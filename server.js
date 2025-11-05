@@ -17,6 +17,8 @@ import session from "express-session";
 
 
 dotenv.config();
+const PROD = process.env.NODE_ENV === "production";
+
 
 // Load Passport strategy before routes
 import "./config/passport.js";
@@ -29,6 +31,8 @@ import adminRoutes from "./routes/admin.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
+if (PROD) app.set("trust proxy", 1); // needed for secure cookies behind Render proxy
+
 
 /* Security & parsing */
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -149,7 +153,11 @@ app.get("/signed-out", (_req, res) => {
   res.render("signed_out", { title: "Signed out" });
 });
 
+// Health check (helps Render detect the service)
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+
 const PORT = process.env.PORT || 9000;
-app.listen(PORT, "127.0.0.1", () =>
-  console.log(`🚀 EduLocate on http://127.0.0.1:${PORT}`)
-);
+// IMPORTANT: bind to 0.0.0.0 on Render
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 EduLocate listening on 0.0.0.0:${PORT}`);
+});

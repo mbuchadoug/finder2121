@@ -1,0 +1,102 @@
+<div class="card">
+  <h2 style="margin-top:0">{{#if isNew}}New School{{else}}Edit: {{school.name}}{{/if}}</h2>
+
+  <form method="post" action="{{#if isNew}}/admin/schools{{else}}/admin/schools/{{school._id}}?_method=PUT{{/if}}">
+    <div class="grid">
+      <div>
+        <label>Name</label>
+        <input class="input" name="name" value="{{school.name}}" required/>
+      </div>
+      <div>
+        <label>City</label>
+        <input class="input" name="city" value="{{school.city}}" placeholder="Harare"/>
+      </div>
+      <div>
+        <label>Slug</label>
+        <input class="input" name="slug" value="{{school.slug}}" placeholder="auto if empty"/>
+      </div>
+      <div>
+        <label>Learning Environment</label>
+        <select class="input" name="learningEnvironment">
+          <option value="" {{#unless school.learningEnvironment}}selected{{/unless}}>—</option>
+          <option {{#ifeq school.learningEnvironment "Comprehensive"}}selected{{/ifeq}}>Comprehensive</option>
+          <option {{#ifeq school.learningEnvironment "Enhanced"}}selected{{/ifeq}}>Enhanced</option>
+          <option {{#ifeq school.learningEnvironment "Advanced"}}selected{{/ifeq}}>Advanced</option>
+        </select>
+      </div>
+      <div>
+        <label>Gender</label>
+        <select class="input" name="gender">
+          <option value="" {{#unless school.gender}}selected{{/unless}}>—</option>
+          <option {{#ifeq school.gender "Mixed"}}selected{{/ifeq}}>Mixed</option>
+          <option {{#ifeq school.gender "Boys"}}selected{{/ifeq}}>Boys</option>
+          <option {{#ifeq school.gender "Girls"}}selected{{/ifeq}}>Girls</option>
+        </select>
+      </div>
+      <div>
+        <label>Curriculum (comma separated)</label>
+        <input class="input" name="curriculum_list" value="{{#if school.curriculum_list}}{{school.curriculum_list}}{{/if}}" placeholder="Cambridge,ZIMSEC"/>
+      </div>
+      <div>
+        <label>Type (comma separated)</label>
+        <input class="input" name="type" value="{{#if school.type}}{{school.type}}{{/if}}" placeholder="Pre-School,Primary School,High School"/>
+      </div>
+      <div>
+        <label>Type2 (Day/Boarding comma separated)</label>
+        <input class="input" name="type2" value="{{#if school.type2}}{{school.type2}}{{/if}}" placeholder="Day,Boarding"/>
+      </div>
+      <div>
+        <label>Website</label>
+        <input class="input" name="website" value="{{school.website}}"/>
+      </div>
+      <div>
+        <label>Facebook URL</label>
+        <input class="input" name="facebookUrl" value="{{school.facebookUrl}}"/>
+      </div>
+      <div style="grid-column:1 / -1">
+        <label>Address</label>
+        <input class="input" name="address" value="{{school.address}}"/>
+      </div>
+      <div style="grid-column:1 / -1">
+        <label>Contact</label>
+        <input class="input" name="contact" value="{{school.contact}}"/>
+      </div>
+    </div>
+
+    <div style="margin:10px 0 6px"><strong>Facilities</strong></div>
+    <div class="grid">
+      <div>
+        <label><input type="checkbox" name="scienceLabs" {{#if school.facilities.scienceLabs}}checked{{/if}}> Science Labs</label>
+        <label><input type="checkbox" name="computerLab" {{#if school.facilities.computerLab}}checked{{/if}}> Computer Lab</label>
+        <label><input type="checkbox" name="library" {{#if school.facilities.library}}checked{{/if}}> Library</label>
+        <label><input type="checkbox" name="makerSpaceSteamLab" {{#if school.facilities.makerSpaceSteamLab}}checked{{/if}}> STEAM / Robotics</label>
+        <label><input type="checkbox" name="examCentreCambridge" {{#if school.facilities.examCentreCambridge}}checked{{/if}}> Cambridge Centre</label>
+        <label><input type="checkbox" name="examCentreZimsec" {{#if school.facilities.examCentreZimsec}}checked{{/if}}> ZIMSEC Centre</label>
+      </div>
+      <div>
+        <label><input type="checkbox" name="swimmingPool" {{#if school.facilities.swimmingPool}}checked{{/if}}> Swimming Pool</label>
+        <label><input type="checkbox" name="rugbyField" {{#if school.facilities.rugbyField}}checked{{/if}}> Rugby</label>
+        <label><input type="checkbox" name="hockeyField" {{#if school.facilities.hockeyField}}checked{{/if}}> Hockey</label>
+        <label><input type="checkbox" name="tennisCourts" {{#if school.facilities.tennisCourts}}checked{{/if}}> Tennis</label>
+        <label><input type="checkbox" name="basketballCourt" {{#if school.facilities.basketballCourt}}checked{{/if}}> Basketball</label>
+        <label><input type="checkbox" name="footballPitch" {{#if school.facilities.footballPitch}}checked{{/if}}> Football</label>
+      </div>
+      <div>
+        <label><input type="checkbox" name="counseling" {{#if school.facilities.counseling}}checked{{/if}}> Counselling</label>
+        <label><input type="checkbox" name="learningSupportSEN" {{#if school.facilities.learningSupportSEN}}checked{{/if}}> Learning Support (SEN)</label>
+        <label><input type="checkbox" name="schoolClinicNurse" {{#if school.facilities.schoolClinicNurse}}checked{{/if}}> School Clinic / Nurse</label>
+        <label><input type="checkbox" name="aftercare" {{#if school.facilities.aftercare}}checked{{/if}}> Aftercare</label>
+        <label><input type="checkbox" name="boarding" {{#if school.facilities.boarding}}checked{{/if}}> Boarding</label>
+        <label><input type="checkbox" name="transportBuses" {{#if school.facilities.transportBuses}}checked{{/if}}> School Transport</label>
+        <label><input type="checkbox" name="wifiCampus" {{#if school.facilities.wifiCampus}}checked{{/if}}> Wi-Fi Campus</label>
+        <label><input type="checkbox" name="cctvSecurity" {{#if school.facilities.cctvSecurity}}checked{{/if}}> CCTV / Security</label>
+        <label><input type="checkbox" name="powerBackup" {{#if school.facilities.powerBackup}}checked{{/if}}> Power Backup</label>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; display:flex; gap:10px">
+      <button class="btn" type="submit">{{#if isNew}}Create{{else}}Save{{/if}}</button>
+      <a class="btn" href="/admin/schools">Cancel</a>
+    </div>
+  </form>
+</div>

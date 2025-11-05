@@ -1,0 +1,41 @@
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Schools</h2>
+    <div style="display:flex;gap:8px">
+      <a href="/admin/schools/new" class="btn">+ New</a>
+      <a href="/admin/import" class="btn">Import</a>
+    </div>
+  </div>
+
+  <form method="get" class="grid" style="margin-top:12px">
+    <div>
+      <label>Search by name</label>
+      <input class="input" name="q" value="{{q}}" placeholder="Eg. 'St John'"/>
+    </div>
+    <div style="align-self:end">
+      <button class="btn" type="submit">Search</button>
+    </div>
+  </form>
+
+  {{#if schools.length}}
+    {{#each schools}}
+      <div class="result">
+        <div style="flex:1">
+          <strong>{{this.name}}</strong>
+          <div class="text-muted">{{this.city}}
+            {{#if this.learningEnvironment}} · {{this.learningEnvironment}}{{/if}}
+            {{#if this.curriculum_list.length}} · {{this.curriculum_list}}{{/if}}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <a class="btn" href="/admin/schools/{{this._id}}/edit">Edit</a>
+          <form method="post" action="/admin/schools/{{this._id}}?_method=DELETE" onsubmit="return confirm('Delete this school?')">
+            <button class="btn" style="background:#b91c1c" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+    {{/each}}
+  {{else}}
+    <div class="card">No schools found.</div>
+  {{/if}}
+</div>

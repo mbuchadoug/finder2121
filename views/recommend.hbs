@@ -1,0 +1,87 @@
+<div class="card">
+  <h2 style="margin-top:0">Find your child’s ideal private school</h2>
+
+  <form id="prefsForm">
+    <div class="grid">
+      <div>
+        <label>City</label>
+        <input class="input" id="city" placeholder="Harare" value="Harare"/>
+      </div>
+
+      <div>
+        <label>Learning Environment</label>
+        <select class="input" id="learningEnvironment">
+          <option value="">Any</option>
+          <option>Comprehensive</option>
+          <option>Enhanced</option>
+          <option>Advanced</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Curriculum</label>
+        <select class="input" id="curriculum" multiple size="5">
+          <option>Cambridge</option>
+          <option>ZIMSEC</option>
+          <option>IB</option>
+        </select>
+        <div class="text-muted" style="font-size:12px;margin-top:-8px">Hold Ctrl/⌘ to select multiple</div>
+      </div>
+
+      <div>
+        <label>School Phase</label>
+        <select class="input" id="type" multiple size="5">
+          <option>Pre-School</option>
+          <option>Primary School</option>
+          <option>High School</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Boarding / Day</label>
+        <select class="input" id="type2" multiple size="4">
+          <option>Day</option>
+          <option>Boarding</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin:10px 0 6px"><strong>Facilities</strong></div>
+
+    <div class="grid">
+      <div>
+        <label><input type="checkbox" name="facilities" value="scienceLabs"/> Science Labs</label>
+        <label><input type="checkbox" name="facilities" value="computerLab"/> Computer Lab</label>
+        <label><input type="checkbox" name="facilities" value="library"/> Library</label>
+        <label><input type="checkbox" name="facilities" value="makerSpaceSteamLab"/> STEAM / Robotics</label>
+        <label><input type="checkbox" name="facilities" value="examCentreCambridge"/> Cambridge Centre</label>
+        <label><input type="checkbox" name="facilities" value="examCentreZimsec"/> ZIMSEC Centre</label>
+      </div>
+
+      <div>
+        <label><input type="checkbox" name="facilities" value="swimmingPool"/> Swimming Pool</label>
+        <label><input type="checkbox" name="facilities" value="rugbyField"/> Rugby</label>
+        <label><input type="checkbox" name="facilities" value="hockeyField"/> Hockey</label>
+        <label><input type="checkbox" name="facilities" value="tennisCourts"/> Tennis</label>
+        <label><input type="checkbox" name="facilities" value="basketballCourt"/> Basketball</label>
+        <label><input type="checkbox" name="facilities" value="footballPitch"/> Football</label>
+      </div>
+
+      <div>
+        <label><input type="checkbox" name="facilities" value="counseling"/> Counselling</label>
+        <label><input type="checkbox" name="facilities" value="learningSupportSEN"/> Learning Support (SEN)</label>
+        <label><input type="checkbox" name="facilities" value="schoolClinicNurse"/> School Clinic / Nurse</label>
+        <label><input type="checkbox" name="facilities" value="aftercare"/> Aftercare</label>
+        <label><input type="checkbox" name="facilities" value="transportBuses"/> School Transport</label>
+        <label><input type="checkbox" name="facilities" value="powerBackup"/> Power Backup</label>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
+      <button id="findBtn" class="btn" type="submit">Find Schools</button>
+      <span id="loader" class="loader" style="display:none;"></span>
+    </div>
+  </form>
+</div>
+
+<div id="results" style="margin-top:16px"></div>

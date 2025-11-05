@@ -1,0 +1,18 @@
+<div class="card">
+  <h2 style="margin-top:0">Import Schools</h2>
+
+  {{#if msg}}<div class="card" style="background:#ecfdf5;border:1px solid #10b981">✔ {{msg}}</div>{{/if}}
+  {{#if error}}<div class="card" style="background:#fef2f2;border:1px solid #ef4444">✖ {{error}}</div>{{/if}}
+
+  <p>Upload a <strong>JSON array</strong> or <strong>CSV</strong> file containing schools.
+     CSV columns can include: <em>name, city, slug, type, type2, curriculum_list, gender, address, contact, website, facebookUrl</em> and any facilities keys.</p>
+
+  <form method="post" action="/admin/import" enctype="multipart/form-data">
+    <input type="file" name="file" class="input" accept=".json,.csv" required/>
+    <button class="btn" type="submit">Import</button>
+  </form>
+
+  <div style="margin-top:16px">
+    <a class="btn" href="/admin/schools">← Back to Schools</a>
+  </div>
+</div>

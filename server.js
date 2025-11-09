@@ -1,24 +1,19 @@
 import express from "express";
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 import passport from "passport";
 import helmet from "helmet";
-//import { engine } from "express-handlebars";
 import axios from "axios";
 import { engine } from "express-handlebars";
 import { ensureAuth } from "./middleware/ensureAuth.js";
 import MongoStore from "connect-mongo";
 import session from "express-session";
 
-// ...
-
-
-
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
-
 
 // Load Passport strategy before routes
 import "./config/passport.js";
@@ -27,14 +22,14 @@ import authRoutes from "./routes/auth.js";
 import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
 
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const app = express();
-if (PROD) app.set("trust proxy", 1); // needed for secure cookies behind Render proxy
 
+const app = express();
+if (PROD) app.set("trust proxy", 1);
 
 /* Security & parsing */
+app.disable("x-powered-by");
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -43,8 +38,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 /* Views (Handlebars) */
-
-
 app.engine(
   "hbs",
   engine({
@@ -55,13 +48,9 @@ app.engine(
     helpers: {
       ifeq: (a, b, opts) => (a === b ? opts.fn(this) : opts.inverse(this)),
     },
-    runtimeOptions: {
-      allowProtoPropertiesByDefault: true,
-      allowProtoMethodsByDefault: true,
-    },
+    runtimeOptions: { allowProtoPropertiesByDefault: true, allowProtoMethodsByDefault: true },
   })
 );
-
 app.set("view engine", "hbs");
 app.set("views", path.join(__dirname, "views"));
 
@@ -80,22 +69,24 @@ app.use(
     secret: process.env.SESSION_SECRET || "change-me",
     resave: false,
     saveUninitialized: false,
-    unset: "destroy",                         // if session is destroyed, also clear cookie
+    unset: "destroy",
     store: MongoStore.create({
       mongoUrl: MONGODB_URI,
       autoRemove: "native",
-      // prevent "Unable to find the session to touch" noise when the doc is gone
-      disableTouch: true,                     // <— key line
-      // (optional) ttl: 60 * 60 * 24 * 7,     // align with cookie maxAge if you want
+      disableTouch: true,
     }),
-    cookie: { httpOnly: true, maxAge: 1000 * 60 * 60 * 24 * 7 }, // 7 days
+    cookie: {
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+      secure: PROD,
+      sameSite: "lax",
+    },
   })
 );
 
 /* Passport */
 app.use(passport.initialize());
 app.use(passport.session());
-
 
 /* Expose a safe user to views */
 app.use((req, res, next) => {
@@ -122,9 +113,75 @@ app.get("/img", async (req, res) => {
     res.setHeader("Content-Type", r.headers["content-type"] || "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.send(Buffer.from(r.data));
-  } catch {
+  } catch (e) {
+    console.error("img proxy error:", e?.message);
     res.status(502).send("img fetch failed");
   }
+});
+
+/* ---------- Robust PDF downloads ---------- */
+const DOCS_DIR = path.join(__dirname, "public", "docs");
+const DOWNLOADS = new Map([
+  ["st-eurit-registration", {
+    path: path.join(DOCS_DIR, "st-eurit-registration.pdf"),
+    filename: "St-Eurit-Registration-Form.pdf",
+  }],
+  ["st-eurit-profile", {
+    path: path.join(DOCS_DIR, "st-eurit-profile.pdf"),
+    filename: "St-Eurit-School-Profile.pdf",
+  }],
+]);
+
+// quick static /docs as well (optional – handy for manual checks)
+app.use(
+  "/docs",
+  express.static(DOCS_DIR, {
+    setHeaders: (res) => res.setHeader("Content-Type", "application/pdf"),
+  })
+);
+
+// live diagnostics: see what the server sees
+app.get("/diag/downloads", (_req, res) => {
+  const report = {};
+  for (const [key, entry] of DOWNLOADS.entries()) {
+    const exists = fs.existsSync(entry.path);
+    let size = null, mtime = null;
+    if (exists) {
+      const st = fs.statSync(entry.path);
+      size = st.size;
+      mtime = st.mtime;
+    }
+    report[key] = { path: entry.path, exists, size, mtime, filename: entry.filename };
+  }
+  res.json({
+    cwd: process.cwd(),
+    docsDir: DOCS_DIR,
+    report,
+  });
+});
+
+app.get("/download/:key", (req, res) => {
+  const entry = DOWNLOADS.get(req.params.key);
+  if (!entry) {
+    console.warn(`[download] unknown key "${req.params.key}"`);
+    return res.status(404).send("Not found");
+  }
+  const { path: filePath, filename } = entry;
+
+  fs.access(filePath, fs.constants.R_OK, (err) => {
+    if (err) {
+      console.error("[download] missing:", filePath, err?.code);
+      return res.status(404).send("File not found");
+    }
+    console.log("[download] sending:", filePath, "as", filename);
+    // res.download sets Content-Disposition and type based on file ext
+    res.download(filePath, filename, (sendErr) => {
+      if (sendErr) {
+        console.error("[download] send error:", sendErr);
+        if (!res.headersSent) res.status(500).send("Failed to send file");
+      }
+    });
+  });
 });
 
 /* Routes */
@@ -132,15 +189,6 @@ app.get("/", (_req, res) => res.redirect("/recommend"));
 app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
-
-
-/*app.get("/recommend", (_req, res) => {
-  res.render("recommend", {
-    title: "EduLocate – Private School Finder",
-  });
-});*/
-
-
 
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {
@@ -153,11 +201,10 @@ app.get("/signed-out", (_req, res) => {
   res.render("signed_out", { title: "Signed out" });
 });
 
-// Health check (helps Render detect the service)
+// Health check
 app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 const PORT = process.env.PORT || 9000;
-// IMPORTANT: bind to 0.0.0.0 on Render
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 EduLocate listening on 0.0.0.0:${PORT}`);
 });

@@ -1,4 +1,3 @@
-// routes/api.js
 import { Router } from "express";
 import School from "../models/school.js";
 
@@ -60,31 +59,24 @@ router.post("/recommend", async (req, res) => {
   // Build as a list of AND conditions, then combine
   const and = [];
 
-  // City (contains, i)
   if (city) and.push({ city: { $regex: rxContains(city) } });
 
-  // Learning environment (contains, i)
   if (learningEnvironment) {
     and.push({ learningEnvironment: { $regex: rxContains(learningEnvironment) } });
   }
 
-  // Curriculum: allow synonyms + contains
   const cur = toArray(curriculum);
   if (cur.length) {
     const regs = makeContainsRegexes(cur, CURR_SYNONYMS);
     and.push({ curriculum_list: { $in: regs } });
   }
 
-  // School phase (contains + synonyms)
   const phases = toArray(type);
   if (phases.length) {
     const regs = makeContainsRegexes(phases, PHASE_SYNONYMS);
     and.push({ type: { $in: regs } });
   }
 
-  // Boarding / Day:
-  // - Some schools store it in `type2` (strings)
-  // - Others only indicate boarding via facilities.boarding = true
   const boardingType = toArray(type2);
   if (boardingType.length) {
     const wantDay = boardingType.some((v) => /day/i.test(v));
@@ -97,7 +89,7 @@ router.post("/recommend", async (req, res) => {
       and.push({
         $or: [
           { type2: { $in: regs } },
-          { "facilities.boarding": true }, // fallback
+          { "facilities.boarding": true },
         ],
       });
     } else if (wantDay) {
@@ -105,13 +97,12 @@ router.post("/recommend", async (req, res) => {
       and.push({
         $or: [
           { type2: { $in: regs } },
-          { "facilities.boarding": { $ne: true } }, // likely day-only
+          { "facilities.boarding": { $ne: true } },
         ],
       });
     }
   }
 
-  // Facilities: require ALL selected flags
   if (Array.isArray(facilities) && facilities.length) {
     for (const f of facilities) and.push({ [`facilities.${f}`]: true });
   }
@@ -129,8 +120,6 @@ router.post("/recommend", async (req, res) => {
     .lean();
 
   /* ---------- CONDITIONAL PINNING ---------- */
-  // Do NOT pin if user selected any of:
-  //  - ZIMSEC (curriculum) OR High School/Secondary (phase) OR Boarding (type2)
   const selectedZimsec = toArray(curriculum).some((v) => /zimsec/i.test(v));
   const selectedHighSchool = toArray(type).some((v) =>
     /high\s*school|secondary|senior/i.test(v)
@@ -139,7 +128,6 @@ router.post("/recommend", async (req, res) => {
 
   const shouldPin = !selectedZimsec && !selectedHighSchool && !selectedBoarding;
 
-  // Configure pinned school names/slugs via .env (defaults to St Eurit)
   const PINNED = (process.env.PINNED_SCHOOLS || "st eurit international school")
     .split(/[|,]/)
     .map((s) => s.trim().toLowerCase())
@@ -152,8 +140,6 @@ router.post("/recommend", async (req, res) => {
     return PINNED.includes(name) || PINNED.includes(slug) || PINNED.includes(norm);
   };
 
-  // If we should pin, but the pinned school isn't in the results (e.g. filters excluded it),
-  // fetch it directly (same city for relevance) and add it to the front.
   if (shouldPin && !docs.some(isPinnedDoc)) {
     const cityRegex = city ? { $regex: rxContains(city) } : undefined;
     const pinnedNameRegs = PINNED.map((p) => new RegExp(`^${esc(p)}$`, "i"));
@@ -169,18 +155,13 @@ router.post("/recommend", async (req, res) => {
 
     if (pinnedDoc) docs.unshift(pinnedDoc);
   }
-  /* ---------------------------------------- */
 
   /* ---------- scoring + reasons ---------- */
-  const totalSignals =
-    (learningEnvironment ? 1 : 0) +
-    (phases.length ? 1 : 0) +
-    (boardingType.length ? 1 : 0) +
-    (cur.length ? 1 : 0) +
-    (facilities?.length ? 1 : 0);
-
   const recommendations = docs.map((d) => {
     const reasons = [];
+    const phases = toArray(type);
+    const boardingType = toArray(type2);
+    const cur = toArray(curriculum);
 
     if (learningEnvironment && rxContains(learningEnvironment).test(d.learningEnvironment || ""))
       reasons.push(`${d.learningEnvironment} learning environment`);
@@ -231,7 +212,6 @@ router.post("/recommend", async (req, res) => {
     const denom =
       (learningEnvironment ? 1 : 0) +
       (phases.length ? 1 : 0) +
-      // count Day and Boarding as separate possible matches if both selected
       (boardingType.length ? (boardingType.length > 1 ? 2 : 1) : 0) +
       (cur.length ? 1 : 0) +
       (facilities?.length ? 1 : 0);
@@ -240,6 +220,7 @@ router.post("/recommend", async (req, res) => {
 
     return {
       id: d._id,
+      slug: d.slug, // expose slug
       name: d.name,
       city: d.city,
       curriculum: d.curriculum_list || [],
@@ -252,23 +233,21 @@ router.post("/recommend", async (req, res) => {
       reason: reasons.join(" · "),
       logo: d.logo,
       heroImage: d.heroImage,
-      _pinned: isPinnedDoc(d), // internal flag used for sorting
+      _pinned: isPinnedDoc(d),
+      pinned: isPinnedDoc(d) && shouldPin,
     };
   });
 
-  // Sort: pinned first (when allowed), then highest match, then name
+  // Sort: pinned first, then highest match, then name
   recommendations.sort((a, b) => {
-    // If pinning is disabled for this query, treat both as unpinned
-    const aPinned = a._pinned && shouldPin;
-    const bPinned = b._pinned && shouldPin;
-
+    const aPinned = a._pinned && (a.pinned === true);
+    const bPinned = b._pinned && (b.pinned === true);
     if (aPinned && !bPinned) return -1;
     if (!aPinned && bPinned) return 1;
     if (b.match !== a.match) return b.match - a.match;
     return (a.name || "").localeCompare(b.name || "");
   });
 
-  // Hide internal flag
   const clean = recommendations.map(({ _pinned, ...rest }) => rest);
   res.json({ recommendations: clean });
 });

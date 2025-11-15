@@ -3,120 +3,125 @@
 
   <header class="landing-hero">
     <div class="hero-content">
-      <h1>Discover the Best Private Schools in Zimbabwe</h1>
+      <h1>ZimEduFinder — Find the Best Private Schools in Zimbabwe</h1>
       <p class="subtitle">
-        Compare private schools across Zimbabwe — including Harare — using real data on curriculum, facilities, environment and more.
+        Smart school matching for Zimbabwean parents. Compare and discover private schools by city, curriculum (Cambridge, ZIMSEC, IB), boarding, fees band and facilities.
       </p>
 
-      <a href="/recommend" class="cta-button">
-        Start Finding Schools →
-      </a>
+      <a href="/recommend" class="cta-button">Get Personalized Matches →</a>
+      <!--<a href="/recommend" class="cta-button" style="margin-left:12px;background:transparent;color:#fff;border:2px solid #fff">Get Personalized Matches</a>-->
     </div>
   </header>
 
   <section class="landing-section">
-    <h2>Why Use Skoolfinder?</h2>
-    <p>
-      Skoolfinder helps parents quickly discover and compare private schools based on what matters:
-      academic pathways, sports, facilities, learning environment, and more.  
-      Our intelligent search tool filters hundreds of data points to show you the best-fit schools in seconds.
-    </p>
+    <h2>Why Zimbabwean parents trust ZimEduFinder</h2>
+    <ul>
+      <li><strong>Smart matching:</strong> Our recommendation engine surfaces best-fit schools based on your child’s needs and your priorities.</li>
+      <li><strong>Detailed filters:</strong> Search by curriculum, boarding/day, facilities (science labs, ICT, sports), and learning environment.</li>
+      <li><strong>Local focus:</strong> Coverage of Harare, Bulawayo, Mutare and other Zimbabwe cities with data tailored for local searches.</li>
+      <li><strong>Compare & contact:</strong> Side-by-side school comparisons and direct contact details to make decisions faster.</li>
+    </ul>
   </section>
 
   <section class="landing-section">
-    <h2>A Better Way to Choose a School</h2>
-    <p>
-      Instead of endless Facebook searches or outdated lists, Skoolfinder gives you a clean,
-      organised way to explore Zimbabwean private schools — all in one place.
-      Whether you're looking for Cambridge, ZIMSEC or IB schools, day or boarding,
-      Skoolfinder brings clarity to your decision.
-    </p>
+    <h2>How it works</h2>
+    <ol>
+      <li><strong>Tell us what matters:</strong> city, curriculum, day/boarding, facilities and fees band.</li>
+      <li><strong>Get matched:</strong> our algorithm ranks best-fit schools and explains matches with clear reasons.</li>
+      <li><strong>Compare & contact:</strong> open profiles, compare features and contact the school directly.</li>
+    </ol>
   </section>
+
+  <section class="landing-section">
+    <h2>Featured categories</h2>
+    <div class="grid-featured" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+      <div class="card"><h3>Top Private Schools</h3><p>Strong academic performance and outstanding facilities.</p></div>
+      <div class="card"><h3>Affordable Options</h3><p>Schools balancing quality and affordability across Zimbabwe.</p></div>
+      <div class="card"><h3>Boarding Schools</h3><p>Trusted boarding options for families across the country.</p></div>
+      <div class="card"><h3>Cambridge Schools</h3><p>Find CIE / Cambridge curriculum schools for global pathways.</p></div>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <h2>Frequently asked questions</h2>
+    <div class="faq">
+      <details>
+        <summary>How accurate are the school profiles?</summary>
+        <p>We verify school details from public data and manual checks. Schools can also update their profiles via our admin system.</p>
+      </details>
+
+      <details>
+        <summary>Is Skoolfinder free to use?</summary>
+        <p>Yes — parents can search and get recommendations for free.</p>
+      </details>
+
+      <details>
+        <summary>Can I compare multiple schools?</summary>
+        <p>Yes. Browse schools, add to comparison, and view them side-by-side.</p>
+      </details>
+    </div>
+  </section>
+
+  <footer class="landing-section">
+    <p style="font-size:0.95rem;color:#666">
+      ZimEduFinder — Zimbabwe’s smart private school matching platform.
+      <!--<a href="/about">Learn more</a>  <a href="/contact">Contact us</a>-->
+    </p>
+  </footer>
 
 </section>
 
 <style>
 /* Wrapper */
-.landing-wrapper {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 40px 20px;
-  font-family: "Inter", sans-serif;
-}
+.landing-wrapper { max-width:1100px;margin:0 auto;padding:36px 18px;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto }
 
-/* Hero Section */
-.landing-hero {
-  background: linear-gradient(135deg, #004aad, #007bff);
-  padding: 90px 30px;
-  border-radius: 18px;
-  color: white;
-  text-align: center;
-  margin-bottom: 50px;
-}
-
-.landing-hero h1 {
-  font-size: 2.8rem;
-  font-weight: 800;
-  margin-bottom: 20px;
-}
-
-.landing-hero .subtitle {
-  font-size: 1.25rem;
-  margin-bottom: 35px;
-  line-height: 1.6;
-  opacity: 0.9;
-}
-
-/* CTA Button */
-.cta-button {
-  display: inline-block;
-  background: #ffffff;
-  color: #004aad;
-  padding: 14px 32px;
-  font-size: 1.1rem;
-  border-radius: 30px;
-  text-decoration: none;
-  font-weight: 700;
-  transition: 0.25s ease;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.cta-button:hover {
-  background: #f0f4ff;
-  transform: translateY(-3px);
-}
+/* Hero */
+.landing-hero { background:linear-gradient(135deg,#003f8a,#007bff);padding:72px 20px;border-radius:14px;color:#fff;text-align:center;margin-bottom:36px }
+.hero-content h1{font-size:2.6rem;margin:0 0 12px}
+.hero-content .subtitle{font-size:1.125rem;opacity:0.95;margin-bottom:20px}
+.cta-button{display:inline-block;background:#fff;color:#003f8a;padding:12px 26px;border-radius:999px;font-weight:700;text-decoration:none;box-shadow:0 6px 18px rgba(0,0,0,0.08)}
+.cta-button[style]{border:2px solid rgba(255,255,255,0.9);background:transparent}
 
 /* Sections */
-.landing-section {
-  margin-bottom: 50px;
-}
+.landing-section{margin:28px 0}
+.landing-section h2{font-size:1.4rem;color:#222;margin-bottom:10px}
+.landing-section p, .landing-section li{color:#444;line-height:1.6}
 
-.landing-section h2 {
-  font-size: 1.8rem;
-  margin-bottom: 12px;
-  font-weight: 700;
-  color: #333;
-}
-
-.landing-section p {
-  font-size: 1.15rem;
-  line-height: 1.7;
-  color: #444;
-}
+/* Cards / Grid */
+.grid-featured .card{background:#fff;border:1px solid #eef2f7;padding:14px;border-radius:10px;box-shadow:0 4px 12px rgba(10,20,40,0.03)}
+.faq details{margin-bottom:10px;border-left:3px solid #e6eefc;padding:10px 12px}
 </style>
 
-{{!-- SEO JSON-LD --}}
+{{!-- FAQ JSON-LD --}}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "Skoolfinder",
-  "url": "https://skoolfinder.net",
-  "description": "Find and compare private schools in Zimbabwe including Harare. Search by curriculum, facilities, environment and more.",
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "https://skoolfinder.net/recommend?q={search_term_string}",
-    "query-input": "required name=search_term_string"
-  }
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How accurate are the school profiles?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We verify school details from public data and manual checks. Schools can also update their profiles via our admin system."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Skoolfinder free to use?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes — parents can search and get recommendations for free."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I compare multiple schools?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Browse schools, add to comparison, and view them side-by-side."
+      }
+    }
+  ]
 }
 </script>

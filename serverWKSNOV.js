@@ -95,7 +95,6 @@ app.use((req, res, next) => {
   next();
 });
 
-/* Diagnostics */
 app.get("/whoami", (req, res) => res.json(req.user || null));
 
 /* Optional: image proxy for logos/og images */
@@ -123,20 +122,14 @@ app.get("/img", async (req, res) => {
 /* ---------- Robust PDF downloads ---------- */
 const DOCS_DIR = path.join(__dirname, "public", "docs");
 const DOWNLOADS = new Map([
-  [
-    "st-eurit-registration",
-    {
-      path: path.join(DOCS_DIR, "st-eurit-registration.pdf"),
-      filename: "St-Eurit-Registration-Form.pdf",
-    },
-  ],
-  [
-    "st-eurit-profile",
-    {
-      path: path.join(DOCS_DIR, "st-eurit-profile.pdf"),
-      filename: "St-Eurit-School-Profile.pdf",
-    },
-  ],
+  ["st-eurit-registration", {
+    path: path.join(DOCS_DIR, "st-eurit-registration.pdf"),
+    filename: "St-Eurit-Registration-Form.pdf",
+  }],
+  ["st-eurit-profile", {
+    path: path.join(DOCS_DIR, "st-eurit-profile.pdf"),
+    filename: "St-Eurit-School-Profile.pdf",
+  }],
 ]);
 
 // quick static /docs as well (optional – handy for manual checks)
@@ -152,8 +145,7 @@ app.get("/diag/downloads", (_req, res) => {
   const report = {};
   for (const [key, entry] of DOWNLOADS.entries()) {
     const exists = fs.existsSync(entry.path);
-    let size = null,
-      mtime = null;
+    let size = null, mtime = null;
     if (exists) {
       const st = fs.statSync(entry.path);
       size = st.size;
@@ -182,6 +174,7 @@ app.get("/download/:key", (req, res) => {
       return res.status(404).send("File not found");
     }
     console.log("[download] sending:", filePath, "as", filename);
+    // res.download sets Content-Disposition and type based on file ext
     res.download(filePath, filename, (sendErr) => {
       if (sendErr) {
         console.error("[download] send error:", sendErr);
@@ -191,17 +184,17 @@ app.get("/download/:key", (req, res) => {
   });
 });
 
-/* Routes: public landing (SEO-friendly) */
-app.get("/", (_req, res) => {
-  res.render("landing", { title: "Skoolfinder — Private Schools in Zimbabwe" });
-});
-
-/* Auth / API / Admin routes */
+/* Routes */
+app.get("/", (_req, res) => res.redirect("/recommend"));
 app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 
-/* Protected recommend page */
+app.get("/", (_req, res) => {
+  res.render("landing", { title: "Skoolfinder — Private Schools in Zimbabwe" });
+});
+
+
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {
     user: req.user,

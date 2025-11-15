@@ -190,6 +190,11 @@ app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 
+app.get("/", (_req, res) => {
+  res.render("landing", { title: "Skoolfinder — Private Schools in Zimbabwe" });
+});
+
+
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {
     user: req.user,

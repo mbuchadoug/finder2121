@@ -1,0 +1,124 @@
+
+{{!-- views/landing.hbs --}}
+<section class="landing-wrapper">
+
+  <header class="landing-hero">
+    <div class="hero-content">
+      <h1>Discover the Best Private Schools in Zimbabwe</h1>
+      <p class="subtitle">
+        Compare private schools across Zimbabwe — including Harare — using real data on curriculum, facilities, environment and more.
+      </p>
+
+      <a href="/recommend" class="cta-button">
+        Start Finding Schools →
+      </a>
+    </div>
+  </header>
+
+  <section class="landing-section">
+    <h2>Why Use Skoolfinder?</h2>
+    <p>
+      Skoolfinder helps parents quickly discover and compare private schools based on what matters:
+      academic pathways, sports, facilities, learning environment, and more.  
+      Our intelligent search tool filters hundreds of data points to show you the best-fit schools in seconds.
+    </p>
+  </section>
+
+  <section class="landing-section">
+    <h2>A Better Way to Choose a School</h2>
+    <p>
+      Instead of endless Facebook searches or outdated lists, Skoolfinder gives you a clean,
+      organised way to explore Zimbabwean private schools — all in one place.
+      Whether you're looking for Cambridge, ZIMSEC or IB schools, day or boarding,
+      Skoolfinder brings clarity to your decision.
+    </p>
+  </section>
+
+</section>
+
+<style>
+/* Wrapper */
+.landing-wrapper {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  font-family: "Inter", sans-serif;
+}
+
+/* Hero Section */
+.landing-hero {
+  background: linear-gradient(135deg, #004aad, #007bff);
+  padding: 90px 30px;
+  border-radius: 18px;
+  color: white;
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.landing-hero h1 {
+  font-size: 2.8rem;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+.landing-hero .subtitle {
+  font-size: 1.25rem;
+  margin-bottom: 35px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+/* CTA Button */
+.cta-button {
+  display: inline-block;
+  background: #ffffff;
+  color: #004aad;
+  padding: 14px 32px;
+  font-size: 1.1rem;
+  border-radius: 30px;
+  text-decoration: none;
+  font-weight: 700;
+  transition: 0.25s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.cta-button:hover {
+  background: #f0f4ff;
+  transform: translateY(-3px);
+}
+
+/* Sections */
+.landing-section {
+  margin-bottom: 50px;
+}
+
+.landing-section h2 {
+  font-size: 1.8rem;
+  margin-bottom: 12px;
+  font-weight: 700;
+  color: #333;
+}
+
+.landing-section p {
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: #444;
+}
+</style>
+
+{{!-- SEO JSON-LD --}}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Skoolfinder",
+  "url": "https://skoolfinder.net",
+  "description": "Find and compare private schools in Zimbabwe including Harare. Search by curriculum, facilities, environment and more.",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://skoolfinder.net/recommend?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+

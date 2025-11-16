@@ -51,21 +51,6 @@
   }
   </script>
 
-  <style>
-    .fb-btn {
-      background:#1877F2;
-      color:#fff !important;
-      padding:8px 16px;
-      border-radius:6px;
-      text-decoration:none;
-      font-weight:600;
-      box-shadow:0 2px 6px rgba(0,0,0,0.15);
-    }
-    .fb-btn:hover {
-      background:#0f65d9;
-    }
-  </style>
-
 </head>
 
 <body>
@@ -88,9 +73,7 @@
           <form method="post" action="/auth/logout" style="display:inline;">
             <button class="btn" type="submit">Logout</button>
           </form>
-
         {{else}}
-          <a class="btn fb-btn" href="/auth/facebook">Login with Facebook</a>
           <a class="btn" href="/auth/google">Sign in with Google</a>
         {{/if}}
       </div>

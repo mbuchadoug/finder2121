@@ -283,6 +283,22 @@ app.get("/sitemap.xml", async (req, res) => {
   }
 });
 
+
+// privacy & deletion pages
+app.get("/privacy-policy", (req, res) => {
+  res.render("privacy_policy", {
+    title: "Privacy Policy – ZimEduFinder",
+    description: "Privacy policy for ZimEduFinder (Skoolfinder) - how we collect and handle data."
+  });
+});
+
+app.get("/data-deletion", (req, res) => {
+  res.render("data_deletion", {
+    title: "Data Deletion Instructions – ZimEduFinder",
+    description: "How to request deletion of your account and personal data."
+  });
+});
+
 /* Routes: public landing (SEO-friendly) */
 app.get("/", (_req, res) => {
   res.render("landing", {

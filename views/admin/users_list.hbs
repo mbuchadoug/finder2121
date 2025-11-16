@@ -1,14 +1,8 @@
+{{!-- views/admin/users_list.hbs --}}
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center">
     <h2 style="margin:0">Users</h2>
   </div>
-
-  {{!-- show optional message from redirect (e.g. deletion result) --}}
-  {{#if msg}}
-    <div style="margin-top:12px;padding:12px;border-radius:8px;background:#eef9f3;color:#064;box-shadow:0 1px 0 rgba(0,0,0,0.02)">
-      {{msg}}
-    </div>
-  {{/if}}
 
   <form method="get" class="grid" style="margin-top:12px">
     <div>
@@ -22,28 +16,28 @@
 
   {{#if users.length}}
     {{#each users}}
-      <div class="result" style="display:flex;gap:12px;align-items:center;padding:12px;border-bottom:1px solid #f1f5f8">
-        <img src="{{this.photo}}" onerror="this.src='/img/school-placeholder.png'" alt="{{this.name}}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
+      <div class="result" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;margin-top:12px;border:1px solid #eef2f7">
+        <img src="{{this.photo}}" onerror="this.src='/img/school-placeholder.png'" alt="{{this.name}}" style="width:56px;height:56px;border-radius:8px;object-fit:cover">
         <div style="flex:1">
-          <strong>{{this.name}}</strong>
+          <strong style="display:block">{{this.name}}</strong>
           <div class="text-muted">{{this.email}}</div>
-          <div style="font-size:0.85rem;color:#666;margin-top:6px">
-            Created: {{this.createdAt}}
-          </div>
         </div>
 
-        <div style="display:flex;gap:8px;align-items:center">
-          <a class="btn" href="/admin/users/{{this._id}}/edit" style="text-decoration:none">Edit</a>
+        <div style="text-transform:uppercase;margin-right:12px">{{this.role}}</div>
 
-          {{!-- Delete form uses method-override (_method=DELETE) --}}
-          <form method="post" action="/admin/users/{{this._id}}" style="display:inline;margin:0" onsubmit="return confirm('Delete user {{this.email}}? This action cannot be undone.');">
-            <input type="hidden" name="_method" value="DELETE" />
-            <button class="btn" type="submit" style="background:#ff4d4f;border-color:#ff4d4f;color:#fff">Delete</button>
-          </form>
-        </div>
+        <!-- Primary: method-override delete form -->
+        <form method="post" action="/admin/users/{{this._id}}?_method=DELETE" style="display:inline;">
+          <input type="hidden" name="_method" value="DELETE">
+          <button class="btn btn-danger" type="submit" onclick="return confirm('Delete user {{this.name}}? This action cannot be undone.')">Delete</button>
+        </form>
+
+        <!-- Fallback: some browsers/clients prefer posting to an explicit endpoint -->
+        <form method="post" action="/admin/users/{{this._id}}/delete" style="display:inline;margin-left:8px;">
+          <button class="btn btn-danger--light" type="submit" onclick="return confirm('Delete user {{this.name}} using fallback?')">Delete (fallback)</button>
+        </form>
       </div>
     {{/each}}
   {{else}}
-    <div class="card" style="margin-top:12px">No users found.</div>
+    <div class="card">No users found.</div>
   {{/if}}
 </div>

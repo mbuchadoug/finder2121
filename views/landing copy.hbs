@@ -3,10 +3,13 @@
 
   <header class="landing-hero">
     <div class="hero-content">
-      <h1>{{title}}</h1>
-      <p class="subtitle">{{description}}</p>
+      <h1>ZimEduFinder — Find the Best Private Schools in Zimbabwe</h1>
+      <p class="subtitle">
+        Smart school matching for Zimbabwean parents. Compare and discover private schools by city, curriculum (Cambridge, ZIMSEC, IB), boarding, fees band and facilities.
+      </p>
 
       <a href="/recommend" class="cta-button">Get Personalized Matches →</a>
+      <!--<a href="/recommend" class="cta-button" style="margin-left:12px;background:transparent;color:#fff;border:2px solid #fff">Get Personalized Matches</a>-->
     </div>
   </header>
 
@@ -62,6 +65,7 @@
   <footer class="landing-section">
     <p style="font-size:0.95rem;color:#666">
       ZimEduFinder — Zimbabwe’s smart private school matching platform.
+      <!--<a href="/about">Learn more</a>  <a href="/contact">Contact us</a>-->
     </p>
   </footer>
 
@@ -87,3 +91,37 @@
 .grid-featured .card{background:#fff;border:1px solid #eef2f7;padding:14px;border-radius:10px;box-shadow:0 4px 12px rgba(10,20,40,0.03)}
 .faq details{margin-bottom:10px;border-left:3px solid #e6eefc;padding:10px 12px}
 </style>
+
+{{!-- FAQ JSON-LD --}}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How accurate are the school profiles?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We verify school details from public data and manual checks. Schools can also update their profiles via our admin system."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Skoolfinder free to use?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes — parents can search and get recommendations for free."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I compare multiple schools?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Browse schools, add to comparison, and view them side-by-side."
+      }
+    }
+  ]
+}
+</script>

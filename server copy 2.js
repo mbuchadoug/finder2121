@@ -1,4 +1,4 @@
-// server.js (full updated)
+// server.js (updated)
 import express from "express";
 import dotenv from "dotenv";
 import path from "path";
@@ -12,10 +12,21 @@ import { engine } from "express-handlebars";
 import { ensureAuth } from "./middleware/ensureAuth.js";
 import MongoStore from "connect-mongo";
 import session from "express-session";
+import { pipeline } from "stream";
+import { promisify } from "util";
 
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
 const SITE_URL = process.env.SITE_URL || "https://skoolfinder.net";
+
+const pipe = promisify(pipeline);
+
+// Load Passport strategy before routes
+import "./config/passport.js";
+
+import authRoutes from "./routes/auth.js";
+import apiRoutes from "./routes/api.js";
+import adminRoutes from "./routes/admin.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,26 +34,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 if (PROD) app.set("trust proxy", 1);
 
-// Load Passport strategy before routes
-import "./config/passport.js";
-
-// Optional model import for sitemap / og generation (adjust path to your model file)
-import School from "./models/school.js"; // ensure this exists (or remove usage in sitemap/og)
-
-import authRoutes from "./routes/auth.js";
-import apiRoutes from "./routes/api.js";
-import adminRoutes from "./routes/admin.js";
-
 /* Security & parsing */
 app.disable("x-powered-by");
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* Static public */
+/* Static public (root) */
 app.use(express.static(path.join(__dirname, "public")));
 
-/* View engine */
+/* Views (Handlebars) */
 app.engine(
   "hbs",
   engine({
@@ -52,12 +53,8 @@ app.engine(
     partialsDir: path.join(__dirname, "views/partials"),
     helpers: {
       ifeq: (a, b, opts) => (a === b ? opts.fn(this) : opts.inverse(this)),
-      // keep helpers small - we rely on res.locals for title/description/og vars
     },
-    runtimeOptions: {
-      allowProtoPropertiesByDefault: true,
-      allowProtoMethodsByDefault: true,
-    },
+    runtimeOptions: { allowProtoPropertiesByDefault: true, allowProtoMethodsByDefault: true },
   })
 );
 app.set("view engine", "hbs");
@@ -97,13 +94,10 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-/* Expose user + siteUrl to templates */
+/* Expose a safe user to views */
 app.use((req, res, next) => {
   res.locals.user =
     req.user?.toObject?.({ getters: true, virtuals: true }) || req.user || null;
-  res.locals.siteUrl = SITE_URL.replace(/\/$/, "");
-  // allow templates to set canonical path easily if not passed per-render
-  res.locals.canonicalPath = req.path === "/" ? "/" : req.path;
   next();
 });
 
@@ -135,6 +129,7 @@ app.get("/img", async (req, res) => {
 /* ---------- Docs / downloads ---------- */
 const DOCS_DIR = path.join(__dirname, "public", "docs");
 
+// Map of download keys -> file path + client filename
 const DOWNLOADS = new Map([
   [
     "st-eurit-registration",
@@ -152,11 +147,12 @@ const DOWNLOADS = new Map([
   ],
 ]);
 
-// static /docs to allow direct checking; set content-type for pdfs
+// static /docs to allow direct checking; make sure content-type is pdf
 app.use(
   "/docs",
   express.static(DOCS_DIR, {
     setHeaders: (res, filePath) => {
+      // Ensure PDF files served from /docs have the right content-type
       if (filePath && filePath.endsWith(".pdf")) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Cache-Control", "public, max-age=86400");
@@ -165,6 +161,7 @@ app.use(
   })
 );
 
+// live diagnostics: see what the server sees
 app.get("/diag/downloads", (_req, res) => {
   const report = {};
   for (const [key, entry] of DOWNLOADS.entries()) {
@@ -185,6 +182,13 @@ app.get("/diag/downloads", (_req, res) => {
   });
 });
 
+/*
+  Robust download endpoint:
+  - streams the file with correct headers
+  - sends explicit Content-Type + Content-Disposition
+  - returns clear 404/500 messages (no HTML fallback)
+  - avoids express.static collisions for download-by-key
+*/
 app.get("/download/:key", async (req, res) => {
   try {
     const entry = DOWNLOADS.get(req.params.key);
@@ -194,6 +198,7 @@ app.get("/download/:key", async (req, res) => {
     }
     const { path: filePath, filename } = entry;
 
+    // check file exists and is readable
     await fs.promises.access(filePath, fs.constants.R_OK).catch((err) => {
       console.error("[download] missing:", filePath, err?.code || err);
       throw { status: 404, message: "File not found" };
@@ -201,8 +206,10 @@ app.get("/download/:key", async (req, res) => {
 
     const stat = await fs.promises.stat(filePath);
 
+    // set explicit headers (content-length + content-type + disposition)
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", stat.size);
+    // Content-Disposition - use RFC5987 encoding for non-ascii filenames
     const fallbackFilename = filename.replace(/"/g, '\\"');
     const encoded = encodeURIComponent(fallbackFilename);
     res.setHeader(
@@ -211,6 +218,7 @@ app.get("/download/:key", async (req, res) => {
     );
     res.setHeader("Cache-Control", "public, max-age=86400");
 
+    // stream the file (robust)
     const readStream = fs.createReadStream(filePath);
     readStream.on("error", (err) => {
       console.error("[download] stream error:", err);
@@ -224,18 +232,25 @@ app.get("/download/:key", async (req, res) => {
   }
 });
 
-/* ---------- SEO helpers: robots + sitemap (DB-aware) ---------- */
+/* ---------- SEO helpers: robots + sitemap ---------- */
 
 // robots.txt — allow all, point to sitemap
 app.get("/robots.txt", (req, res) => {
   const sitemapUrl = `${SITE_URL.replace(/\/$/, "")}/sitemap.xml`;
-  const txt = ["User-agent: *", "Allow: /", `Sitemap: ${sitemapUrl}`, ""].join("\n");
+  const txt = [
+    "User-agent: *",
+    "Allow: /",
+    `Sitemap: ${sitemapUrl}`,
+    "",
+  ].join("\n");
   res.type("text/plain").send(txt);
 });
 
-// sitemap.xml — includes school pages from DB (assumes School model with slug & updatedAt)
+// Simple dynamic sitemap.xml (add more URLs if your site has pages)
+// If you have dynamic school pages, extend this to generate from DB.
 app.get("/sitemap.xml", async (req, res) => {
   try {
+    // Root static pages - add others you want indexed
     const pages = [
       { url: "/", changefreq: "weekly", priority: 1.0 },
       { url: "/recommend", changefreq: "weekly", priority: 0.8 },
@@ -243,31 +258,16 @@ app.get("/sitemap.xml", async (req, res) => {
       { url: "/health", changefreq: "monthly", priority: 0.1 },
     ];
 
-    // Add downloads that exist
+    // include docs that exist
     for (const [key, entry] of DOWNLOADS.entries()) {
       if (fs.existsSync(entry.path)) {
         pages.push({ url: `/download/${key}`, changefreq: "monthly", priority: 0.1 });
       }
     }
 
-    // Add schools from DB if model exists
-    try {
-      if (School && typeof School.find === "function") {
-        const schools = await School.find({ published: true }).select("slug updatedAt").lean().limit(50000);
-        for (const s of schools) {
-          const slug = s.slug || s._id;
-          const lastmod = s.updatedAt ? new Date(s.updatedAt).toISOString() : undefined;
-          pages.push({ url: `/schools/${slug}`, changefreq: "monthly", priority: 0.6, lastmod });
-        }
-      }
-    } catch (e) {
-      console.warn("sitemap: could not query School model:", e?.message || e);
-    }
-
     const urlsXml = pages
       .map((p) => {
-        const lastmodTag = p.lastmod ? `<lastmod>${p.lastmod}</lastmod>` : "";
-        return `<url><loc>${SITE_URL.replace(/\/$/, "")}${p.url}</loc>${lastmodTag}<changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>`;
+        return `<url><loc>${SITE_URL.replace(/\/$/, "")}${p.url}</loc><changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>`;
       })
       .join("");
 
@@ -285,16 +285,7 @@ app.get("/sitemap.xml", async (req, res) => {
 
 /* Routes: public landing (SEO-friendly) */
 app.get("/", (_req, res) => {
-  res.render("landing", {
-    title: "ZimEduFinder — Find the Best Private Schools in Zimbabwe",
-    description:
-      "Smart school matching for Zimbabwean parents. Compare and discover private schools by city, curriculum (Cambridge, ZIMSEC, IB), boarding, fees band and facilities.",
-    ogTitle: "ZimEduFinder — Find Private Schools in Zimbabwe",
-    ogDescription:
-      "Find and compare private schools by curriculum, fees band, facilities and location. Start with our smart matching tool.",
-    ogImage: `${SITE_URL.replace(/\/$/, "")}/static/img/og-cover.jpg`,
-    canonicalPath: "/",
-  });
+  res.render("landing", { title: "Skoolfinder — Private Schools in Zimbabwe" });
 });
 
 /* Auth / API / Admin routes */
@@ -307,107 +298,15 @@ app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {
     user: req.user,
     title: "EduLocate – Private School Finder",
-    description: "Answer a few questions and we'll match your child to best-fit private schools.",
-    canonicalPath: "/recommend",
   });
 });
 
 app.get("/signed-out", (_req, res) => {
-  res.render("signed_out", { title: "Signed out", canonicalPath: "/signed-out" });
+  res.render("signed_out", { title: "Signed out" });
 });
 
 // Health check
 app.get("/health", (_req, res) => res.status(200).send("ok"));
-
-/* ---------- Optional: OG image generation (requires 'canvas') ---------- */
-/* If you don't want to install native deps, remove this block and rely on static images in /public/static/img/ */
-try {
-  // lazy import canvas so app still runs if canvas isn't installed
-  const { createCanvas, loadImage } = await (async () => {
-    try {
-      return await import("canvas");
-    } catch (e) {
-      console.warn("canvas not available; /og/:slug.png will be disabled");
-      return {};
-    }
-  })();
-
-  if (createCanvas) {
-    app.get("/og/:slug.png", async (req, res) => {
-      try {
-        const slug = req.params.slug;
-        let school = null;
-        try {
-          school = await School.findOne({ slug }).select("name city").lean();
-        } catch (e) {
-          // ignore DB errors; fallback to defaults
-        }
-        const title = (school && school.name) ? school.name : "ZimEduFinder";
-        const subtitle = (school && school.city) ? school.city : "Private schools in Zimbabwe";
-
-        const width = 1200, height = 630;
-        const canvas = createCanvas(width, height);
-        const ctx = canvas.getContext("2d");
-
-        // Background
-        ctx.fillStyle = "#003f8a";
-        ctx.fillRect(0, 0, width, height);
-
-        // Try draw logo if exists
-        try {
-          const logoPath = path.join(__dirname, "public", "static", "img", "logo.png");
-          if (fs.existsSync(logoPath)) {
-            const logoImg = await loadImage(logoPath);
-            const logoW = 160;
-            const logoH = (logoImg.height / logoImg.width) * logoW;
-            ctx.drawImage(logoImg, 40, 40, logoW, logoH);
-          }
-        } catch (e) {
-          // ignore logo errors
-        }
-
-        // Title wrapping
-        ctx.fillStyle = "#fff";
-        ctx.textBaseline = "top";
-        ctx.font = "bold 56px Sans";
-        const maxWidth = width - 160;
-        const words = title.split(" ");
-        const lines = [];
-        let line = "";
-        for (const w of words) {
-          const test = line ? `${line} ${w}` : w;
-          if (ctx.measureText(test).width > maxWidth) {
-            lines.push(line);
-            line = w;
-          } else {
-            line = test;
-          }
-        }
-        if (line) lines.push(line);
-
-        let y = 220;
-        for (const l of lines.slice(0, 3)) {
-          ctx.fillText(l, 40, y);
-          y += 72;
-        }
-
-        // Subtitle
-        ctx.font = "400 34px Sans";
-        ctx.fillStyle = "#dbe9ff";
-        ctx.fillText(subtitle, 40, y + 12);
-
-        res.setHeader("Content-Type", "image/png");
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        canvas.pngStream().pipe(res);
-      } catch (e) {
-        console.error("og image error:", e);
-        res.status(500).send("og image generation failed");
-      }
-    });
-  }
-} catch (e) {
-  console.warn("OG image setup skipped:", e?.message || e);
-}
 
 const PORT = process.env.PORT || 9000;
 app.listen(PORT, "0.0.0.0", () => {

@@ -23,7 +23,11 @@ router.get(
 
 /* ----- Facebook ----- */
 // Start Facebook OAuth (request email)
-router.get("/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+//router.get("/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+
+// Start Facebook OAuth (public profile only — works immediately)
+router.get("/facebook", passport.authenticate("facebook", { scope: ["public_profile"] }));
+
 
 // Facebook callback URL
 router.get(

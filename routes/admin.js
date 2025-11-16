@@ -138,13 +138,48 @@ router.post("/import", ensureAuthed, ensureAdmin, upload.single("file"), async (
 });
 
 // ----- Users list
-router.get("/users", ensureAuthed, ensureAdmin, async (req, res) => {
+/*router.get("/users", ensureAuthed, ensureAdmin, async (req, res) => {
   const q = (req.query.q || "").trim();
   const filter = q
     ? { $or: [{ email: new RegExp(q, "i") }, { name: new RegExp(q, "i") }] }
     : {};
   const users = await User.find(filter).sort({ createdAt: -1 }).limit(500).lean();
   res.render("admin/users_list", { title: "Admin · Users", users, q });
+});
+*/
+
+// ----- Users list
+router.get("/users", ensureAuthed, ensureAdmin, async (req, res) => {
+  const q = (req.query.q || "").trim();
+  const filter = q
+    ? { $or: [{ email: new RegExp(q, "i") }, { name: new RegExp(q, "i") }] }
+    : {};
+  const users = await User.find(filter).sort({ createdAt: -1 }).limit(500).lean();
+  const msg = req.query.msg || null;
+  res.render("admin/users_list", { title: "Admin · Users", users, q, msg });
+});
+
+// DELETE user
+router.delete("/users/:id", ensureAuthed, ensureAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // Prevent deleting the currently logged-in admin user
+    if (req.user && String(req.user._id) === String(id)) {
+      return res.status(400).redirect("/admin/users?q=&msg=" + encodeURIComponent("You cannot delete your own account."));
+    }
+
+    const u = await User.findById(id);
+    if (!u) {
+      return res.status(404).redirect("/admin/users?q=&msg=" + encodeURIComponent("User not found."));
+    }
+
+    await User.findByIdAndDelete(id);
+    return res.redirect("/admin/users?q=&msg=" + encodeURIComponent("User deleted."));
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    return res.status(500).redirect("/admin/users?q=&msg=" + encodeURIComponent("Failed to delete user."));
+  }
 });
 
 // ----------------- helpers -----------------

@@ -1,0 +1,30 @@
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Users</h2>
+  </div>
+
+  <form method="get" class="grid" style="margin-top:12px">
+    <div>
+      <label>Search by name or email</label>
+      <input class="input" name="q" value="{{q}}" placeholder="e.g. ty@example.com"/>
+    </div>
+    <div style="align-self:end">
+      <button class="btn" type="submit">Search</button>
+    </div>
+  </form>
+
+  {{#if users.length}}
+    {{#each users}}
+      <div class="result">
+        <img src="{{this.photo}}" onerror="this.src='/img/school-placeholder.png'" alt="{{this.name}}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
+        <div style="flex:1">
+          <strong>{{this.name}}</strong>
+          <div class="text-muted">{{this.email}}</div>
+        </div>
+        <div><span class="badge" style="text-transform:uppercase">{{this.role}}</span></div>
+      </div>
+    {{/each}}
+  {{else}}
+    <div class="card">No users found.</div>
+  {{/if}}
+</div>

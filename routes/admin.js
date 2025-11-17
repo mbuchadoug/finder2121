@@ -87,4 +87,48 @@ router.post("/users/:id/delete", ensureAuthed, ensureAdmin, async (req, res) => 
 /* I'm keeping the rest of your file unchanged; append the previous school routes here */
 /* If you replaced the file entirely, paste your other routes (schools, import, etc) below */
 
+
+router.get("/schools", ensureAuthed, ensureAdmin, async (req, res) => {
+  const q = (req.query.q || "").trim();
+  const filter = q ? { name: new RegExp(q, "i") } : {};
+  const schools = await School.find(filter).sort({ name: 1 }).limit(500).lean();
+  res.render("admin/schools_list", { title: "Admin · Schools", schools, q });
+});
+
+// Create form
+router.get("/schools/new", ensureAuthed, ensureAdmin, (_req, res) => {
+  res.render("admin/school_form", { title: "Admin · New School", school: {}, isNew: true });
+});
+
+// Create submit
+router.post("/schools", ensureAuthed, ensureAdmin, async (req, res) => {
+  const body = normalizeSchoolPayload(req.body);
+  await School.create(body);
+  res.redirect("/admin/schools");
+});
+
+// Edit form
+router.get("/schools/:id/edit", ensureAuthed, ensureAdmin, async (req, res) => {
+  const school = await School.findById(req.params.id).lean();
+  if (!school) return res.status(404).send("Not found");
+  res.render("admin/school_form", {
+    title: `Admin · Edit ${school.name}`,
+    school,
+    isNew: false,
+  });
+});
+
+// UPDATE
+router.put("/schools/:id", ensureAuthed, ensureAdmin, async (req, res) => {
+  const body = normalizeSchoolPayload(req.body);
+  await School.findByIdAndUpdate(req.params.id, { $set: body });
+  res.redirect("/admin/schools");
+});
+
+// DELETE
+router.delete("/schools/:id", ensureAuthed, ensureAdmin, async (req, res) => {
+  await School.findByIdAndDelete(req.params.id);
+  res.redirect("/admin/schools");
+});
+
 export default router;

@@ -10,7 +10,6 @@
     </div>
   {{/unless}}
 
-  <!-- Note: action points to API; when anonymous clicking finds -> we'll redirect client-side to auth -->
   <form id="prefsForm" action="/api/recommend" method="post">
     <div class="grid">
       <div>
@@ -88,12 +87,7 @@
     </div>
 
     <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
-      {{!-- if user authenticated, button is submit, else button is plain button and JS will handle redirect --}}
-      {{#if user}}
-        <button id="findBtn" class="btn" type="submit">Get personalised matches</button>
-      {{else}}
-        <button id="findBtn" class="btn" type="button">Get personalised matches</button>
-      {{/if}}
+      <button id="findBtn" class="btn" type="submit">Get personalised matches</button>
       <span id="loader" class="loader" style="display:none;"></span>
     </div>
   </form>
@@ -102,55 +96,44 @@
 <div id="results" style="margin-top:16px"></div>
 
 <script>
-(function () {
-  // Client-side FB in-app detection + debug logging
-  function isFacebookInAppClient() {
-    const ua = (navigator.userAgent || '').toLowerCase();
-    const ref = (document.referrer || '').toLowerCase();
-    // broad set of markers
-    return /\bfbav\b|\bfban\b|facebook|messenger|instagram|fb_iab|fb_iab_ios|fb_iab_android|okhttp/i.test(ua) || ref.includes('facebook.com');
-  }
+  (function () {
+    const findBtn = document.getElementById('findBtn');
+    const form = document.getElementById('prefsForm');
 
-  function returnToPath() {
-    return window.location.pathname + window.location.search + window.location.hash;
-  }
+    // If user is authenticated server-side, `user` exists; keep normal behaviour.
+    // If not authenticated, intercept submit and redirect to /auth/signin which
+    // will choose Facebook when the request comes from Facebook in-app browser.
+    const isAuthed = {{#if user}}true{{else}}false{{/if}};
 
-  const findBtn = document.getElementById('findBtn');
-  const form = document.getElementById('prefsForm');
+    function makeReturnTo() {
+      return window.location.pathname + window.location.search + window.location.hash;
+    }
 
-  if (!findBtn) return;
+    if (!findBtn || !form) return;
 
-  // If user is not authed (server rendered), handle click client-side
-  const isAuthed = {{#if user}}true{{else}}false{{/if};
+    if (!isAuthed) {
+      // intercept submit for anonymous users
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        // go to /auth/signin — server will detect Facebook in-app and start FB OAuth
+        const returnTo = makeReturnTo();
+        window.location.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+      });
 
-  if (!isAuthed) {
-    findBtn.addEventListener('click', function (ev) {
-      ev.preventDefault(); // double-safety to stop accidental form post
-      const isFB = isFacebookInAppClient();
-      console.log('[prefsForm] anonymous click — fb_inapp=', isFB, 'ua=', navigator.userAgent);
-      // prefer forcing provider=facebook when FB in-app is detected (server respects provider override)
-      const providerParam = isFB ? 'provider=facebook&' : '';
-      const returnTo = returnToPath();
-      // redirect to auth signin (server will still do detection)
-      window.location.href = '/auth/signin?' + providerParam + 'returnTo=' + encodeURIComponent(returnTo);
-    });
-
-    // also ensure inline sign link uses provider hint if in FB
-    const inline = document.getElementById('inlineSign');
-    if (inline) {
-      inline.addEventListener('click', function () {
-        const isFB = isFacebookInAppClient();
-        const providerParam = isFB ? 'provider=facebook&' : '';
-        const returnTo = returnToPath();
-        this.href = '/auth/signin?' + providerParam + 'returnTo=' + encodeURIComponent(returnTo);
+      // also ensure inline sign link uses auth route
+      const inline = document.getElementById('inlineSign');
+      if (inline) {
+        inline.addEventListener('click', function () {
+          const returnTo = makeReturnTo();
+          this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+        });
+      }
+    } else {
+      // if authenticated, allow default submit — could still show loader etc.
+      form.addEventListener('submit', function () {
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'inline-block';
       });
     }
-  } else {
-    // Authenticated users: show loader and allow form submit
-    form.addEventListener('submit', function () {
-      const loader = document.getElementById('loader');
-      if (loader) loader.style.display = 'inline-block';
-    });
-  }
-})();
+  })();
 </script>

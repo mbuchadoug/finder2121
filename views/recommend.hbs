@@ -5,7 +5,7 @@
     <div style="margin:10px 0;padding:10px;border:1px solid #eee;background:#fbfbff;border-radius:6px">
       <strong>Want personalised results?</strong>
       <div style="margin-top:6px">
-        <a id="inlineSign" class="btn" href="/signin?returnTo={{canonicalPath}}">Sign in to save preferences</a>
+        <a id="inlineSign" class="btn" href="/auth/signin?returnTo={{canonicalPath}}">Sign in to save preferences</a>
       </div>
     </div>
   {{/unless}}
@@ -102,7 +102,7 @@
     if (!inline) return;
     inline.addEventListener('click', function () {
       const returnTo = window.location.pathname + window.location.search + window.location.hash;
-      this.href = '/signin?returnTo=' + encodeURIComponent(returnTo);
+      this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
     });
   })();
 </script>

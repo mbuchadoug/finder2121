@@ -90,10 +90,10 @@
           </form>
 
         {{else}}
-          <!-- Single sign-in button — will redirect to /signin with returnTo -->
-          <a id="signinLink" class="sign-btn" href="/signin?returnTo={{canonicalPath}}">Sign in</a>
+          <!-- Single sign-in button — will redirect to /auth/signin with returnTo -->
+          <a id="signinLink" class="sign-btn" href="/auth/signin?returnTo={{canonicalPath}}">Sign in</a>
           <noscript>
-            <!-- If JS disabled, pass canonicalPath via server-rendered link already above -->
+            <!-- If JS disabled, server-rendered link above already includes canonicalPath -->
           </noscript>
         {{/if}}
       </div>
@@ -112,7 +112,7 @@
         // Compose the full path+query for returnTo
         const returnTo = window.location.pathname + window.location.search + window.location.hash;
         // set href dynamically to ensure user returns to exact place they clicked
-        this.href = '/signin?returnTo=' + encodeURIComponent(returnTo);
+        this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
         // allow default click to proceed
       });
     })();

@@ -16,7 +16,7 @@
   />
 
   <!-- Canonical -->
-  <link rel="canonical" href="{{siteUrl}}{{canonicalPath}}" />
+  <link rel="canonical" href="{{siteUrl}}" />
 
   <!-- Styles -->
   <link rel="preload" href="/css/app.css" as="style" />
@@ -25,7 +25,7 @@
   <!-- Open Graph -->
   <meta property="og:title" content="ZimEduFinder — Private Schools in Zimbabwe" />
   <meta property="og:description" content="Find and compare private schools by curriculum, fees band, facilities and location." />
-  <meta property="og:url" content="{{siteUrl}}{{canonicalPath}}" />
+  <meta property="og:url" content="{{siteUrl}}" />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="{{siteUrl}}/static/img/og-cover.jpg" />
 
@@ -52,18 +52,18 @@
   </script>
 
   <style>
-    .sign-btn {
-      background: #0b63d6;
-      color: #fff !important;
-      padding: 8px 14px;
-      border-radius: 6px;
-      text-decoration: none;
-      font-weight: 600;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-      display: inline-block;
+    .fb-btn {
+      background:#1877F2;
+      color:#fff !important;
+      padding:8px 16px;
+      border-radius:6px;
+      text-decoration:none;
+      font-weight:600;
+      box-shadow:0 2px 6px rgba(0,0,0,0.15);
     }
-    .sign-btn:hover { filter: brightness(.95); }
-    .user-badge { font-size:12px; color:#666; margin-right:8px; }
+    .fb-btn:hover {
+      background:#0f65d9;
+    }
   </style>
 
 </head>
@@ -81,7 +81,7 @@
 
       <div style="display:flex;gap:8px;align-items:center">
         {{#if user}}
-          <span class="user-badge">
+          <span class="text-muted" style="font-size:12px">
             {{user.email}} {{#if user.role}}({{user.role}}){{/if}}
           </span>
 
@@ -90,11 +90,8 @@
           </form>
 
         {{else}}
-          <!-- Single sign-in button — will redirect to /signin with returnTo -->
-          <a id="signinLink" class="sign-btn" href="/signin?returnTo={{canonicalPath}}">Sign in</a>
-          <noscript>
-            <!-- If JS disabled, pass canonicalPath via server-rendered link already above -->
-          </noscript>
+          <a class="btn fb-btn" href="/auth/facebook">Login with Facebook</a>
+          <a class="btn" href="/auth/google">Sign in with Google</a>
         {{/if}}
       </div>
     </nav>
@@ -102,21 +99,6 @@
     {{{body}}}
 
   </div>
-
-  <script>
-    // Ensure returnTo is accurate (useful when pages have client-side routing or query strings)
-    (function () {
-      const btn = document.getElementById('signinLink');
-      if (!btn) return;
-      btn.addEventListener('click', function (ev) {
-        // Compose the full path+query for returnTo
-        const returnTo = window.location.pathname + window.location.search + window.location.hash;
-        // set href dynamically to ensure user returns to exact place they clicked
-        this.href = '/signin?returnTo=' + encodeURIComponent(returnTo);
-        // allow default click to proceed
-      });
-    })();
-  </script>
 
   <script src="/js/app.js" defer></script>
 </body>

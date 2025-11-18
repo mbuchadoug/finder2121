@@ -1,20 +1,11 @@
 <div class="card">
   <h2 style="margin-top:0">Find your child’s ideal private school</h2>
 
-  {{#unless user}}
-    <div style="margin:10px 0;padding:10px;border:1px solid #eee;background:#fbfbff;border-radius:6px">
-      <strong>Want personalised results?</strong>
-      <div style="margin-top:6px">
-        <a id="inlineSign" class="btn" href="/signin?returnTo={{canonicalPath}}">Sign in to save preferences</a>
-      </div>
-    </div>
-  {{/unless}}
-
   <form id="prefsForm">
     <div class="grid">
       <div>
         <label>City</label>
-        <input class="input" id="city" placeholder="Harare" value="Harare" readonly />
+        <input class="input" id="city" placeholder="Harare" value="Harare"/ readonly>
       </div>
 
       <div>
@@ -94,15 +85,3 @@
 </div>
 
 <div id="results" style="margin-top:16px"></div>
-
-<script>
-  // make inline sign button behave same as header (ensures returnTo is exact)
-  (function () {
-    const inline = document.getElementById('inlineSign');
-    if (!inline) return;
-    inline.addEventListener('click', function () {
-      const returnTo = window.location.pathname + window.location.search + window.location.hash;
-      this.href = '/signin?returnTo=' + encodeURIComponent(returnTo);
-    });
-  })();
-</script>

@@ -322,7 +322,7 @@ app.use("/admin", adminRoutes);
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {
     user: req.user,
-    title: "EduLocate – Private School Finder",
+    title: "ZimEduFinder – Private School Finder",
     description: "Answer a few questions and we'll match your child to best-fit private schools.",
     canonicalPath: "/recommend",
   });

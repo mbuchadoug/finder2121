@@ -10,16 +10,16 @@
     </div>
   {{/unless}}
 
-  <form id="prefsForm" action="/api/recommend" method="post">
+  <form id="prefsForm">
     <div class="grid">
       <div>
         <label>City</label>
-        <input class="input" name="city" id="city" placeholder="Harare" value="Harare" readonly />
+        <input class="input" id="city" placeholder="Harare" value="Harare" readonly />
       </div>
 
       <div>
         <label>Learning Environment</label>
-        <select class="input" name="learningEnvironment" id="learningEnvironment">
+        <select class="input" id="learningEnvironment">
           <option value="">Any</option>
           <option>Comprehensive</option>
           <option>Enhanced</option>
@@ -29,7 +29,7 @@
 
       <div>
         <label>Curriculum</label>
-        <select class="input" name="curriculum" id="curriculum" multiple size="5">
+        <select class="input" id="curriculum" multiple size="5">
           <option>Cambridge</option>
           <option>ZIMSEC</option>
           <option>IB</option>
@@ -39,7 +39,7 @@
 
       <div>
         <label>School Phase</label>
-        <select class="input" name="type" id="type" multiple size="5">
+        <select class="input" id="type" multiple size="5">
           <option>Pre-School</option>
           <option>Primary School</option>
           <option>High School</option>
@@ -48,7 +48,7 @@
 
       <div>
         <label>Boarding / Day</label>
-        <select class="input" name="type2" id="type2" multiple size="4">
+        <select class="input" id="type2" multiple size="4">
           <option>Day</option>
           <option>Boarding</option>
         </select>
@@ -87,7 +87,7 @@
     </div>
 
     <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
-      <button id="findBtn" class="btn" type="submit">Get personalised matches</button>
+      <button id="findBtn" class="btn" type="submit">Find Schools</button>
       <span id="loader" class="loader" style="display:none;"></span>
     </div>
   </form>
@@ -96,44 +96,13 @@
 <div id="results" style="margin-top:16px"></div>
 
 <script>
+  // make inline sign button behave same as header (ensures returnTo is exact)
   (function () {
-    const findBtn = document.getElementById('findBtn');
-    const form = document.getElementById('prefsForm');
-
-    // If user is authenticated server-side, `user` exists; keep normal behaviour.
-    // If not authenticated, intercept submit and redirect to /auth/signin which
-    // will choose Facebook when the request comes from Facebook in-app browser.
-    const isAuthed = {{#if user}}true{{else}}false{{/if}};
-
-    function makeReturnTo() {
-      return window.location.pathname + window.location.search + window.location.hash;
-    }
-
-    if (!findBtn || !form) return;
-
-    if (!isAuthed) {
-      // intercept submit for anonymous users
-      form.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        // go to /auth/signin — server will detect Facebook in-app and start FB OAuth
-        const returnTo = makeReturnTo();
-        window.location.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
-      });
-
-      // also ensure inline sign link uses auth route
-      const inline = document.getElementById('inlineSign');
-      if (inline) {
-        inline.addEventListener('click', function () {
-          const returnTo = makeReturnTo();
-          this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
-        });
-      }
-    } else {
-      // if authenticated, allow default submit — could still show loader etc.
-      form.addEventListener('submit', function () {
-        const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'inline-block';
-      });
-    }
+    const inline = document.getElementById('inlineSign');
+    if (!inline) return;
+    inline.addEventListener('click', function () {
+      const returnTo = window.location.pathname + window.location.search + window.location.hash;
+      this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+    });
   })();
 </script>

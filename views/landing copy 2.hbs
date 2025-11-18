@@ -6,9 +6,7 @@
       <h1>{{title}}</h1>
       <p class="subtitle">{{description}}</p>
 
-      <!-- Updated CTA: points to auth signin with returnTo default to /recommend.
-           JS below will add provider=facebook when it detects FB in-app. -->
-      <a id="landingCta" href="/auth/signin?returnTo=/recommend" class="cta-button">Get Personalized Matches →</a>
+      <a href="/recommend" class="cta-button">Get Personalized Matches →</a>
     </div>
   </header>
 
@@ -89,34 +87,3 @@
 .grid-featured .card{background:#fff;border:1px solid #eef2f7;padding:14px;border-radius:10px;box-shadow:0 4px 12px rgba(10,20,40,0.03)}
 .faq details{margin-bottom:10px;border-left:3px solid #e6eefc;padding:10px 12px}
 </style>
-
-<script>
-  (function () {
-    // Client-side detection for Facebook / Instagram in-app browsers
-    function isFacebookInApp() {
-      const ua = (navigator.userAgent || '').toLowerCase();
-      const ref = (document.referrer || '').toLowerCase();
-      // broad fingerprints used by FB / IG in-app browsers
-      return /\bfbav\b|\bfban\b|facebook|messenger|instagram|fb_iab|fb_iab_ios|fb_iab_android|okhttp/i.test(ua) || ref.includes('facebook.com');
-    }
-
-    const cta = document.getElementById('landingCta');
-    if (!cta) return;
-
-    // if inside FB in-app, hint provider=facebook so server starts FB OAuth explicitly
-    if (isFacebookInApp()) {
-      const base = '/auth/signin';
-      const params = new URLSearchParams({
-        provider: 'facebook',
-        returnTo: '/recommend'
-      });
-      cta.href = base + '?' + params.toString();
-      // optional label change for clarity
-      cta.textContent = 'Get Personalized Matches (Facebook) →';
-    } else {
-      // default: go to auth signin; server will prefer Google where appropriate,
-      // or user can be redirected to /recommend after login.
-      cta.href = '/auth/signin?returnTo=/recommend';
-    }
-  })();
-</script>

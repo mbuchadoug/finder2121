@@ -126,9 +126,11 @@ router.post("/recommend", async (req, res) => {
   );
   const selectedBoarding = toArray(type2).some((v) => /boarding/i.test(v));
 
-  const shouldPin = !selectedZimsec && !selectedHighSchool && !selectedBoarding;
+  //const shouldPin = !selectedZimsec && !selectedHighSchool && !selectedBoarding;
+  // Force pinning for all recommend requests
+  const shouldPin = true;
 
-  const PINNED = (process.env.PINNED_SCHOOLS || "st eurit international school")
+  const PINNED = (process.env.PINNED_SCHOOLS || "St Eurit International School")
     .split(/[|,]/)
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);

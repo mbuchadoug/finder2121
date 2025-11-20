@@ -191,6 +191,32 @@
     return String(val);
   }
 
+  function buildPinnedBanner(p) {
+    if (!p) return '';
+    const reg = p.registerUrl || p.register || p.register_url || '';
+    const downloads = (p.downloads || {});
+    const regHref = reg || (p.slug ? `/register/${encodeURIComponent(p.slug)}` : '');
+    const regBtn = regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
+    const downloadRegistration = downloads.registration || '/download/st-eurit-registration';
+    const downloadProfile = downloads.profile || '/download/st-eurit-profile';
+
+    return `
+      <div class="pinned-banner" data-pinned="${p.slug || ''}">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between">
+          <div style="flex:1;min-width:220px">
+            <strong style="font-size:16px">${p.name || 'Recommended school'}</strong>
+            <div style="font-size:13px;color:#444">This is our recommended school — you can apply online or download the registration form.</div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <a class="btn btn-primary" href="${downloadRegistration}">Download Registration Form (PDF)</a>
+            <a class="btn btn-light" href="${downloadProfile}">Download School Profile (PDF)</a>
+            ${regBtn}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   // Render a single recommendation — responsive buttons
   function renderRecommendation(r) {
     const metaParts = [];
@@ -203,7 +229,7 @@
 
     // Buttons container: only for pinned
     let btnsHtml = '';
-    if (r.pinned) {
+    if (r.pinned || r.registerUrl) {
       const downloadsHtml = `
         <a class="btn btn-primary" href="/download/st-eurit-registration">Download Registration Form (PDF)</a>
         <a class="btn btn-light" href="/download/st-eurit-profile">Download School Profile (PDF)</a>
@@ -244,7 +270,6 @@
   if (!findBtn || !form) return;
 
   if (!isAuthed) {
-    // old behaviour: redirect anonymous users to sign-in
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       const returnTo = makeReturnTo();
@@ -272,32 +297,51 @@
           resultsNode.innerHTML = `<div style="padding:14px;border:1px solid #faa;background:#fff4f4">Failed to fetch recommendations: ${resp.status} ${resp.statusText} ${txt ? ' - ' + txt : ''}</div>`;
           return;
         }
+
         const data = await resp.json();
         const recs = data.recommendations || [];
 
-        // If the API returned a pinnedSchool, render a banner above the results
-        if (data.pinnedSchool && data.pinnedSchool.registerUrl) {
-          const p = data.pinnedSchool;
-          const pinnedBanner = `
-            <div class="pinned-banner">
-              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between">
-                <div style="flex:1;min-width:220px">
-                  <strong style="font-size:16px">${p.name || 'Recommended school'}</strong>
-                  <div style="font-size:13px;color:#444">This is our recommended school — you can apply directly online or download the registration form.</div>
-                </div>
-                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-                  <a class="btn btn-primary" href="${p.downloads?.registration || '/download/st-eurit-registration'}">Download Registration Form (PDF)</a>
-                  <a class="btn btn-light" href="${p.downloads?.profile || '/download/st-eurit-profile'}">Download School Profile (PDF)</a>
-                  <a class="btn btn-success" href="${p.registerUrl}">Fill Registration Form Online</a>
-                </div>
-              </div>
-            </div>
-          `;
-          resultsNode.innerHTML = pinnedBanner + (recs.length ? recs.map(renderRecommendation).join('') : `<div style="padding:14px;border:1px dashed #ddd;background:#fafafa">No recommendations found.</div>`);
+        // Debug info (remove later if desired)
+        console.log("API /recommend response:", { pinnedSchool: data.pinnedSchool, recommendations: recs });
+
+        // 1) Prefer pinnedSchool from API
+        let pinned = data.pinnedSchool || null;
+
+        // 2) Fallback: find a pinned entry inside recommendations
+        if (!pinned) {
+          const pinnedFromRecs = recs.find(r => r.pinned || r.registerUrl);
+          if (pinnedFromRecs) {
+            pinned = {
+              name: pinnedFromRecs.name,
+              slug: pinnedFromRecs.slug,
+              registerUrl: pinnedFromRecs.registerUrl,
+              downloads: { registration: '/download/st-eurit-registration', profile: '/download/st-eurit-profile' }
+            };
+          }
+        }
+
+        // 3) Final fallback: if any recommendation has registerUrl, pick that
+        if (!pinned) {
+          const anyWithRegister = recs.find(r => r.registerUrl);
+          if (anyWithRegister) {
+            pinned = {
+              name: anyWithRegister.name,
+              slug: anyWithRegister.slug,
+              registerUrl: anyWithRegister.registerUrl,
+              downloads: { registration: '/download/st-eurit-registration', profile: '/download/st-eurit-profile' }
+            };
+          }
+        }
+
+        // Build output: pinned banner (if pinned) + results
+        if (pinned) {
+          const bannerHtml = buildPinnedBanner(pinned);
+          resultsNode.innerHTML = bannerHtml + (recs.length ? recs.map(renderRecommendation).join('') : `<div style="padding:14px;border:1px dashed #ddd;background:#fafafa">No recommendations found.</div>`);
         } else {
           renderResults(recs);
         }
 
+        // Keep UX smooth
         resultsNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         console.error("recommend fetch error:", err);
@@ -307,7 +351,7 @@
       }
     });
 
-    // Optional: auto-run on load (uncomment if wanted)
+    // Optionally run initial search if you want initial results for signed users:
     // form.dispatchEvent(new Event('submit'));
   }
 })();

@@ -237,6 +237,8 @@ router.post("/recommend", async (req, res) => {
       heroImage: d.heroImage,
       _pinned: isPinnedDoc(d),
       pinned: isPinnedDoc(d) && shouldPin,
+     registerUrl: d.slug ? `/register/${encodeURIComponent(d.slug)}` : undefined,
+
     };
   });
 

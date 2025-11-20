@@ -12,6 +12,9 @@ import { engine } from "express-handlebars";
 import { ensureAuth } from "./middleware/ensureAuth.js";
 import MongoStore from "connect-mongo";
 import session from "express-session";
+import registerRoutes from "./routes/register.js";
+
+
 
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
@@ -52,6 +55,8 @@ app.engine(
     partialsDir: path.join(__dirname, "views/partials"),
     helpers: {
       ifeq: (a, b, opts) => (a === b ? opts.fn(this) : opts.inverse(this)),
+      ifEquals: (a, b, opts) => (String(a) === String(b) ? opts.fn ? opts.fn(this) : "selected" : opts.inverse ? opts.inverse(this) : "")
+
       // keep helpers small - we rely on res.locals for title/description/og vars
     },
     runtimeOptions: {
@@ -317,7 +322,7 @@ app.get("/", (_req, res) => {
 app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
-
+app.use("/register", registerRoutes);
 /* Protected recommend page */
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {

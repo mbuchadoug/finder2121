@@ -1,0 +1,64 @@
+{{! views/register_form.hbs }}
+<h1>{{title}}</h1>
+
+{{#if errors}}
+  <div class="errors">
+    <ul>
+      {{#each errors}}
+        <li>{{msg}}</li>
+      {{/each}}
+    </ul>
+  </div>
+{{/if}}
+
+<form method="post" action="/register" autocomplete="on">
+  <input type="hidden" name="schoolSlug" value="{{school.slug}}">
+  <input type="hidden" name="schoolName" value="{{school.name}}">
+
+  <fieldset>
+    <legend>Student details</legend>
+    <label>First name <input name="studentFirstName" value="{{form.studentFirstName}}" required></label>
+    <label>Middle name <input name="studentMiddleName" value="{{form.studentMiddleName}}"></label>
+    <label>Last name <input name="studentLastName" value="{{form.studentLastName}}" required></label>
+    <label>Date of birth <input type="date" name="dateOfBirth" value="{{form.dateOfBirth}}"></label>
+    <label>Gender
+      <select name="gender">
+        <option value="">Select</option>
+        <option {{#ifEquals form.gender "Boy"}}selected{{/ifEquals}}>Boy</option>
+        <option {{#ifEquals form.gender "Girl"}}selected{{/ifEquals}}>Girl</option>
+        <option {{#ifEquals form.gender "Other"}}selected{{/ifEquals}}>Other</option>
+      </select>
+    </label>
+    <label>Current Grade / Stage <input name="currentGrade" value="{{form.currentGrade}}"></label>
+    <label>Languages spoken <input name="languagesSpoken" value="{{form.languagesSpoken}}"></label>
+    <label>Allergies <input name="allergies" value="{{form.allergies}}"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Parent / Guardian</legend>
+    <label>Father's name <input name="fatherName" value="{{form.fatherName}}"></label>
+    <label>Father mobile <input name="fatherMobile" value="{{form.fatherMobile}}"></label>
+    <label>Father email <input name="fatherEmail" value="{{form.fatherEmail}}"></label>
+
+    <label>Mother's name <input name="motherName" value="{{form.motherName}}"></label>
+    <label>Mother mobile <input name="motherMobile" value="{{form.motherMobile}}"></label>
+    <label>Mother email <input name="motherEmail" value="{{form.motherEmail}}"></label>
+
+    <label>Home address <input name="homeAddress" value="{{form.homeAddress}}"></label>
+    <label>Work address <input name="workAddress" value="{{form.workAddress}}"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Indemnity & Consent</legend>
+    <p>Please read the school's indemnity and consent (see PDF on site).</p>
+    <label><input type="checkbox" name="indemnityAccepted" value="1" {{#if form.indemnityAccepted}}checked{{/if}}> I accept the indemnity terms.</label>
+    <input type="hidden" name="indemnityText" value="Parent accepted indemnity on form">
+  </fieldset>
+
+  <div style="margin-top:12px;">
+    <button type="submit">Submit registration</button>
+    <a href="/">Cancel</a>
+  </div>
+</form>
+
+<p>If you have issues, email <a href="mailto:{{schoolContactEmail}}">{{schoolContactEmail}}</a></p>

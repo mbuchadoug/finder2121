@@ -32,6 +32,15 @@
 @media (max-width: 420px) {
   .btn-row .btn { min-width: 100%; padding: 12px 14px; border-radius: 10px; }
 }
+
+/* Pinned banner */
+.pinned-banner {
+  border-radius:10px;
+  border:1px solid #cfe8ff;
+  padding:14px;
+  margin-bottom:16px;
+  background:#f6fbff;
+}
 </style>
 
 <div class="card">
@@ -265,9 +274,30 @@
         }
         const data = await resp.json();
         const recs = data.recommendations || [];
-        // DEBUG: inspect server response
-        console.log("recommendations from server:", recs);
-        renderResults(recs);
+
+        // If the API returned a pinnedSchool, render a banner above the results
+        if (data.pinnedSchool && data.pinnedSchool.registerUrl) {
+          const p = data.pinnedSchool;
+          const pinnedBanner = `
+            <div class="pinned-banner">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between">
+                <div style="flex:1;min-width:220px">
+                  <strong style="font-size:16px">${p.name || 'Recommended school'}</strong>
+                  <div style="font-size:13px;color:#444">This is our recommended school — you can apply directly online or download the registration form.</div>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                  <a class="btn btn-primary" href="${p.downloads?.registration || '/download/st-eurit-registration'}">Download Registration Form (PDF)</a>
+                  <a class="btn btn-light" href="${p.downloads?.profile || '/download/st-eurit-profile'}">Download School Profile (PDF)</a>
+                  <a class="btn btn-success" href="${p.registerUrl}">Fill Registration Form Online</a>
+                </div>
+              </div>
+            </div>
+          `;
+          resultsNode.innerHTML = pinnedBanner + (recs.length ? recs.map(renderRecommendation).join('') : `<div style="padding:14px;border:1px dashed #ddd;background:#fafafa">No recommendations found.</div>`);
+        } else {
+          renderResults(recs);
+        }
+
         resultsNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         console.error("recommend fetch error:", err);

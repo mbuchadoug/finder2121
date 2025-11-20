@@ -88,12 +88,18 @@ router.post("/recommend", async (req, res) => {
       } else if (wantBoarding) {
         const regs = makeContainsRegexes(TYPE2_BOARDING);
         and.push({
-          $or: [{ type2: { $in: regs } }, { "facilities.boarding": true }],
+          $or: [
+            { type2: { $in: regs } },
+            { "facilities.boarding": true },
+          ],
         });
       } else if (wantDay) {
         const regs = makeContainsRegexes(TYPE2_DAY);
         and.push({
-          $or: [{ type2: { $in: regs } }, { "facilities.boarding": { $ne: true } }],
+          $or: [
+            { type2: { $in: regs } },
+            { "facilities.boarding": { $ne: true } },
+          ],
         });
       }
     }
@@ -109,7 +115,10 @@ router.post("/recommend", async (req, res) => {
     }
 
     /* ---------- fetch matching docs ---------- */
-    let docs = await School.find(filter).sort({ tier: 1, name: 1 }).limit(100).lean();
+    let docs = await School.find(filter)
+      .sort({ tier: 1, name: 1 })
+      .limit(100)
+      .lean();
 
     /* ---------- CONDITIONAL PINNING ---------- */
     const selectedZimsec = toArray(curriculum).some((v) => /zimsec/i.test(v));
@@ -139,7 +148,11 @@ router.post("/recommend", async (req, res) => {
 
       const pinnedDoc = await School.findOne({
         ...(city ? { city: cityRegex } : {}),
-        $or: [{ name: { $in: pinnedNameRegs } }, { slug: { $in: PINNED } }, { normalizedName: { $in: PINNED } }],
+        $or: [
+          { name: { $in: pinnedNameRegs } },
+          { slug: { $in: PINNED } },
+          { normalizedName: { $in: PINNED } },
+        ],
       }).lean();
 
       if (pinnedDoc) {
@@ -149,38 +162,6 @@ router.post("/recommend", async (req, res) => {
           console.log("DEBUG_RECO: No pinnedDoc found for PINNED:", PINNED);
         }
       }
-    }
-
-    /* ---------- pinnedSchool object (stable, separate) ---------- */
-    let pinnedSchool = null;
-    try {
-      if (PINNED.length) {
-        const pinnedQueryOr = [];
-        for (const p of PINNED) {
-          // try slug, normalizedName and exact name match
-          pinnedQueryOr.push({ slug: p });
-          pinnedQueryOr.push({ normalizedName: p });
-          pinnedQueryOr.push({ name: new RegExp(`^${esc(p)}$`, "i") });
-        }
-        if (pinnedQueryOr.length) {
-          const pinnedDoc = await School.findOne({ $or: pinnedQueryOr }).select("name slug").lean();
-          if (pinnedDoc) {
-            pinnedSchool = {
-              id: pinnedDoc._id,
-              name: pinnedDoc.name,
-              slug: pinnedDoc.slug,
-              registerUrl: pinnedDoc.slug ? `/register/${encodeURIComponent(pinnedDoc.slug)}` : undefined,
-              downloads: {
-                registration: "/download/st-eurit-registration",
-                profile: "/download/st-eurit-profile",
-              },
-            };
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("pinnedSchool lookup failed:", e && e.message ? e.message : e);
-      pinnedSchool = null;
     }
 
     /* ---------- scoring + reasons ---------- */
@@ -284,10 +265,9 @@ router.post("/recommend", async (req, res) => {
 
     if (process.env.DEBUG_RECO === "1") {
       console.log("DEBUG_RECO: final recommendations (clean):", JSON.stringify(clean, null, 2));
-      console.log("DEBUG_RECO: pinnedSchool:", JSON.stringify(pinnedSchool, null, 2));
     }
 
-    return res.json({ recommendations: clean, pinnedSchool });
+    return res.json({ recommendations: clean });
   } catch (err) {
     console.error("recommend route error:", err);
     res.status(500).send("recommend failed");

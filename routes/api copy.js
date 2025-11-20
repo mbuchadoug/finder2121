@@ -220,9 +220,6 @@ router.post("/recommend", async (req, res) => {
 
     const match = denom ? (matched / denom) * 100 : 100;
 
-    // Ensure pinned detection is explicit & stable
-    const pinnedFlag = isPinnedDoc(d) && shouldPin;
-
     return {
       id: d._id,
       slug: d.slug, // expose slug
@@ -239,9 +236,9 @@ router.post("/recommend", async (req, res) => {
       logo: d.logo,
       heroImage: d.heroImage,
       _pinned: isPinnedDoc(d),
-      pinned: pinnedFlag,
-      // Only expose registerUrl for pinned docs
-      registerUrl: pinnedFlag && d.slug ? `/register/${encodeURIComponent(d.slug)}` : undefined,
+      pinned: isPinnedDoc(d) && shouldPin,
+     registerUrl: d.slug ? `/register/${encodeURIComponent(d.slug)}` : undefined,
+
     };
   });
 

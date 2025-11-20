@@ -130,7 +130,6 @@
       }
       gatherSelect('curriculum'); gatherSelect('type'); gatherSelect('type2');
 
-      // facilities checkboxes
       const facilityEls = formEl.querySelectorAll('input[type="checkbox"][name="facilities"]');
       if (facilityEls && facilityEls.length) {
         const fvals = [];
@@ -141,7 +140,6 @@
       return obj;
     }
 
-    // make pretty text from possibly nested arrays
     function flattenJoin(val) {
       if (!val && val !== 0) return '';
       if (Array.isArray(val)) {
@@ -164,20 +162,15 @@
       // Buttons container: show downloads + register ONLY for pinned school
       let btns = '';
       if (r.pinned) {
-        // ensure spacing and distinct elements so they don't visually merge
         btns += `
           <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:12px; align-items:center">
             <a class="btn btn-primary" href="/download/st-eurit-registration" style="display:inline-block; padding:12px 18px; border-radius:12px;">Download Registration Form (PDF)</a>
             <a class="btn btn-light" href="/download/st-eurit-profile" style="display:inline-block; padding:12px 18px; border-radius:12px;">Download School Profile (PDF)</a>
         `;
-
         if (r.registerUrl) {
           btns += `<a class="btn btn-success" href="${r.registerUrl}" style="display:inline-block; padding:12px 18px; border-radius:12px; background:#0b66d0; color:#fff; text-decoration:none;">Fill Registration Form Online</a>`;
         }
         btns += `</div>`;
-      } else {
-        // not pinned: no downloads, no registration button
-        btns = '';
       }
 
       const badge = r.pinned ? `<span class="badge" style="float:right;background:#e6f0ff;color:#036; padding:6px 10px;border-radius:999px;font-weight:700">RECOMMENDED</span>` : '';
@@ -231,6 +224,7 @@
         try {
           if (loader) loader.style.display = 'inline-block';
           const payload = collectFormData(form);
+
           const resp = await fetch(form.action || '/api/recommend', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -246,6 +240,10 @@
 
           const data = await resp.json();
           const recs = data.recommendations || [];
+
+          // DEBUG LOG: inspect server response - confirm pinned/registerUrl presence
+          console.log("recommendations from server:", recs);
+
           renderResults(recs);
           resultsNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (err) {

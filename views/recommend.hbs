@@ -32,17 +32,6 @@
 @media (max-width: 420px) {
   .btn-row .btn { min-width: 100%; padding: 12px 14px; border-radius: 10px; }
 }
-
-/* Debug pill (temporary) */
-.debug-pill {
-  display:inline-block;
-  background:#fff5cc;
-  color:#7a5a00;
-  padding:4px 8px;
-  border-radius:999px;
-  font-size:12px;
-  margin-left:8px;
-}
 </style>
 
 <div class="card">
@@ -214,9 +203,6 @@
       btnsHtml = `<div class="btn-row" aria-hidden="false">${downloadsHtml}${registerHtml}</div>`;
     }
 
-    // temporary debug pill to confirm pinned/register presence on mobile
-    const debug = `<span class="debug-pill">pinned:${r.pinned ? 'yes' : 'no'} registerUrl:${r.registerUrl ? 'yes' : 'no'}</span>`;
-
     const badge = r.pinned ? `<span class="badge" style="float:right;background:#e6f0ff;color:#036; padding:6px 10px;border-radius:999px;font-weight:700">RECOMMENDED</span>` : '';
 
     const reason = r.reason ? `<div style="color:#666;font-size:14px;margin-top:8px">Reason: ${r.reason}</div>` : `<div style="color:#666;font-size:14px;margin-top:8px">Reason: —</div>`;
@@ -225,7 +211,7 @@
       <div class="result-card" style="border-radius:10px;border:1px solid #eee;padding:18px;margin-bottom:16px;background:#fff">
         <div style="display:flex; align-items:flex-start; gap:12px;">
           <div style="flex:1">
-            <h3 style="margin:0 0 6px 0">${r.name || ''} ${debug}</h3>
+            <h3 style="margin:0 0 6px 0">${r.name || ''}</h3>
             <div style="color:#333">${meta}</div>
             ${reason}
             ${btnsHtml}

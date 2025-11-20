@@ -1,64 +1,279 @@
 {{! views/register_form.hbs }}
-<h1>{{title}}</h1>
 
-{{#if errors}}
-  <div class="errors">
-    <ul>
-      {{#each errors}}
-        <li>{{msg}}</li>
-      {{/each}}
-    </ul>
-  </div>
-{{/if}}
+<style>
+  /* Container */
+  .reg-container {
+    max-width: 980px;
+    margin: 24px auto;
+    padding: 26px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(17,24,39,0.06);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: #0f172a;
+  }
 
-<form method="post" action="/register" autocomplete="on">
-  <input type="hidden" name="schoolSlug" value="{{school.slug}}">
-  <input type="hidden" name="schoolName" value="{{school.name}}">
+  h1.reg-title {
+    margin: 0 0 18px;
+    font-size: 40px;
+    line-height: 1.05;
+    letter-spacing: -0.5px;
+  }
 
-  <fieldset>
-    <legend>Student details</legend>
-    <label>First name <input name="studentFirstName" value="{{form.studentFirstName}}" required></label>
-    <label>Middle name <input name="studentMiddleName" value="{{form.studentMiddleName}}"></label>
-    <label>Last name <input name="studentLastName" value="{{form.studentLastName}}" required></label>
-    <label>Date of birth <input type="date" name="dateOfBirth" value="{{form.dateOfBirth}}"></label>
-    <label>Gender
-      <select name="gender">
-        <option value="">Select</option>
-        <option {{#ifEquals form.gender "Boy"}}selected{{/ifEquals}}>Boy</option>
-        <option {{#ifEquals form.gender "Girl"}}selected{{/ifEquals}}>Girl</option>
-        <option {{#ifEquals form.gender "Other"}}selected{{/ifEquals}}>Other</option>
-      </select>
-    </label>
-    <label>Current Grade / Stage <input name="currentGrade" value="{{form.currentGrade}}"></label>
-    <label>Languages spoken <input name="languagesSpoken" value="{{form.languagesSpoken}}"></label>
-    <label>Allergies <input name="allergies" value="{{form.allergies}}"></label>
-  </fieldset>
+  fieldset.section {
+    border: 1px solid #d7dfe8;
+    padding: 16px;
+    margin-bottom: 18px;
+    border-radius: 8px;
+    background: #fbfdff;
+  }
 
-  <fieldset>
-    <legend>Parent / Guardian</legend>
-    <label>Father's name <input name="fatherName" value="{{form.fatherName}}"></label>
-    <label>Father mobile <input name="fatherMobile" value="{{form.fatherMobile}}"></label>
-    <label>Father email <input name="fatherEmail" value="{{form.fatherEmail}}"></label>
+  fieldset.section legend {
+    font-weight: 700;
+    padding: 0 8px;
+    color: #0b2545;
+  }
 
-    <label>Mother's name <input name="motherName" value="{{form.motherName}}"></label>
-    <label>Mother mobile <input name="motherMobile" value="{{form.motherMobile}}"></label>
-    <label>Mother email <input name="motherEmail" value="{{form.motherEmail}}"></label>
+  /* Two-column grid for inputs */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 26px;
+    align-items: start;
+  }
 
-    <label>Home address <input name="homeAddress" value="{{form.homeAddress}}"></label>
-    <label>Work address <input name="workAddress" value="{{form.workAddress}}"></label>
-  </fieldset>
+  /* Single full-width rows */
+  .full-row {
+    grid-column: 1 / -1;
+  }
 
-  <fieldset>
-    <legend>Indemnity & Consent</legend>
-    <p>Please read the school's indemnity and consent (see PDF on site).</p>
-    <label><input type="checkbox" name="indemnityAccepted" value="1" {{#if form.indemnityAccepted}}checked{{/if}}> I accept the indemnity terms.</label>
-    <input type="hidden" name="indemnityText" value="Parent accepted indemnity on form">
-  </fieldset>
+  label.form-label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    color: #0b2545;
+  }
 
-  <div style="margin-top:12px;">
-    <button type="submit">Submit registration</button>
-    <a href="/">Cancel</a>
-  </div>
-</form>
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="date"],
+  select,
+  textarea {
+    height: 40px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #cfd8e3;
+    background: #fff;
+    font-size: 14px;
+    outline: none;
+    transition: box-shadow .12s ease, border-color .12s ease;
+    box-sizing: border-box;
+  }
 
-<p>If you have issues, email <a href="mailto:{{schoolContactEmail}}">{{schoolContactEmail}}</a></p>
+  textarea {
+    min-height: 90px;
+    padding: 10px 12px;
+    resize: vertical;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: #7aa7ff;
+    box-shadow: 0 6px 18px rgba(10, 94, 255, 0.08);
+  }
+
+  .form-actions {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    margin-top:8px;
+  }
+
+  button.btn-primary {
+    background: linear-gradient(180deg,#0b66d0,#0358b6);
+    color: #fff;
+    border: 0;
+    padding: 12px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight:700;
+  }
+
+  a.btn-cancel {
+    display:inline-block;
+    padding: 10px 14px;
+    color: #0b2545;
+    text-decoration: none;
+    border-radius: 8px;
+    border: 1px solid transparent;
+  }
+
+  .muted {
+    color:#556174;
+    font-size:13px;
+  }
+
+  /* Responsive */
+  @media (max-width: 880px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .reg-container { padding:18px; margin:12px; }
+    h1.reg-title { font-size:32px; }
+  }
+</style>
+
+<div class="reg-container">
+  <h1 class="reg-title">{{title}}</h1>
+
+  {{#if errors}}
+    <div style="background:#fff4f4;border:1px solid #ffd6d6;padding:12px;border-radius:8px;margin-bottom:12px">
+      <strong style="color:#9b1c1c">Please fix the following:</strong>
+      <ul style="margin:8px 0 0 18px;color:#7b2a2a">
+        {{#each errors}}
+          <li>{{msg}}</li>
+        {{/each}}
+      </ul>
+    </div>
+  {{/if}}
+
+  <form method="post" action="/register" autocomplete="on" novalidate>
+    <input type="hidden" name="schoolSlug" value="{{school.slug}}">
+    <input type="hidden" name="schoolName" value="{{school.name}}">
+
+    <fieldset class="section">
+      <legend>Student details</legend>
+
+      <div class="form-grid">
+        <label class="form-label">
+          First name
+          <input name="studentFirstName" value="{{form.studentFirstName}}" required placeholder="e.g. John">
+        </label>
+
+        <label class="form-label">
+          Middle name
+          <input name="studentMiddleName" value="{{form.studentMiddleName}}" placeholder="optional">
+        </label>
+
+        <label class="form-label">
+          Last name
+          <input name="studentLastName" value="{{form.studentLastName}}" required placeholder="e.g. Doe">
+        </label>
+
+        <label class="form-label">
+          Date of birth
+          <input type="date" name="dateOfBirth" value="{{form.dateOfBirth}}">
+        </label>
+
+        <label class="form-label full-row">
+          Gender
+          <select name="gender" aria-label="Gender">
+            <option value="">Select</option>
+            <option value="Boy" {{#ifEquals form.gender "Boy"}}selected{{/ifEquals}}>Boy</option>
+            <option value="Girl" {{#ifEquals form.gender "Girl"}}selected{{/ifEquals}}>Girl</option>
+            <option value="Other" {{#ifEquals form.gender "Other"}}selected{{/ifEquals}}>Other</option>
+          </select>
+        </label>
+
+        <label class="form-label">
+          Current Grade / Stage
+          <input name="currentGrade" value="{{form.currentGrade}}" placeholder="e.g. Grade 3 / Year 1">
+        </label>
+
+        <label class="form-label">
+          Languages spoken
+          <input name="languagesSpoken" value="{{form.languagesSpoken}}" placeholder="e.g. English, Shona">
+        </label>
+
+        <label class="form-label full-row">
+          Allergies / Medical info
+          <input name="allergies" value="{{form.allergies}}" placeholder="Allergies, medical notes (optional)">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="section">
+      <legend>Parent / Guardian</legend>
+
+      <div class="form-grid">
+        <label class="form-label">
+          Father's name
+          <input name="fatherName" value="{{form.fatherName}}" placeholder="Full name">
+        </label>
+
+        <label class="form-label">
+          Father's mobile
+          <input name="fatherMobile" value="{{form.fatherMobile}}" placeholder="+263 77 123 4567" type="tel">
+        </label>
+
+        <label class="form-label">
+          Father's email
+          <input name="fatherEmail" value="{{form.fatherEmail}}" placeholder="email@example.com" type="email">
+        </label>
+
+        <label class="form-label">
+          Mother's name
+          <input name="motherName" value="{{form.motherName}}" placeholder="Full name">
+        </label>
+
+        <label class="form-label">
+          Mother's mobile
+          <input name="motherMobile" value="{{form.motherMobile}}" placeholder="+263 77 123 4567" type="tel">
+        </label>
+
+        <label class="form-label">
+          Mother's email
+          <input name="motherEmail" value="{{form.motherEmail}}" placeholder="email@example.com" type="email">
+        </label>
+
+        <label class="form-label full-row">
+          Home address
+          <input name="homeAddress" value="{{form.homeAddress}}" placeholder="Street, Suburb, City">
+        </label>
+
+        <label class="form-label full-row">
+          Work address
+          <input name="workAddress" value="{{form.workAddress}}" placeholder="Company / office address (optional)">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="section">
+      <legend>Indemnity & Consent</legend>
+      <p class="muted">Please read the school's indemnity and consent (download the registration PDF above to view the full text).</p>
+
+      <label style="display:flex;align-items:center;gap:10px;margin-top:12px">
+        <input type="checkbox" name="indemnityAccepted" value="1" {{#if form.indemnityAccepted}}checked{{/if}}>
+        <span style="font-weight:600">I accept the indemnity terms.</span>
+      </label>
+      <input type="hidden" name="indemnityText" value="Parent accepted indemnity on form">
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Submit registration</button>
+      <a class="btn-cancel" href="/">Cancel</a>
+      <div style="margin-left:auto; font-size:13px; color:#556174">Questions? <a href="mailto:{{schoolContactEmail}}">{{schoolContactEmail}}</a></div>
+    </div>
+  </form>
+</div>
+
+<script>
+  // tiny client-side validation UX: focus first invalid field on submit
+  (function () {
+    const form = document.querySelector('form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+      // simple required fields check
+      const required = ['studentFirstName', 'studentLastName', 'fatherMobile'];
+      for (const name of required) {
+        const el = form.elements[name];
+        if (el && !el.value.trim()) {
+          e.preventDefault();
+          el.focus();
+          el.style.boxShadow = '0 6px 18px rgba(255,50,50,0.08)';
+          return false;
+        }
+      }
+    });
+  })();
+</script>

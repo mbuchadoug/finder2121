@@ -1,0 +1,261 @@
+<div class="card">
+  <h2 style="margin-top:0">Find your child’s ideal private school</h2>
+
+  {{#unless user}}
+    <div style="margin:10px 0;padding:10px;border:1px solid #eee;background:#fbfbff;border-radius:6px">
+      <strong>Want personalised results?</strong>
+      <div style="margin-top:6px">
+        <a id="inlineSign" class="btn" href="/auth/signin?returnTo={{canonicalPath}}">Sign in to save preferences</a>
+      </div>
+    </div>
+  {{/unless}}
+
+  <form id="prefsForm" action="/api/recommend" method="post">
+    <div class="grid">
+      <div>
+        <label>City</label>
+        <input class="input" name="city" id="city" placeholder="Harare" value="Harare" readonly />
+      </div>
+
+      <div>
+        <label>Learning Environment</label>
+        <select class="input" name="learningEnvironment" id="learningEnvironment">
+          <option value="">Any</option>
+          <option>Comprehensive</option>
+          <option>Enhanced</option>
+          <option>Advanced</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Curriculum</label>
+        <select class="input" name="curriculum" id="curriculum" multiple size="5">
+          <option>Cambridge</option>
+          <option>ZIMSEC</option>
+          <option>IB</option>
+        </select>
+        <div class="text-muted" style="font-size:12px;margin-top:-8px">Hold Ctrl/⌘ to select multiple</div>
+      </div>
+
+      <div>
+        <label>School Phase</label>
+        <select class="input" name="type" id="type" multiple size="5">
+          <option>Pre-School</option>
+          <option>Primary School</option>
+          <option>High School</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Boarding / Day</label>
+        <select class="input" name="type2" id="type2" multiple size="4">
+          <option>Day</option>
+          <option>Boarding</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin:10px 0 6px"><strong>Facilities</strong></div>
+
+    <div class="grid">
+      <div>
+        <label><input type="checkbox" name="facilities" value="scienceLabs"/> Science Labs</label>
+        <label><input type="checkbox" name="facilities" value="computerLab"/> Computer Lab</label>
+        <label><input type="checkbox" name="facilities" value="library"/> Library</label>
+        <label><input type="checkbox" name="facilities" value="makerSpaceSteamLab"/> STEAM / Robotics</label>
+        <label><input type="checkbox" name="facilities" value="examCentreCambridge"/> Cambridge Centre</label>
+        <label><input type="checkbox" name="facilities" value="examCentreZimsec"/> ZIMSEC Centre</label>
+      </div>
+
+      <div>
+        <label><input type="checkbox" name="facilities" value="swimmingPool"/> Swimming Pool</label>
+        <label><input type="checkbox" name="facilities" value="rugbyField"/> Rugby</label>
+        <label><input type="checkbox" name="facilities" value="hockeyField"/> Hockey</label>
+        <label><input type="checkbox" name="facilities" value="tennisCourts"/> Tennis</label>
+        <label><input type="checkbox" name="facilities" value="basketballCourt"/> Basketball</label>
+        <label><input type="checkbox" name="facilities" value="footballPitch"/> Football</label>
+      </div>
+
+      <div>
+        <label><input type="checkbox" name="facilities" value="counseling"/> Counselling</label>
+        <label><input type="checkbox" name="facilities" value="learningSupportSEN"/> Learning Support (SEN)</label>
+        <label><input type="checkbox" name="facilities" value="schoolClinicNurse"/> School Clinic / Nurse</label>
+        <label><input type="checkbox" name="facilities" value="aftercare"/> Aftercare</label>
+        <label><input type="checkbox" name="facilities" value="transportBuses"/> School Transport</label>
+       <!-- <label><input type="checkbox" name="facilities" value="powerBackup"/> Power Backup</label> -->
+      </div>
+    </div>
+
+    <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
+      <button id="findBtn" class="btn" type="submit">Get personalised matches</button>
+      <span id="loader" class="loader" style="display:none;"></span>
+    </div>
+  </form>
+</div>
+
+<div id="results" style="margin-top:16px"></div>
+
+<script>
+  (function () {
+    const findBtn = document.getElementById('findBtn');
+    const form = document.getElementById('prefsForm');
+    const resultsNode = document.getElementById('results');
+    const loader = document.getElementById('loader');
+
+    const isAuthed = {{#if user}}true{{else}}false{{/if}};
+
+    function makeReturnTo() {
+      return window.location.pathname + window.location.search + window.location.hash;
+    }
+
+    function collectFormData(formEl) {
+      const fd = new FormData(formEl);
+      const obj = {};
+      for (const [k, v] of fd.entries()) {
+        if (Object.prototype.hasOwnProperty.call(obj, k)) {
+          if (Array.isArray(obj[k])) obj[k].push(v);
+          else obj[k] = [obj[k], v];
+        } else {
+          obj[k] = v;
+        }
+      }
+
+      function gatherSelect(name) {
+        const el = formEl.querySelector(`[name="${name}"]`);
+        if (!el) return;
+        if (el.options) {
+          const vals = Array.from(el.options).filter(o => o.selected).map(o => o.value).filter(Boolean);
+          if (vals.length) obj[name] = vals;
+        }
+      }
+      gatherSelect('curriculum'); gatherSelect('type'); gatherSelect('type2');
+
+      const facilityEls = formEl.querySelectorAll('input[type="checkbox"][name="facilities"]');
+      if (facilityEls && facilityEls.length) {
+        const fvals = [];
+        facilityEls.forEach(cb => { if (cb.checked) fvals.push(cb.value); });
+        obj.facilities = fvals;
+      }
+
+      return obj;
+    }
+
+    function flattenJoin(val) {
+      if (!val && val !== 0) return '';
+      if (Array.isArray(val)) {
+        const flat = val.flat ? val.flat(Infinity) : val.reduce((a,b)=>a.concat(Array.isArray(b)?b:b),[]);
+        return flat.filter(Boolean).join(', ');
+      }
+      return String(val);
+    }
+
+    function renderRecommendation(r) {
+      const metaParts = [];
+      if (r.city) metaParts.push(r.city);
+      if (r.learningEnvironment) metaParts.push(r.learningEnvironment);
+      if (Array.isArray(r.curriculum) && r.curriculum.length) metaParts.push(flattenJoin(r.curriculum));
+      if (Array.isArray(r.type) && r.type.length) metaParts.push(flattenJoin(r.type));
+      if (Array.isArray(r.type2) && r.type2.length) metaParts.push(flattenJoin(r.type2));
+
+      const meta = metaParts.join(' · ');
+
+      // Buttons container: show downloads + register ONLY for pinned school
+      let btns = '';
+      if (r.pinned) {
+        btns += `
+          <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:12px; align-items:center">
+            <a class="btn btn-primary" href="/download/st-eurit-registration" style="display:inline-block; padding:12px 18px; border-radius:12px;">Download Registration Form (PDF)</a>
+            <a class="btn btn-light" href="/download/st-eurit-profile" style="display:inline-block; padding:12px 18px; border-radius:12px;">Download School Profile (PDF)</a>
+        `;
+        if (r.registerUrl) {
+          btns += `<a class="btn btn-success" href="${r.registerUrl}" style="display:inline-block; padding:12px 18px; border-radius:12px; background:#0b66d0; color:#fff; text-decoration:none;">Fill Registration Form Online</a>`;
+        }
+        btns += `</div>`;
+      }
+
+      const badge = r.pinned ? `<span class="badge" style="float:right;background:#e6f0ff;color:#036; padding:6px 10px;border-radius:999px;font-weight:700">RECOMMENDED</span>` : '';
+
+      const reason = r.reason ? `<div style="color:#666;font-size:14px;margin-top:8px">Reason: ${r.reason}</div>` : `<div style="color:#666;font-size:14px;margin-top:8px">Reason: —</div>`;
+
+      return `
+        <div class="result-card" style="border-radius:10px;border:1px solid #eee;padding:18px;margin-bottom:16px;background:#fff">
+          <div style="display:flex; align-items:flex-start; gap:12px;">
+            <div style="flex:1">
+              <h3 style="margin:0 0 6px 0">${r.name || ''}</h3>
+              <div style="color:#333">${meta}</div>
+              ${reason}
+              ${btns}
+            </div>
+            <div style="min-width:120px;text-align:right">
+              ${badge}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderResults(arr) {
+      if (!arr || !arr.length) {
+        resultsNode.innerHTML = `<div style="padding:14px;border:1px dashed #ddd;background:#fafafa">No recommendations found.</div>`;
+        return;
+      }
+      resultsNode.innerHTML = arr.map(renderRecommendation).join('');
+    }
+
+    if (!findBtn || !form) return;
+
+    if (!isAuthed) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const returnTo = makeReturnTo();
+        window.location.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+      });
+
+      const inline = document.getElementById('inlineSign');
+      if (inline) {
+        inline.addEventListener('click', function () {
+          const returnTo = makeReturnTo();
+          this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+        });
+      }
+    } else {
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        try {
+          if (loader) loader.style.display = 'inline-block';
+          const payload = collectFormData(form);
+
+          const resp = await fetch(form.action || '/api/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+          });
+
+          if (!resp.ok) {
+            const txt = await resp.text().catch(()=>null);
+            resultsNode.innerHTML = `<div style="padding:14px;border:1px solid #faa;background:#fff4f4">Failed to fetch recommendations: ${resp.status} ${resp.statusText} ${txt ? ' - ' + txt : ''}</div>`;
+            return;
+          }
+
+          const data = await resp.json();
+          const recs = data.recommendations || [];
+
+          // DEBUG LOG: inspect server response - confirm pinned/registerUrl presence
+          console.log("recommendations from server:", recs);
+
+          renderResults(recs);
+          resultsNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          console.error("recommend fetch error:", err);
+          resultsNode.innerHTML = `<div style="padding:14px;border:1px solid #faa;background:#fff4f4">An error occurred while fetching recommendations.</div>`;
+        } finally {
+          if (loader) loader.style.display = 'none';
+        }
+      });
+    }
+
+    // Optional: run an initial search for signed-in users
+    // if (isAuthed) form.dispatchEvent(new Event('submit'));
+  })();
+</script>

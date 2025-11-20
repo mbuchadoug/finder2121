@@ -99,6 +99,8 @@
   (function () {
     const findBtn = document.getElementById('findBtn');
     const form = document.getElementById('prefsForm');
+    const resultsNode = document.getElementById('results');
+    const loader = document.getElementById('loader');
 
     // If user is authenticated server-side, `user` exists; keep normal behaviour.
     // If not authenticated, intercept submit and redirect to /auth/signin which
@@ -109,13 +111,121 @@
       return window.location.pathname + window.location.search + window.location.hash;
     }
 
+    // helper to collect form data (including multi-selects and checkboxes) into an object
+    function collectFormData(formEl) {
+      const fd = new FormData(formEl);
+      const obj = {};
+
+      // simple fields
+      for (const [k, v] of fd.entries()) {
+        // For repeated fields (like checkboxes named "facilities") FormData will produce multiple entries.
+        if (Object.prototype.hasOwnProperty.call(obj, k)) {
+          // if already array, push, else convert to array
+          if (Array.isArray(obj[k])) {
+            obj[k].push(v);
+          } else {
+            obj[k] = [obj[k], v];
+          }
+        } else {
+          obj[k] = v;
+        }
+      }
+
+      // Special handling: ensure multi-selects named "curriculum" and "type" "type2" and checkboxes "facilities" become arrays
+      function ensureArray(name) {
+        const el = formEl.querySelector(`[name="${name}"]`);
+        if (!el) return;
+        if (el.options) {
+          // select multiple - gather selected
+          const vals = Array.from(el.options).filter(o => o.selected).map(o => o.value).filter(Boolean);
+          if (vals.length) obj[name] = vals;
+        } else {
+          // for checkboxes, FormData already collected multiple entries into obj[name] as array above
+          if (!obj[name]) obj[name] = [];
+          else if (!Array.isArray(obj[name])) obj[name] = [obj[name]];
+        }
+      }
+
+      ensureArray('curriculum');
+      ensureArray('type');
+      ensureArray('type2');
+
+      // Ensure facilities is array
+      const facilityEls = formEl.querySelectorAll('input[type="checkbox"][name="facilities"]');
+      if (facilityEls && facilityEls.length) {
+        const fvals = [];
+        facilityEls.forEach(cb => {
+          if (cb.checked) fvals.push(cb.value);
+        });
+        obj.facilities = fvals;
+      }
+
+      return obj;
+    }
+
+    // render a single recommendation card HTML
+    function renderRecommendation(r) {
+      // Build metadata line
+      const metaParts = [];
+      if (r.city) metaParts.push(r.city);
+      if (r.learningEnvironment) metaParts.push(r.learningEnvironment);
+      if (Array.isArray(r.curriculum) && r.curriculum.length) metaParts.push(r.curriculum.join(', '));
+      if (Array.isArray(r.type) && r.type.length) metaParts.push(r.type.join(', '));
+      if (Array.isArray(r.type2) && r.type2.length) metaParts.push(JSON.stringify(r.type2));
+
+      const meta = metaParts.join(' · ');
+
+      // Buttons: for pinned school show download links and register button
+      let btns = '';
+      if (r.pinned) {
+        // static download keys for St Eurit — adjust keys if different
+        btns += `<a class="btn btn-primary" href="/download/st-eurit-registration" style="margin-right:8px">Download Registration Form (PDF)</a>`;
+        btns += `<a class="btn btn-light" href="/download/st-eurit-profile" style="margin-right:8px">Download School Profile (PDF)</a>`;
+      }
+
+      if (r.registerUrl) {
+        // show register button (for pinned school this will be present)
+        btns += `<a class="btn btn-success" href="${r.registerUrl}" style="margin-right:8px">Fill Registration Form Online</a>`;
+      }
+
+      // recommended badge if pinned
+      const badge = r.pinned ? `<span class="badge" style="float:right;background:#e6f0ff;color:#036; padding:6px 10px;border-radius:999px;font-weight:700">RECOMMENDED</span>` : '';
+
+      // reason text
+      const reason = r.reason ? `<div style="color:#666;font-size:14px;margin-top:8px">Reason: ${r.reason}</div>` : `<div style="color:#666;font-size:14px;margin-top:8px">Reason: —</div>`;
+
+      return `
+        <div class="result-card" style="border-radius:10px;border:1px solid #eee;padding:18px;margin-bottom:16px;background:#fff">
+          <div style="display:flex; align-items:flex-start; gap:12px;">
+            <div style="flex:1">
+              <h3 style="margin:0 0 6px 0">${r.name || ''}</h3>
+              <div style="color:#333">${meta}</div>
+              ${reason}
+              <div style="margin-top:12px">${btns}</div>
+            </div>
+            <div style="min-width:120px;text-align:right">
+              ${badge}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // render array of recommendations into #results
+    function renderResults(arr) {
+      if (!arr || !arr.length) {
+        resultsNode.innerHTML = `<div style="padding:14px;border:1px dashed #ddd;background:#fafafa">No recommendations found.</div>`;
+        return;
+      }
+      resultsNode.innerHTML = arr.map(renderRecommendation).join('');
+    }
+
     if (!findBtn || !form) return;
 
     if (!isAuthed) {
-      // intercept submit for anonymous users
+      // intercept submit for anonymous users — keep previous redirect behavior
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        // go to /auth/signin — server will detect Facebook in-app and start FB OAuth
         const returnTo = makeReturnTo();
         window.location.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
       });
@@ -129,11 +239,46 @@
         });
       }
     } else {
-      // if authenticated, allow default submit — could still show loader etc.
-      form.addEventListener('submit', function () {
-        const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'inline-block';
+      // Authenticated: submit via fetch and render results
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+
+        try {
+          if (loader) loader.style.display = 'inline-block';
+          // collect form data into object
+          const payload = collectFormData(form);
+
+          // send to API (same endpoint as form action)
+          const resp = await fetch(form.action || '/api/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+          });
+
+          if (!resp.ok) {
+            const txt = await resp.text().catch(()=>null);
+            resultsNode.innerHTML = `<div style="padding:14px;border:1px solid #faa;background:#fff4f4">Failed to fetch recommendations: ${resp.status} ${resp.statusText} ${txt ? ' - ' + txt : ''}</div>`;
+            return;
+          }
+
+          const data = await resp.json();
+          const recs = data.recommendations || [];
+
+          renderResults(recs);
+          // scroll to results
+          resultsNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          console.error("recommend fetch error:", err);
+          resultsNode.innerHTML = `<div style="padding:14px;border:1px solid #faa;background:#fff4f4">An error occurred while fetching recommendations.</div>`;
+        } finally {
+          if (loader) loader.style.display = 'none';
+        }
       });
     }
+
+    // optional: run a default search on load (auto-run if you want)
+    // You can uncomment to fetch default recommendations immediately for signed-in users:
+    // if (isAuthed) form.dispatchEvent(new Event('submit'));
   })();
 </script>

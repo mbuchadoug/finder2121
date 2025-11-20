@@ -1,0 +1,139 @@
+<div class="card">
+  <h2 style="margin-top:0">Find your child’s ideal private school</h2>
+
+  {{#unless user}}
+    <div style="margin:10px 0;padding:10px;border:1px solid #eee;background:#fbfbff;border-radius:6px">
+      <strong>Want personalised results?</strong>
+      <div style="margin-top:6px">
+        <a id="inlineSign" class="btn" href="/auth/signin?returnTo={{canonicalPath}}">Sign in to save preferences</a>
+      </div>
+    </div>
+  {{/unless}}
+
+  <form id="prefsForm" action="/api/recommend" method="post">
+    <div class="grid">
+      <div>
+        <label>City</label>
+        <input class="input" name="city" id="city" placeholder="Harare" value="Harare" readonly />
+      </div>
+
+      <div>
+        <label>Learning Environment</label>
+        <select class="input" name="learningEnvironment" id="learningEnvironment">
+          <option value="">Any</option>
+          <option>Comprehensive</option>
+          <option>Enhanced</option>
+          <option>Advanced</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Curriculum</label>
+        <select class="input" name="curriculum" id="curriculum" multiple size="5">
+          <option>Cambridge</option>
+          <option>ZIMSEC</option>
+          <option>IB</option>
+        </select>
+        <div class="text-muted" style="font-size:12px;margin-top:-8px">Hold Ctrl/⌘ to select multiple</div>
+      </div>
+
+      <div>
+        <label>School Phase</label>
+        <select class="input" name="type" id="type" multiple size="5">
+          <option>Pre-School</option>
+          <option>Primary School</option>
+          <option>High School</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Boarding / Day</label>
+        <select class="input" name="type2" id="type2" multiple size="4">
+          <option>Day</option>
+          <option>Boarding</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin:10px 0 6px"><strong>Facilities</strong></div>
+
+    <div class="grid">
+      <div>
+        <label><input type="checkbox" name="facilities" value="scienceLabs"/> Science Labs</label>
+        <label><input type="checkbox" name="facilities" value="computerLab"/> Computer Lab</label>
+        <label><input type="checkbox" name="facilities" value="library"/> Library</label>
+        <label><input type="checkbox" name="facilities" value="makerSpaceSteamLab"/> STEAM / Robotics</label>
+        <label><input type="checkbox" name="facilities" value="examCentreCambridge"/> Cambridge Centre</label>
+        <label><input type="checkbox" name="facilities" value="examCentreZimsec"/> ZIMSEC Centre</label>
+      </div>
+
+      <div>
+        <label><input type="checkbox" name="facilities" value="swimmingPool"/> Swimming Pool</label>
+        <label><input type="checkbox" name="facilities" value="rugbyField"/> Rugby</label>
+        <label><input type="checkbox" name="facilities" value="hockeyField"/> Hockey</label>
+        <label><input type="checkbox" name="facilities" value="tennisCourts"/> Tennis</label>
+        <label><input type="checkbox" name="facilities" value="basketballCourt"/> Basketball</label>
+        <label><input type="checkbox" name="facilities" value="footballPitch"/> Football</label>
+      </div>
+
+      <div>
+        <label><input type="checkbox" name="facilities" value="counseling"/> Counselling</label>
+        <label><input type="checkbox" name="facilities" value="learningSupportSEN"/> Learning Support (SEN)</label>
+        <label><input type="checkbox" name="facilities" value="schoolClinicNurse"/> School Clinic / Nurse</label>
+        <label><input type="checkbox" name="facilities" value="aftercare"/> Aftercare</label>
+        <label><input type="checkbox" name="facilities" value="transportBuses"/> School Transport</label>
+       <!-- <label><input type="checkbox" name="facilities" value="powerBackup"/> Power Backup</label>-->
+      </div>
+    </div>
+
+    <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
+      <button id="findBtn" class="btn" type="submit">Get personalised matches</button>
+      <span id="loader" class="loader" style="display:none;"></span>
+    </div>
+  </form>
+</div>
+
+<div id="results" style="margin-top:16px"></div>
+
+<script>
+  (function () {
+    const findBtn = document.getElementById('findBtn');
+    const form = document.getElementById('prefsForm');
+
+    // If user is authenticated server-side, `user` exists; keep normal behaviour.
+    // If not authenticated, intercept submit and redirect to /auth/signin which
+    // will choose Facebook when the request comes from Facebook in-app browser.
+    const isAuthed = {{#if user}}true{{else}}false{{/if}};
+
+    function makeReturnTo() {
+      return window.location.pathname + window.location.search + window.location.hash;
+    }
+
+    if (!findBtn || !form) return;
+
+    if (!isAuthed) {
+      // intercept submit for anonymous users
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        // go to /auth/signin — server will detect Facebook in-app and start FB OAuth
+        const returnTo = makeReturnTo();
+        window.location.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+      });
+
+      // also ensure inline sign link uses auth route
+      const inline = document.getElementById('inlineSign');
+      if (inline) {
+        inline.addEventListener('click', function () {
+          const returnTo = makeReturnTo();
+          this.href = '/auth/signin?returnTo=' + encodeURIComponent(returnTo);
+        });
+      }
+    } else {
+      // if authenticated, allow default submit — could still show loader etc.
+      form.addEventListener('submit', function () {
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'inline-block';
+      });
+    }
+  })();
+</script>

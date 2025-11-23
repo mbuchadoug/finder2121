@@ -1,8 +1,7 @@
 
-
 <style>
 /* Button styles — explicit and mobile-friendly */
-.btn {
+.btn { 
   display: inline-block;
   padding: 10px 16px;
   border-radius: 10px;
@@ -78,7 +77,7 @@
         <label>Curriculum</label>
         <select class="input" name="curriculum" id="curriculum" multiple size="5">
           <option>Cambridge</option>
-          <!--<option>ZIMSEC</option>-->
+          <option>ZIMSEC</option>
           <option>IB</option>
         </select>
         <div class="text-muted" style="font-size:12px;margin-top:-8px">Hold Ctrl/⌘ to select multiple</div>
@@ -109,13 +108,13 @@
         <label><input type="checkbox" name="facilities" value="scienceLabs"/> Science Labs</label>
         <label><input type="checkbox" name="facilities" value="computerLab"/> Computer Lab</label>
         <label><input type="checkbox" name="facilities" value="library"/> Library</label>
-        <label><input type="checkbox" name="facilities" value="makerSpaceSteamLab"/> STEM / Robotics</label>
+        <label><input type="checkbox" name="facilities" value="makerSpaceSteamLab"/> STEAM / Robotics</label>
         <label><input type="checkbox" name="facilities" value="examCentreCambridge"/> Cambridge Centre</label>
-       <!-- <label><input type="checkbox" name="facilities" value="examCentreZimsec"/> ZIMSEC Centre</label>-->
+        <label><input type="checkbox" name="facilities" value="examCentreZimsec"/> ZIMSEC Centre</label>
       </div>
 
       <div>
-        <label><input type="checkbox" name="facilities" value="swimmingPool"/> Swimming</label>
+        <label><input type="checkbox" name="facilities" value="swimmingPool"/> Swimming Pool</label>
         <label><input type="checkbox" name="facilities" value="rugbyField"/> Rugby</label>
         <label><input type="checkbox" name="facilities" value="hockeyField"/> Hockey</label>
         <label><input type="checkbox" name="facilities" value="tennisCourts"/> Tennis</label>
@@ -193,16 +192,31 @@
     return String(val);
   }
 
+  // Only render the 3 buttons if the school is St Eurit (by slug or name)
+  function isStEuritRecord(p) {
+    if (!p) return false;
+    const slug = String(p.slug || '').toLowerCase();
+    const name = String(p.name || '').toLowerCase();
+    return slug === 'st-eurit-international-school-harare' || name.includes('st eurit');
+  }
+
   function buildPinnedBanner(p) {
     if (!p) return '';
-    const downloads = (p.downloads || {});
-    // Prefer explicit registerUrl, then slug, then fallback to known St Eurit slug
+
+    const downloadRegistration = (p.downloads && p.downloads.registration) || '/download/st-eurit-registration';
+    const downloadProfile = (p.downloads && p.downloads.profile) || '/download/st-eurit-profile';
+
+    // compute register href (explicit, then slug, then fallback)
     const reg = p.registerUrl || p.register || p.register_url || '';
     const regHref = reg || (p.slug ? `/register/${encodeURIComponent(p.slug)}` : '/register/st-eurit-international-school-harare');
-    const regBtn = regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
 
-    const downloadRegistration = downloads.registration || '/download/st-eurit-registration';
-    const downloadProfile = downloads.profile || '/download/st-eurit-profile';
+    // Only include the three action buttons if this is actually St Eurit
+    const showButtons = isStEuritRecord(p);
+    const regBtn = showButtons ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
+    const downloadsHtml = showButtons ? `
+      <a class="btn btn-primary" href="${downloadRegistration}">Download Registration Form (PDF)</a>
+      <a class="btn btn-light" href="${downloadProfile}">Download School Profile (PDF)</a>
+    ` : '';
 
     return `
       <div class="pinned-banner" data-pinned="${p.slug || ''}">
@@ -212,8 +226,7 @@
             <div style="font-size:13px;color:#444">This is our recommended school — you can apply online or download the registration form.</div>
           </div>
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-            <a class="btn btn-primary" href="${downloadRegistration}">Download Registration Form (PDF)</a>
-            <a class="btn btn-light" href="${downloadProfile}">Download School Profile (PDF)</a>
+            ${downloadsHtml}
             ${regBtn}
           </div>
         </div>
@@ -231,17 +244,18 @@
     if (Array.isArray(r.type2) && r.type2.length) metaParts.push(flattenJoin(r.type2));
     const meta = metaParts.join(' · ');
 
-    // Buttons container: only for pinned or if we can compute a register URL
+    // Only show the 3 action buttons for St Eurit
+    const showButtons = isStEuritRecord(r);
     let btnsHtml = '';
-    // determine canonical register href: prefer explicit registerUrl, then slug, then fallback
-    const regHref = r.registerUrl || (r.slug ? `/register/${encodeURIComponent(r.slug)}` : '/register/st-eurit-international-school-harare');
-    if (r.pinned || regHref) {
-      const downloadsHtml = `
-        <a class="btn btn-primary" href="/download/st-eurit-registration">Download Registration Form (PDF)</a>
-        <a class="btn btn-light" href="/download/st-eurit-profile">Download School Profile (PDF)</a>
-      `;
-      const registerHtml = regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
-      btnsHtml = `<div class="btn-row">${downloadsHtml}${registerHtml}</div>`;
+    if (showButtons) {
+      const downloadRegistration = '/download/st-eurit-registration';
+      const downloadProfile = '/download/st-eurit-profile';
+      const regHref = r.registerUrl || (r.slug ? `/register/${encodeURIComponent(r.slug)}` : '/register/st-eurit-international-school-harare');
+      btnsHtml = `<div class="btn-row">
+        <a class="btn btn-primary" href="${downloadRegistration}">Download Registration Form (PDF)</a>
+        <a class="btn btn-light" href="${downloadProfile}">Download School Profile (PDF)</a>
+        ${regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : ''}
+      </div>`;
     }
 
     const badge = r.pinned ? `<span class="badge" style="float:right;background:#e6f0ff;color:#036; padding:6px 10px;border-radius:999px;font-weight:700">RECOMMENDED</span>` : '';
@@ -306,9 +320,6 @@
 
         const data = await resp.json();
         const recs = data.recommendations || [];
-
-        // Debug info (remove later if desired)
-        console.log("API /recommend response:", { pinnedSchool: data.pinnedSchool, recommendations: recs });
 
         // 1) Prefer pinnedSchool from API
         let pinned = data.pinnedSchool || null;

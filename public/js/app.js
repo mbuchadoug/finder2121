@@ -14,9 +14,9 @@ const getMulti = (id) =>
 async function submitPrefs(ev) {
   ev.preventDefault();
   const btn = $("findBtn"), out = $("results"), loader = $("loader");
-  btn.disabled = true;
-  btn.textContent = "Finding schools…";
-  loader.style.display = "inline-block";
+  btn.disabled = true; 
+  btn.textContent = "Finding schools…"; 
+  loader.style.display = "inline-block"; 
   out.innerHTML = "";
 
   const payload = {
@@ -40,14 +40,14 @@ async function submitPrefs(ev) {
   } catch (e) {
     out.innerHTML = `<div class="card">Error: ${escapeHtml(e.message)}</div>`;
   } finally {
-    loader.style.display = "none";
-    btn.disabled = false;
+    loader.style.display = "none"; 
+    btn.disabled = false; 
     btn.textContent = "Find Schools";
   }
 }
 
 function renderResults(list) {
-  const out = $("results");
+  const out = $("results"); 
   out.innerHTML = "";
 
   if (!Array.isArray(list) || list.length === 0) {
@@ -65,20 +65,20 @@ function renderResults(list) {
     const env = r.learningEnvironment ? ` · ${escapeHtml(r.learningEnvironment)}` : "";
     const imgUrl = r.image || r.heroImage || r.logo || "/img/school-placeholder.png";
 
-    // detect pinned St Eurit top card
+    // Strict St Eurit detection: by slug or by name
     const slug = (r.slug || "").toLowerCase();
     const isStEuritBySlug = slug === "st-eurit-international-school-harare";
     const isStEuritByName = (r.name || "").toLowerCase().includes("st eurit");
-    const isPinnedTopStEurit = idx === 0 && (r.pinned || isStEuritBySlug || isStEuritByName);
+    const isStEurit = isStEuritBySlug || isStEuritByName;
 
     const div = document.createElement("div");
     div.className = "result";
 
-    // prefill mailto link with subject and body
+    // prefill mailto link with subject and body (for St Eurit only — kept for reference)
     const mailSubject = encodeURIComponent("EduLocate Enquiry – School Application");
     const mailBody = encodeURIComponent(
-      "Dear Admissions Team,\n\nI am interested in applying for my child to join St Eurit International School. " +
-      "Please share more details about the admission process.\n\nKind regards,\n[Your Name]\n[Your Contact Info]"
+      "Dear Admissions Team,I am interested in applying for my child to join St Eurit International School. " +
+      "Please share more details about the admission process.Kind regards,[Your Name][Your Contact Info]"
     );
     const mailLink = `mailto:enquiries@steuritinternationalschool.org?subject=${mailSubject}&body=${mailBody}`;
 
@@ -90,14 +90,14 @@ function renderResults(list) {
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <strong>${name}</strong>
-          ${isPinnedTopStEurit ? `
+          ${isStEurit ? `
             <a href="${mailLink}" class="tag-recommended" target="_blank" title="Send an enquiry email">
               Recommended
             </a>` : ""}
         </div>
         <div>${city}${env}${curriculum ? " · " + curriculum : ""}${type ? " · " + type : ""}${type2 ? " · " + type2 : ""}</div>
         <div class="subtext">Reason: ${reason || "—"}</div>
-        ${isPinnedTopStEurit ? `
+        ${isStEurit ? `
           <div class="download-row">
             <a class="btn btn-sm" href="/download/st-eurit-registration" type="application/pdf" download>
               Download Registration Form (PDF)

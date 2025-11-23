@@ -1,3 +1,4 @@
+
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (s = "") =>
   String(s)
@@ -84,9 +85,6 @@ function renderResults(list) {
     // compute register href (fallback to slug or known st-eurit route)
     const regHref = (r.registerUrl) || (r.slug ? `/register/${encodeURIComponent(r.slug)}` : '/register/st-eurit-international-school-harare');
 
-    // enrollment requirements path
-    const enrollmentPdf = '/docs/st-eurit-enrollment-requirements.pdf';
-
     div.innerHTML = `
       <img src="${imgUrl}" onerror="this.src='/img/school-placeholder.png'" alt="${name}" style="width:64px;height:64px;border-radius:8px;object-fit:cover">
       <div style="flex:1">
@@ -106,9 +104,6 @@ function renderResults(list) {
             </a>
             <a class="btn btn-light btn-sm" href="/download/st-eurit-profile" type="application/pdf" download>
               Download School Profile (PDF)
-            </a>
-            <a class="btn btn-light btn-sm" href="${enrollmentPdf}" type="application/pdf" download>
-              Enrollment Requirements (PDF)
             </a>
             ${regHref ? `<a class="btn btn-sm btn-success" href="${regHref}">Fill Registration Form Online</a>` : ''}
           </div>` : ``}

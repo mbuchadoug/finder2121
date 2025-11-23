@@ -1,3 +1,4 @@
+
 <style>
 /* Button styles — explicit and mobile-friendly */
 .btn { 
@@ -191,7 +192,7 @@
     return String(val);
   }
 
-  // Only render the action buttons if the school is St Eurit (by slug or name)
+  // Only render the 3 buttons if the school is St Eurit (by slug or name)
   function isStEuritRecord(p) {
     if (!p) return false;
     const slug = String(p.slug || '').toLowerCase();
@@ -204,20 +205,17 @@
 
     const downloadRegistration = (p.downloads && p.downloads.registration) || '/download/st-eurit-registration';
     const downloadProfile = (p.downloads && p.downloads.profile) || '/download/st-eurit-profile';
-    // Enrollment requirements file (site path)
-    const enrollmentPdf = '/docs/st-eurit-enrollment-requirements.pdf';
 
     // compute register href (explicit, then slug, then fallback)
     const reg = p.registerUrl || p.register || p.register_url || '';
     const regHref = reg || (p.slug ? `/register/${encodeURIComponent(p.slug)}` : '/register/st-eurit-international-school-harare');
 
-    // Only include the action buttons if this is actually St Eurit
+    // Only include the three action buttons if this is actually St Eurit
     const showButtons = isStEuritRecord(p);
     const regBtn = showButtons ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
     const downloadsHtml = showButtons ? `
       <a class="btn btn-primary" href="${downloadRegistration}">Download Registration Form (PDF)</a>
       <a class="btn btn-light" href="${downloadProfile}">Download School Profile (PDF)</a>
-      <a class="btn btn-light" href="${enrollmentPdf}">Enrollment Requirements (PDF)</a>
     ` : '';
 
     return `
@@ -246,18 +244,16 @@
     if (Array.isArray(r.type2) && r.type2.length) metaParts.push(flattenJoin(r.type2));
     const meta = metaParts.join(' · ');
 
-    // Only show the action buttons for St Eurit
+    // Only show the 3 action buttons for St Eurit
     const showButtons = isStEuritRecord(r);
     let btnsHtml = '';
     if (showButtons) {
       const downloadRegistration = '/download/st-eurit-registration';
       const downloadProfile = '/download/st-eurit-profile';
-      const enrollmentPdf = '/docs/st-eurit-enrollment-requirements.pdf';
       const regHref = r.registerUrl || (r.slug ? `/register/${encodeURIComponent(r.slug)}` : '/register/st-eurit-international-school-harare');
       btnsHtml = `<div class="btn-row">
         <a class="btn btn-primary" href="${downloadRegistration}">Download Registration Form (PDF)</a>
         <a class="btn btn-light" href="${downloadProfile}">Download School Profile (PDF)</a>
-        <a class="btn btn-light" href="${enrollmentPdf}">Enrollment Requirements (PDF)</a>
         ${regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : ''}
       </div>`;
     }

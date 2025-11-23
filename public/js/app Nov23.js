@@ -1,11 +1,10 @@
-
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (s = "") =>
   String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
 const getMulti = (id) =>
@@ -14,9 +13,9 @@ const getMulti = (id) =>
 async function submitPrefs(ev) {
   ev.preventDefault();
   const btn = $("findBtn"), out = $("results"), loader = $("loader");
-  btn.disabled = true;
-  btn.textContent = "Finding schools…";
-  loader.style.display = "inline-block";
+  btn.disabled = true; 
+  btn.textContent = "Finding schools…"; 
+  loader.style.display = "inline-block"; 
   out.innerHTML = "";
 
   const payload = {
@@ -40,14 +39,14 @@ async function submitPrefs(ev) {
   } catch (e) {
     out.innerHTML = `<div class="card">Error: ${escapeHtml(e.message)}</div>`;
   } finally {
-    loader.style.display = "none";
-    btn.disabled = false;
+    loader.style.display = "none"; 
+    btn.disabled = false; 
     btn.textContent = "Find Schools";
   }
 }
 
 function renderResults(list) {
-  const out = $("results");
+  const out = $("results"); 
   out.innerHTML = "";
 
   if (!Array.isArray(list) || list.length === 0) {
@@ -82,9 +81,6 @@ function renderResults(list) {
     );
     const mailLink = `mailto:enquiries@steuritinternationalschool.org?subject=${mailSubject}&body=${mailBody}`;
 
-    // compute register href (fallback to slug or known st-eurit route)
-    const regHref = (r.registerUrl) || (r.slug ? `/register/${encodeURIComponent(r.slug)}` : '/register/st-eurit-international-school-harare');
-
     div.innerHTML = `
       <img src="${imgUrl}" onerror="this.src='/img/school-placeholder.png'" alt="${name}" style="width:64px;height:64px;border-radius:8px;object-fit:cover">
       <div style="flex:1">
@@ -105,7 +101,6 @@ function renderResults(list) {
             <a class="btn btn-light btn-sm" href="/download/st-eurit-profile" type="application/pdf" download>
               Download School Profile (PDF)
             </a>
-            ${regHref ? `<a class="btn btn-sm btn-success" href="${regHref}">Fill Registration Form Online</a>` : ''}
           </div>` : ``}
       </div>`;
     out.appendChild(div);

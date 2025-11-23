@@ -1,8 +1,6 @@
-
-
 <style>
 /* Button styles — explicit and mobile-friendly */
-.btn {
+.btn { 
   display: inline-block;
   padding: 10px 16px;
   border-radius: 10px;
@@ -195,12 +193,10 @@
 
   function buildPinnedBanner(p) {
     if (!p) return '';
-    const downloads = (p.downloads || {});
-    // Prefer explicit registerUrl, then slug, then fallback to known St Eurit slug
     const reg = p.registerUrl || p.register || p.register_url || '';
-    const regHref = reg || (p.slug ? `/register/${encodeURIComponent(p.slug)}` : '/register/st-eurit-international-school-harare');
+    const downloads = (p.downloads || {});
+    const regHref = reg || (p.slug ? `/register/${encodeURIComponent(p.slug)}` : '');
     const regBtn = regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
-
     const downloadRegistration = downloads.registration || '/download/st-eurit-registration';
     const downloadProfile = downloads.profile || '/download/st-eurit-profile';
 
@@ -231,17 +227,15 @@
     if (Array.isArray(r.type2) && r.type2.length) metaParts.push(flattenJoin(r.type2));
     const meta = metaParts.join(' · ');
 
-    // Buttons container: only for pinned or if we can compute a register URL
+    // Buttons container: only for pinned
     let btnsHtml = '';
-    // determine canonical register href: prefer explicit registerUrl, then slug, then fallback
-    const regHref = r.registerUrl || (r.slug ? `/register/${encodeURIComponent(r.slug)}` : '/register/st-eurit-international-school-harare');
-    if (r.pinned || regHref) {
+    if (r.pinned || r.registerUrl) {
       const downloadsHtml = `
         <a class="btn btn-primary" href="/download/st-eurit-registration">Download Registration Form (PDF)</a>
         <a class="btn btn-light" href="/download/st-eurit-profile">Download School Profile (PDF)</a>
       `;
-      const registerHtml = regHref ? `<a class="btn btn-success" href="${regHref}">Fill Registration Form Online</a>` : '';
-      btnsHtml = `<div class="btn-row">${downloadsHtml}${registerHtml}</div>`;
+      const registerHtml = r.registerUrl ? `<a class="btn btn-success" href="${r.registerUrl}">Fill Registration Form Online</a>` : '';
+      btnsHtml = `<div class="btn-row" aria-hidden="false">${downloadsHtml}${registerHtml}</div>`;
     }
 
     const badge = r.pinned ? `<span class="badge" style="float:right;background:#e6f0ff;color:#036; padding:6px 10px;border-radius:999px;font-weight:700">RECOMMENDED</span>` : '';

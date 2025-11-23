@@ -115,6 +115,8 @@
     font-size:13px;
   }
 
+  .indemnity-box { border-radius:8px; background:#fff; }
+
   /* Responsive */
   @media (max-width: 880px) {
     .form-grid { grid-template-columns: 1fr; }
@@ -137,7 +139,7 @@
     </div>
   {{/if}}
 
-  <form method="post" action="/register" autocomplete="on" novalidate>
+  <form id="registrationForm" method="post" action="/register" autocomplete="on" novalidate>
     <input type="hidden" name="schoolSlug" value="{{school.slug}}">
     <input type="hidden" name="schoolName" value="{{school.name}}">
 
@@ -147,22 +149,22 @@
       <div class="form-grid">
         <label class="form-label">
           First name
-          <input name="studentFirstName" value="{{form.studentFirstName}}" required placeholder="e.g. John">
+          <input id="studentFirstName" name="studentFirstName" value="{{form.studentFirstName}}" required placeholder="e.g. John">
         </label>
 
         <label class="form-label">
           Middle name
-          <input name="studentMiddleName" value="{{form.studentMiddleName}}" placeholder="optional">
+          <input id="studentMiddleName" name="studentMiddleName" value="{{form.studentMiddleName}}" placeholder="optional">
         </label>
 
         <label class="form-label">
           Last name
-          <input name="studentLastName" value="{{form.studentLastName}}" required placeholder="e.g. Doe">
+          <input id="studentLastName" name="studentLastName" value="{{form.studentLastName}}" required placeholder="e.g. Doe">
         </label>
 
         <label class="form-label">
           Date of birth
-          <input type="date" name="dateOfBirth" value="{{form.dateOfBirth}}">
+          <input type="date" id="dateOfBirth" name="dateOfBirth" value="{{form.dateOfBirth}}">
         </label>
 
         <label class="form-label full-row">
@@ -198,32 +200,32 @@
       <div class="form-grid">
         <label class="form-label">
           Father's name
-          <input name="fatherName" value="{{form.fatherName}}" placeholder="Full name">
+          <input id="fatherName" name="fatherName" value="{{form.fatherName}}" placeholder="Full name">
         </label>
 
         <label class="form-label">
           Father's mobile
-          <input name="fatherMobile" value="{{form.fatherMobile}}" placeholder="+263 77 123 4567" type="tel">
+          <input id="fatherMobile" name="fatherMobile" value="{{form.fatherMobile}}" placeholder="+263 77 123 4567" type="tel">
         </label>
 
         <label class="form-label">
           Father's email
-          <input name="fatherEmail" value="{{form.fatherEmail}}" placeholder="email@example.com" type="email">
+          <input id="fatherEmail" name="fatherEmail" value="{{form.fatherEmail}}" placeholder="email@example.com" type="email">
         </label>
 
         <label class="form-label">
           Mother's name
-          <input name="motherName" value="{{form.motherName}}" placeholder="Full name">
+          <input id="motherName" name="motherName" value="{{form.motherName}}" placeholder="Full name">
         </label>
 
         <label class="form-label">
           Mother's mobile
-          <input name="motherMobile" value="{{form.motherMobile}}" placeholder="+263 77 123 4567" type="tel">
+          <input id="motherMobile" name="motherMobile" value="{{form.motherMobile}}" placeholder="+263 77 123 4567" type="tel">
         </label>
 
         <label class="form-label">
           Mother's email
-          <input name="motherEmail" value="{{form.motherEmail}}" placeholder="email@example.com" type="email">
+          <input id="motherEmail" name="motherEmail" value="{{form.motherEmail}}" placeholder="email@example.com" type="email">
         </label>
 
         <label class="form-label full-row">
@@ -238,15 +240,93 @@
       </div>
     </fieldset>
 
-    <fieldset class="section">
+    <fieldset class="section indemnity-box">
       <legend>Indemnity & Consent</legend>
-      <p class="muted">Please read the school's indemnity and consent (download the registration PDF above to view the full text).</p>
 
-      <label style="display:flex;align-items:center;gap:10px;margin-top:12px">
-        <input type="checkbox" name="indemnityAccepted" value="1" {{#if form.indemnityAccepted}}checked{{/if}}>
-        <span style="font-weight:600">I accept the indemnity terms.</span>
-      </label>
-      <input type="hidden" name="indemnityText" value="Parent accepted indemnity on form">
+      <!-- brief original paragraph (kept for users who don't expand) -->
+      <p class="muted">Please read the school's indemnity and consent (expand below to view full terms).</p>
+
+      <!-- COLLAPSIBLE INDEMNITY (auto-fill placeholders inside) -->
+      <div style="margin-top:8px">
+        <details id="indemnityDetails" style="border-top:1px solid #eef4fb;padding-top:12px" aria-expanded="false">
+          <summary style="cursor:pointer;font-weight:700;color:#0b2545;padding:6px 4px">
+            Read the indemnity & consent terms (click to expand)
+          </summary>
+
+          <div style="margin-top:12px;line-height:1.5;color:#2d3b49;font-size:0.98rem">
+            <p style="white-space:pre-line;margin:0 0 10px 0">
+I/We, <span id="parentNameSpan">______________________________________</span> [Parent/Guardian Name], being the 
+parent/guardian of <span id="studentNameSpan">_______________________________________</span> [Student Name], hereby 
+acknowledge and agree to the following terms and conditions:
+1. School Bus and Meal Arrangements: I/We understand that a 30-day written notice is required to 
+cancel school bus or meal services, failing which I/we will be liable for the charges.
+2. Fee Payments: I/We agree to pay school fees in full via bank transfer or deposit. No discounts will 
+be applied for sibling or once-off payments.
+3. Payment Terms: I/We understand that fees must be paid on or before the opening of term or on 
+the 1st of each month (if on a payment plan). Failure to meet this deadline may result in the 
+school withholding services to my/our child until all outstanding balances are cleared.
+4. Child's Health and Well-being: I/We acknowledge that it remains our responsibility to ensure our 
+child's health and well-being while at school, including providing necessary medication and care.
+5. Liability for Incidents: I/We hereby indemnify and hold harmless St Eurit International School, its 
+employees, agents, and affiliates from any claims, demands, or liabilities arising from any 
+incidents, accidents, or injuries to our child while participating in school activities, trips, sports, or 
+functions.
+6. Personal Belongings: I/We acknowledge that any valuable items brought to school or school 
+events by our child remain our responsibility, and we will not hold the school liable for any loss 
+or damage.
+7. Media Consent: I/We consent to the school using photographs or videos of our child on the school 
+website, social media platforms, or other promotional materials.
+8. Discipline and Punishment: I/We consent to the school authorities disciplining our child in a 
+manner deemed fit, provided it does not involve corporal punishment unless given consent in 
+writing, abuse, or infliction of physical harm.
+9. Bullying: In the event that my/our child is found to be involved in bullying other learners, I/we 
+hereby consent to the school disciplining my/our child in any form deemed fit to reprimand and 
+correct their behaviour, including but not limited to detention, suspension, or other disciplinary 
+measures as per the school's policies.
+10. Communication: I/We agree to keep the school informed of any changes to our contact details, 
+medical conditions, or other relevant information.
+11. Rules and Regulations: I/We acknowledge that our child will abide by the school's rules and 
+regulations, as amended from time to time.
+12. Dress Code: I/We understand that the school has the right to deny entry to my/our child if they are 
+not properly dressed according to the school's standards. I/We agree to ensure that my/our child 
+wears the school uniform in good condition and refrain from wearing torn or tattered uniforms 
+that may compromise the school's brand and standards.
+13. Compulsory Activities: I/We agree to ensure our child's participation in all compulsory school 
+activities, including but not limited to: Speech and Prize Giving Day. Two fundraising activities 
+per term, each with a contribution of $5.
+14. Please note that fees are charged per term but can optionally be paid in monthly instalments. Fees 
+paid before opening day may attract discounts if paid in cash meaning fees paid after opening day 
+have no discounts neither sibling nor once-off.
+15. When a student wants to transfer, please give a term's notice in writing before transferring; otherwise 
+you will be blacklisted and charged for the term you didn’t serve notice.
+            </p>
+
+            <p style="font-size:0.95rem;color:#445569;margin-top:8px">
+              You can also view the scanned indemnity here:
+              <a href="/mnt/data/indemnity consent.png" target="_blank" rel="noopener">/mnt/data/indemnity consent.png</a>
+              &nbsp;|&nbsp;
+              <a href="/mnt/data/fe43b77b-e53f-4514-9342-a7bbe54e9383.png" target="_blank" rel="noopener">/mnt/data/fe43b77b-e53f-4514-9342-a7bbe54e9383.png</a>
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <!-- checkbox and short note (keeps previous UX) -->
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:600">
+          <input id="indemnityAccepted" type="checkbox" name="indemnityAccepted" value="1" {{#if form.indemnityAccepted}}checked{{/if}}>
+          <span style="font-weight:600">I accept the indemnity terms.</span>
+        </label>
+
+        <input type="hidden" name="indemnityText" id="indemnityTextInput" value="Parent accepted indemnity on form">
+
+        <div style="margin-left:auto;font-size:13px;color:#556174">
+          Questions? <a href="mailto:{{schoolContactEmail}}">{{schoolContactEmail}}</a>
+        </div>
+      </div>
+
+      <!-- inline error placeholder (hidden unless validation fails) -->
+      <div id="indemnityError" role="alert" style="display:none;margin-top:8px;color:#9b1c1c;font-weight:700"></div>
     </fieldset>
 
     <div class="form-actions">
@@ -258,22 +338,129 @@
 </div>
 
 <script>
-  // tiny client-side validation UX: focus first invalid field on submit
   (function () {
-    const form = document.querySelector('form');
-    if (!form) return;
-    form.addEventListener('submit', function (e) {
-      // simple required fields check
-      const required = ['studentFirstName', 'studentLastName', 'fatherMobile'];
-      for (const name of required) {
-        const el = form.elements[name];
-        if (el && !el.value.trim()) {
-          e.preventDefault();
-          el.focus();
-          el.style.boxShadow = '0 6px 18px rgba(255,50,50,0.08)';
-          return false;
+    // Elements
+    const form = document.getElementById('registrationForm');
+    const errorBox = document.getElementById('indemnityError');
+    const checkbox = document.getElementById('indemnityAccepted');
+
+    // placeholder spans inside collapsible text
+    const parentNameSpan = document.getElementById('parentNameSpan');
+    const studentNameSpan = document.getElementById('studentNameSpan');
+
+    // helper to fetch value by id or name
+    function inputValue(...keys) {
+      for (const k of keys) {
+        if (!k) continue;
+        const elById = document.getElementById(k);
+        if (elById && elById.value !== undefined) {
+          const v = String(elById.value || '').trim();
+          if (v) return v;
+        }
+        const elByName = form.elements[k];
+        if (elByName && elByName.value !== undefined) {
+          const v = String(elByName.value || '').trim();
+          if (v) return v;
         }
       }
+      return '';
+    }
+
+    // build parent/guardian display name (prefer explicit parentName -> fatherName & motherName)
+    function buildParentName() {
+      const parent = inputValue('parentName','parent_name');
+      if (parent) return parent;
+      const father = inputValue('fatherName','father_name');
+      const mother = inputValue('motherName','mother_name');
+      if (father && mother) return father + ' & ' + mother;
+      return father || mother || '';
+    }
+
+    // build student display name
+    function buildStudentName() {
+      const first = inputValue('studentFirstName','student_first_name','firstName','firstname');
+      const middle = inputValue('studentMiddleName','student_middle_name','middleName','middlename') || '';
+      const last = inputValue('studentLastName','student_last_name','lastName','lastname') || '';
+      const parts = [first, middle, last].filter(Boolean);
+      if (parts.length) return parts.join(' ');
+      return inputValue('studentName','student_name') || '';
+    }
+
+    // refresh the blanks in the collapsible text
+    function refreshPlaceholders() {
+      const p = buildParentName();
+      const s = buildStudentName();
+      parentNameSpan.textContent = p || '______________________________________';
+      studentNameSpan.textContent = s || '_______________________________________';
+    }
+
+    // initial fill
+    refreshPlaceholders();
+
+    // wire input listeners for live update (only on fields that exist)
+    const watchKeys = [
+      'parentName','parent_name','fatherName','father_name','motherName','mother_name',
+      'studentFirstName','studentMiddleName','studentLastName',
+      'student_first_name','student_middle_name','student_last_name','firstName','lastName','studentName','student_name'
+    ];
+    watchKeys.forEach(k => {
+      const el = document.getElementById(k) || (form.elements ? form.elements[k] : null);
+      if (el) {
+        el.addEventListener('input', refreshPlaceholders);
+        el.addEventListener('change', refreshPlaceholders);
+      }
     });
+
+    // validation: required fields (keeps your existing checks) + indemnity checkbox enforcement
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        // reset error
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+
+        // basic required check (preserve existing behaviour)
+        const required = ['studentFirstName', 'studentLastName', 'fatherMobile'];
+        for (const name of required) {
+          const el = form.elements[name];
+          if (el && String(el.value || '').trim() === '') {
+            ev.preventDefault();
+            el.focus();
+            el.style.boxShadow = '0 6px 18px rgba(255,50,50,0.08)';
+            return false;
+          }
+        }
+
+        // enforce indemnity checkbox
+        if (checkbox && !checkbox.checked) {
+          ev.preventDefault();
+          errorBox.textContent = 'You must accept the indemnity terms before submitting the registration.';
+          errorBox.style.display = 'block';
+          // open details and focus checkbox for accessibility
+          const details = document.getElementById('indemnityDetails');
+          if (details && !details.open) details.open = true;
+          checkbox.focus();
+          document.getElementById('registrationForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return false;
+        }
+
+        // set indemnityText with snapshot (optional)
+        const snapshot = `Accepted by: ${buildParentName() || '[not provided]'}; Student: ${buildStudentName() || '[not provided]'}; Date: ${new Date().toISOString()}`;
+        const indemnityTextInput = document.getElementById('indemnityTextInput');
+        if (indemnityTextInput) indemnityTextInput.value = snapshot;
+
+        // allow submit
+        return true;
+      }, { passive: false });
+    }
+
+    // clear error when checkbox toggled
+    if (checkbox) {
+      checkbox.addEventListener('change', function () {
+        if (this.checked) {
+          errorBox.style.display = 'none';
+          errorBox.textContent = '';
+        }
+      });
+    }
   })();
 </script>

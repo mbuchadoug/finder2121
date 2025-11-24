@@ -307,10 +307,10 @@ app.get("/data-deletion", (req, res) => {
 /* Routes: public landing (SEO-friendly) */
 app.get("/", (_req, res) => {
   res.render("landing", {
-    title: "ZimEduFinder — Find the Best Private Schools in Zimbabwe",
+    title: "ZimEduFinder - Find the Best Private Schools in Zimbabwe",
     description:
       "Smart school matching for Zimbabwean parents. Compare and discover private schools by city, curriculum (Cambridge, ZIMSEC, IB), boarding, fees band and facilities.",
-    ogTitle: "ZimEduFinder — Find Private Schools in Zimbabwe",
+    ogTitle: "ZimEduFinder-Find Private Schools in Zimbabwe",
     ogDescription:
       "Find and compare private schools by curriculum, fees band, facilities and location. Start with our smart matching tool.",
     ogImage: `${SITE_URL.replace(/\/$/, "")}/static/img/og-cover.jpg`,

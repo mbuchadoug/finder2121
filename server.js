@@ -323,7 +323,7 @@ app.get("/", (_req, res) => {
 
 app.get("/", (_req, res) => {
   res.render("landing", {
-    title: "ZimEduFinder-Best Private Schools in Zimbabwe",
+    title: "ZimEduFinder|Best Private Schools in Zimbabwe",
     description:
       "Find and compare private schools in Zimbabwe. Search by curriculum (Cambridge, IB, ZIMSEC), fees, facilities and location. Smart school matching for parents.",
     ogTitle: "ZimEduFinder-Find the Best Private Schools in Zimbabwe",

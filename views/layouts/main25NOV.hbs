@@ -9,8 +9,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- SEO (dynamic) -->
-  <meta name="description" content="{{description}}" />
+  <!-- SEO -->
+  <meta
+    name="description"
+    content="ZimEduFinder helps parents find and compare private schools across Zimbabwe. Search by city, curriculum, fees band, and facilities."
+  />
 
   <!-- Canonical -->
   <link rel="canonical" href="{{siteUrl}}{{canonicalPath}}" />
@@ -19,18 +22,18 @@
   <link rel="preload" href="/css/app.css" as="style" />
   <link rel="stylesheet" href="/css/app.css" />
 
-  <!-- Open Graph (DYNAMIC) -->
-  <meta property="og:title" content="{{ogTitle}}" />
-  <meta property="og:description" content="{{ogDescription}}" />
+  <!-- Open Graph -->
+  <meta property="og:title" content="ZimEduFinder - Private Schools in Zimbabwe" />
+  <meta property="og:description" content="Find and compare private schools by curriculum, fees band, facilities and location." />
   <meta property="og:url" content="{{siteUrl}}{{canonicalPath}}" />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="{{ogImage}}" />
+  <meta property="og:image" content="{{siteUrl}}/static/img/og-cover.jpg" />
 
-  <!-- Twitter (DYNAMIC) -->
+  <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="{{ogTitle}}" />
-  <meta name="twitter:description" content="{{ogDescription}}" />
-  <meta name="twitter:image" content="{{ogImage}}" />
+  <meta name="twitter:title" content="ZimEduFinder - Private Schools in Zimbabwe" />
+  <meta name="twitter:description" content="Smart school matching for Zimbabwean parents." />
+  <meta name="twitter:image" content="{{siteUrl}}/static/img/og-cover.jpg" />
 
   <!-- Organization JSON-LD -->
   <script type="application/ld+json">
@@ -39,18 +42,12 @@
     "@type":"Organization",
     "name":"ZimEduFinder",
     "url":"{{siteUrl}}",
-    "logo":"{{siteUrl}}/static/img/og-cover.jpg",
+    "logo":"{{siteUrl}}/static/img/logo.png",
     "sameAs":[
       "https://www.facebook.com/yourpage",
       "https://twitter.com/yourhandle"
     ],
-    "contactPoint":[
-      {
-        "@type":"ContactPoint",
-        "telephone":"+263789901058",
-        "contactType":"customer service"
-      }
-    ]
+    "contactPoint":[{"@type":"ContactPoint","telephone":"+263789901058","contactType":"customer service"}]
   }
   </script>
 
@@ -70,7 +67,6 @@
   </style>
 
 </head>
-
 
 <body>
   <div class="container">

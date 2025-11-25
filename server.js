@@ -304,7 +304,7 @@ app.get("/data-deletion", (req, res) => {
   });
 });
 
-/* Routes: public landing (SEO-friendly) */
+/* Routes: public landing (SEO-friendly)
 app.get("/", (_req, res) => {
   res.render("landing", {
     title: "ZimEduFinder - Find the Best Private Schools in Zimbabwe",
@@ -316,7 +316,24 @@ app.get("/", (_req, res) => {
     ogImage: `${SITE_URL.replace(/\/$/, "")}/static/img/og-cover.jpg`,
     canonicalPath: "/",
   });
+}); */
+
+
+
+
+app.get("/", (_req, res) => {
+  res.render("landing", {
+    title: "ZimEduFinder - Best Private Schools in Zimbabwe & Harare",
+    description:
+      "Find and compare private schools in Zimbabwe. Search by curriculum (Cambridge, IB, ZIMSEC), fees, facilities and location. Smart school matching for parents.",
+    ogTitle: "ZimEduFinder - Find the Best Private Schools in Zimbabwe",
+    ogDescription:
+      "Compare private schools by curriculum, fees band, facilities and location. Start with our smart matching tool.",
+    ogImage: `${SITE_URL.replace(/\/$/, "")}/static/img/og-cover.jpg`,
+    canonicalPath: "/",
+  });
 });
+
 
 /* Auth / API / Admin routes */
 app.use("/auth", authRoutes);

@@ -7,48 +7,7 @@ import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 
 const router = Router();
 
-function toArraySafe(v) {
-  if (!v && v !== 0) return [];
-  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
-  if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
-  return [String(v)];
-}
-
-function verifyTwilioRequest(req) {
-  if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
-    console.log("TWILIO_VERIFY: DEBUG skip enabled");
-    return true;
-  }
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!authToken) {
-    console.warn("TWILIO_VERIFY: TWILIO_AUTH_TOKEN not set — skipping verification (dev)");
-    return true;
-  }
-  try {
-    const signature = req.header("x-twilio-signature");
-    const configuredSite = (process.env.SITE_URL || "").replace(/\/$/, "");
-    let url;
-    if (configuredSite) {
-      url = `${configuredSite}${req.originalUrl}`;
-    } else {
-      const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
-      const host = req.get("host");
-      if (!host) {
-        console.warn("TWILIO_VERIFY: no host header; cannot verify");
-        return false;
-      }
-      url = `${proto}://${host}${req.originalUrl}`;
-    }
-    const params = Object.assign({}, req.body || {});
-    const ok = twilio.validateRequest(authToken, signature, url, params);
-    if (!ok) console.warn("TWILIO_VERIFY: signature invalid for", url, "signature:", signature);
-    return ok;
-  } catch (e) {
-    console.warn("TWILIO_VERIFY: error:", e?.message || e);
-    return false;
-  }
-}
-
+/* --- Helpers --- */
 function sendTwimlText(res, text) {
   const twiml = new MessagingResponse();
   twiml.message(text || "");
@@ -56,50 +15,151 @@ function sendTwimlText(res, text) {
   return res.send(twiml.toString());
 }
 
-/**
- * Parse extended filters from words.
- * - curriculum: cambridge, caie, zimsec, ib
- * - learningEnvironment: urban, suburban, rural
- * - phase: preschool, nursery, primary, secondary, high
- * - boarding/day: boarding or day
- */
-function parseFilters(words) {
-  const curriculum = [];
-  const type2 = []; // boarding/day
-  let learningEnvironment;
-  let phase;
+function ensureAbsoluteUrl(url) {
+  if (!url) return "";
+  let u = String(url).trim();
+  if (!/^https?:\/\//i.test(u)) {
+    u = `https://${u.replace(/^\/+/, "")}`;
+  }
+  return u;
+}
 
-  for (const w of words) {
-    const word = w.toLowerCase();
-    // curriculum
-    if (/cambridge|caie/.test(word)) curriculum.push("Cambridge");
-    if (/zimsec/.test(word)) curriculum.push("ZIMSEC");
-    if (/ib/.test(word)) curriculum.push("IB");
+function simpleSanitize(s) {
+  if (!s && s !== 0) return "";
+  return String(s).trim();
+}
 
-    // boarding/day
-    if (/board|boarding/.test(word)) type2.push("Boarding");
-    if (/day|dayonly|day-school|dayschool/.test(word)) type2.push("Day");
+/* Accept several forms into a normalized array */
+function toArraySafe(v) {
+  if (!v && v !== 0) return [];
+  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
+  return [String(v)];
+}
 
-    // learning environment
-    if (/urban|city|town/.test(word)) learningEnvironment = "Urban";
-    if (/suburb|suburban/.test(word)) learningEnvironment = "Suburban";
-    if (/rural|village/.test(word)) learningEnvironment = "Rural";
-
-    // phase
-    if (/presch|nurser|playgroup/.test(word)) phase = "Preschool";
-    if (/primary|elementary/.test(word)) phase = "Primary";
-    if (/secondary|high|upper/.test(word)) phase = "Secondary";
+/* Basic Twilio request verification (can be disabled with DEBUG_TWILIO_SKIP_VERIFY=1) */
+function verifyTwilioRequest(req) {
+  if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
+    console.log("TWILIO_VERIFY: DEBUG skip enabled");
+    return true;
+  }
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    console.warn("TWILIO_AUTH_TOKEN not set — skipping Twilio signature verification (dev only)");
+    return true;
   }
 
+  try {
+    const signature = req.header("x-twilio-signature");
+    // reconstruct full URL Twilio used to call us (important)
+    const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
+    const host = req.get("host");
+    if (!host) {
+      console.warn("TWILIO_VERIFY: no host header; cannot verify");
+      return false;
+    }
+    const url = `${proto}://${host}${req.originalUrl}`;
+    const params = Object.assign({}, req.body || {});
+    const ok = twilio.validateRequest(authToken, signature, url, params);
+    if (!ok) console.warn("TWILIO_VERIFY: signature invalid for", url);
+    return ok;
+  } catch (e) {
+    console.warn("TWILIO_VERIFY: validateRequest error:", e?.message || e);
+    return false;
+  }
+}
+
+/* Build the payload and call internal recommend API */
+async function callRecommend(payload) {
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  if (!site) throw new Error("SITE_URL not configured");
+  const url = `${site}/api/recommend`;
+  const resp = await axios.post(url, payload, { timeout: 10000 });
+  return resp.data;
+}
+
+/* Lightweight parser for filters from command text */
+function parseFiltersFromWords(words) {
+  const curriculum = [];
+  let learningEnvironment;
+  let schoolPhase;
+  const type2 = []; // boarding/day
+  const facilities = [];
+
+  for (const w of words) {
+    const low = w.toLowerCase();
+    // curriculum
+    if (/^cambridge$|^caie$|^caie$|^cai$|^caie$/.test(low) || /cambridge|caie/.test(low)) {
+      curriculum.push("Cambridge");
+      continue;
+    }
+    if (/zimsec/.test(low)) {
+      curriculum.push("ZIMSEC");
+      continue;
+    }
+    if (/ib/.test(low)) {
+      curriculum.push("IB");
+      continue;
+    }
+
+    // learning environment (very broad)
+    if (/urban|city|suburban|rural|town|peri-urban/.test(low)) {
+      if (/urban|city|town|peri-urban/.test(low)) learningEnvironment = "Urban";
+      else if (/suburban/.test(low)) learningEnvironment = "Suburban";
+      else if (/rural/.test(low)) learningEnvironment = "Rural";
+      continue;
+    }
+
+    // school phase
+    if (/primary|elementary|prep/.test(low)) {
+      schoolPhase = "Primary";
+      continue;
+    }
+    if (/secondary|high|senior/.test(low)) {
+      schoolPhase = "Secondary";
+      continue;
+    }
+    if (/pre-?school|nursery|playgroup/.test(low)) {
+      schoolPhase = "Preschool";
+      continue;
+    }
+
+    // boarding/day
+    if (/board|boarding/.test(low)) {
+      type2.push("Boarding");
+      continue;
+    }
+    if (/day|day-?school/.test(low)) {
+      type2.push("Day");
+      continue;
+    }
+
+    // facilities (simple single-word tags)
+    if (/swimming|pool|sports|football|rugby|tennis|computer|it|labs?/.test(low)) {
+      facilities.push(low);
+      continue;
+    }
+  }
+
+  // de-duplicate and return
   return {
-    curriculum: [...new Set(curriculum)],
-    type2: [...new Set(type2)],
+    curriculum: Array.from(new Set(curriculum)),
     learningEnvironment,
-    phase,
+    schoolPhase,
+    type2: Array.from(new Set(type2)),
+    facilities: Array.from(new Set(facilities)),
   };
 }
 
-/* POST /webhook  (mounted under /twilio in server.js -> full path: /twilio/webhook) */
+/* Determine if a school is St-Eurit (loose match by name or slug) */
+function isStEuritSchool(r) {
+  const nameLower = String(r.name || "").toLowerCase();
+  const slugLower = String(r.slug || "").toLowerCase();
+  return /st[\s-]*eurit/.test(nameLower) || /st-?eurit/.test(slugLower);
+}
+
+/* --- Route --- */
+/* POST /twilio/webhook  (mounted under /twilio in server.js) */
 router.post("/webhook", async (req, res) => {
   try {
     console.log("TWILIO: incoming webhook", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
@@ -111,10 +171,11 @@ router.post("/webhook", async (req, res) => {
     });
     console.log("TWILIO: body (raw):", req.body);
 
-    // verify
+    // Verify Twilio signature (or skip in DEBUG)
     const ok = verifyTwilioRequest(req);
     if (!ok) {
       console.warn("TWILIO: request verification failed");
+      // return 403 so Twilio knows it's not accepted
       return res.status(403).send("Invalid Twilio signature");
     }
 
@@ -122,16 +183,14 @@ router.post("/webhook", async (req, res) => {
     const rawFrom = String(params.From || params.from || "");
     const bodyRaw = String(params.Body || params.body || "").trim();
     const profileName = String(params.ProfileName || params.profileName || "");
+
     console.log("TWILIO: parsed", { rawFrom, bodyRaw, profileName });
 
-    if (!rawFrom) {
-      console.warn("TWILIO: missing From");
-      return sendTwimlText(res, "Missing sender info");
-    }
+    if (!rawFrom) return sendTwimlText(res, "Missing sender info");
 
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
-    // ensure user exists
+    // upsert user and update name
     let user = await User.findOne({ provider: "whatsapp", providerId });
     if (!user) {
       user = await User.create({
@@ -148,90 +207,23 @@ router.post("/webhook", async (req, res) => {
     }
 
     const text = (bodyRaw || "").trim();
-    const lctext = text.toLowerCase();
+    const textLower = text.toLowerCase();
 
-    // greeting/help
-    if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
+    // Greeting/help
+    if (!textLower || ["hi", "hello", "hey"].includes(textLower)) {
       const reply =
-        "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
+        "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] — e.g. 'find harare'\n• find [city] boarding cambridge primary\n• fav add <slug>\n• help";
       return sendTwimlText(res, reply);
     }
 
-    if (lctext === "help") {
+    if (textLower === "help") {
       const reply =
-        "ZimEduFinder Help:\n• find [city] [filters]\nFilters: curriculum (cambridge, zimsec, ib), boarding/day, phase (primary/secondary/preschool), environment (urban/suburban/rural)\nExamples:\n• find harare cambridge boarding primary urban\n• find bulawayo zimsec day secondary";
+        "ZimEduFinder Help:\n• find [city] [filters]\nFilters: cambridge, zimsec, ib, boarding, day, primary, secondary, urban, rural\nExample: 'find harare cambridge boarding primary'";
       return sendTwimlText(res, reply);
     }
 
-    // find command
-    const words = lctext.split(/\s+/).filter(Boolean);
-    if (words[0] === "find") {
-      const city = words[1] || "Harare";
-      const rest = words.slice(2);
-      const parsed = parseFilters(rest);
-
-      // persist lastPrefs as structured object
-      const lastPrefs = {
-        city: String(city),
-        curriculum: parsed.curriculum,
-        learningEnvironment: parsed.learningEnvironment,
-        schoolPhase: parsed.phase,
-        type2: parsed.type2,
-        facilities: [], // keep placeholder
-      };
-      try {
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $set: { lastPrefs } },
-          { new: true }
-        );
-        console.log("TWILIO: lastPrefs saved for", providerId, lastPrefs);
-      } catch (e) {
-        console.error("TWILIO: failed saving lastPrefs:", e && e.message ? e.message : e);
-      }
-
-      // call recommend with extended filters
-      try {
-        const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        if (!site) throw new Error("SITE_URL not configured");
-        const resp = await axios.post(`${site}/api/recommend`, {
-          city: lastPrefs.city,
-          curriculum: lastPrefs.curriculum,
-          learningEnvironment: lastPrefs.learningEnvironment,
-          schoolPhase: lastPrefs.schoolPhase,
-          type2: lastPrefs.type2,
-          facilities: lastPrefs.facilities,
-        }, { timeout: 10000 });
-
-        const recs = (resp.data && resp.data.recommendations) || [];
-        if (!recs.length) {
-          return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
-        }
-
-        const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
-        for (const r of recs.slice(0, 5)) {
-          lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
-          if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
-          if (r.fees) lines.push(`  Fees: ${r.fees}`);
-          if (r.website) lines.push(`  Website: ${r.website}`);
-
-          // ONLY show register link for St Eurit (case-insensitive match)
-          const name = (r.name || "").toLowerCase();
-          if (/st[\s-]*eurit/.test(name) || /st eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
-            const registerUrl = r.registerUrl || (r.slug ? `${process.env.SITE_URL || ""}/register/${encodeURIComponent(r.slug)}` : "");
-            if (registerUrl) lines.push(`  Register: ${registerUrl}`);
-          }
-        }
-        lines.push("\nReply 'help' for commands.");
-        return sendTwimlText(res, lines.join("\n"));
-      } catch (e) {
-        console.error("TWILIO: recommend call failed:", e && (e.message || e.response && e.response.data) ? (e.message || JSON.stringify(e.response.data)) : e);
-        return sendTwimlText(res, "Search failed — please try again later.");
-      }
-    }
-
-    // fav add
-    if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {
+    // favourite add: "fav add <slug>"
+    if (textLower.startsWith("fav add ") || textLower.startsWith("favorite add ")) {
       const slug = text.split(/\s+/).slice(2).join(" ").trim();
       if (!slug) return sendTwimlText(res, "Please provide the school slug, e.g. 'fav add st-eurit-international-school'");
 
@@ -248,14 +240,112 @@ router.post("/webhook", async (req, res) => {
       }
     }
 
-    // fallback
+    // find command -> parse filters and call recommend
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length && words[0].toLowerCase() === "find") {
+      const city = words[1] || "";
+      const remainder = words.slice(city ? 2 : 1); // words after city
+      // parse filters from remainder and also include any tokens in the entire command
+      const filterTokens = parseFiltersFromWords(words.slice(1));
+      const payload = {
+        city: simpleSanitize(city) || undefined,
+        learningEnvironment: filterTokens.learningEnvironment || undefined,
+        curriculum: filterTokens.curriculum || [],
+        schoolPhase: filterTokens.schoolPhase || undefined,
+        type2: filterTokens.type2 || [],
+        facilities: filterTokens.facilities || [],
+      };
+
+      // Persist lastPrefs to user (safe shape)
+      try {
+        user.lastPrefs = {
+          city: payload.city || undefined,
+          curriculum: payload.curriculum || [],
+          learningEnvironment: payload.learningEnvironment || undefined,
+          schoolPhase: payload.schoolPhase || undefined,
+          type2: payload.type2 || [],
+          facilities: payload.facilities || [],
+        };
+        await user.save();
+      } catch (e) {
+        console.warn("TWILIO: saving lastPrefs failed:", e && e.message ? e.message : e);
+      }
+
+      // Call recommend
+      let data;
+      try {
+        data = await callRecommend({
+          city: payload.city,
+          learningEnvironment: payload.learningEnvironment,
+          curriculum: payload.curriculum,
+          type: [], // kept for backward compatibility
+          type2: payload.type2,
+          facilities: payload.facilities,
+          schoolPhase: payload.schoolPhase,
+        });
+      } catch (e) {
+        console.error("TWILIO: recommend call failed:", e && e.message ? e.message : e);
+        return sendTwimlText(res, "Search failed — please try again later.");
+      }
+
+      const recs = (data && data.recommendations) || [];
+      if (!recs.length) {
+        return sendTwimlText(res, `No matches found for "${payload.city || 'your query'}". Try 'find harare' or 'help'.`);
+      }
+
+      // Build reply lines (top 5)
+      const lines = [`Top ${Math.min(5, recs.length)} matches for ${payload.city || words.slice(1).join(" ")}:`];
+      for (const r of recs.slice(0, 5)) {
+        // Basic info
+        lines.push(`\n• ${r.name || "Unknown"}${r.city ? " — " + r.city : ""}`);
+
+        // curriculum if present in record or parsed
+        if (r.curriculum && (Array.isArray(r.curriculum) && r.curriculum.length)) {
+          lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
+        }
+
+        if (r.phase || r.schoolPhase) {
+          const ph = r.phase || r.schoolPhase;
+          lines.push(`  Phase: ${ph}`);
+        }
+
+        // website (ensure scheme)
+        if (r.website) {
+          const website = ensureAbsoluteUrl(r.website);
+          lines.push(`  Website: ${website}`);
+        }
+
+        // Determine register URL (prefer r.registerUrl, fallback to slug on your site)
+        let registerUrl = "";
+        if (r.registerUrl) registerUrl = simpleSanitize(r.registerUrl);
+        if (!registerUrl && r.slug) {
+          const base = (process.env.SITE_URL || "").replace(/\/$/, "");
+          if (base) registerUrl = `${base}/register/${encodeURIComponent(String(r.slug))}`;
+        }
+        registerUrl = ensureAbsoluteUrl(registerUrl);
+
+        // Only show Register link for St Eurit (loose match) and when URL looks valid
+        if (isStEuritSchool(r) && registerUrl) {
+          lines.push(`  Register: ${registerUrl}`);
+        }
+      }
+
+      // Send aggregated TwiML reply
+      const finalMsg = lines.join("\n");
+      console.log("TWILIO: reply ->", finalMsg);
+      return sendTwimlText(res, finalMsg);
+    }
+
+    // Fallback/unrecognised
     return sendTwimlText(res, "Sorry, I didn't understand. Send 'help' for usage.");
   } catch (err) {
     console.error("TWILIO: webhook handler error:", err && err.stack ? err.stack : err);
+    // safest fallback: TwiML error message
     try {
       return sendTwimlText(res, "Server error; try again later.");
     } catch (e) {
-      return res.end();
+      // if even that fails, just end response
+      return res.status(500).end();
     }
   }
 });

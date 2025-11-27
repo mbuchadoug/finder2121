@@ -343,7 +343,8 @@ app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 app.use("/register", registerRoutes);
-app.use("/twilio", twilioWebhookRoutes);
+app.use("/twilio/webhook", twilioWebhookRoutes);
+
 
 /* Protected recommend page */
 app.get("/recommend", ensureAuth, (req, res) => {

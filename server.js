@@ -13,6 +13,9 @@ import { ensureAuth } from "./middleware/ensureAuth.js";
 import MongoStore from "connect-mongo";
 import session from "express-session";
 import registerRoutes from "./routes/register.js";
+import twilioWebhookRoutes from "./routes/twilio_webhook.js";
+// ...
+
 
 
 
@@ -340,6 +343,7 @@ app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 app.use("/register", registerRoutes);
+app.use("/", twilioWebhookRoutes);
 /* Protected recommend page */
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {

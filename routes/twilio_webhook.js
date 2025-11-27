@@ -21,6 +21,7 @@ function toArraySafe(v) {
   return [String(v)];
 }
 
+// prefer SITE_URL if present (most reliable), otherwise use forwarded proto or req.protocol + host
 function verifyTwilioRequest(req) {
   if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY: DEBUG skip enabled");
@@ -31,18 +32,30 @@ function verifyTwilioRequest(req) {
     console.warn("TWILIO_AUTH_TOKEN not set — skipping Twilio signature verification (dev only)");
     return true;
   }
+
   try {
     const signature = req.header("x-twilio-signature");
-    const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
-    const host = req.get("host");
-    if (!host) {
-      console.warn("TWILIO_VERIFY: no host header; cannot verify");
-      return false;
+
+    // If the deployed SITE_URL is set (and reachable by Twilio), use that as the base.
+    // This avoids proxy-related mismatches. Ensure SITE_URL includes protocol (https://).
+    const configuredSite = (process.env.SITE_URL || "").replace(/\/$/, "");
+    let url;
+    if (configuredSite) {
+      url = `${configuredSite}${req.originalUrl}`;
+    } else {
+      // fallback: reconstruct from forwarded proto or req.protocol
+      const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
+      const host = req.get("host");
+      if (!host) {
+        console.warn("TWILIO_VERIFY: no host header; cannot verify");
+        return false;
+      }
+      url = `${proto}://${host}${req.originalUrl}`;
     }
-    const url = `${proto}://${host}${req.originalUrl}`;
+
     const params = Object.assign({}, req.body || {});
     const ok = twilio.validateRequest(authToken, signature, url, params);
-    if (!ok) console.warn("TWILIO_VERIFY: signature invalid for", url);
+    if (!ok) console.warn("TWILIO_VERIFY: signature invalid for", url, "signature:", signature);
     return ok;
   } catch (e) {
     console.warn("TWILIO_VERIFY: validateRequest error:", e?.message || e);

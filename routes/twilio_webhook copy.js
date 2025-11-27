@@ -2,7 +2,7 @@
 import { Router } from "express";
 import twilio from "twilio";
 import axios from "axios";
-import User from "../models/user.js";
+import User from "../models/userCopy.js";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 
 const router = Router();

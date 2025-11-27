@@ -2,7 +2,7 @@
 import { Router } from "express";
 import twilio from "twilio";
 import axios from "axios";
-import User from "../models/user.js";
+import User from "../models/userCopy.js";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 
 const router = Router();
@@ -153,7 +153,7 @@ router.post("/webhook", async (req, res) => {
     // greeting/help
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
       const reply =
-        "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
+        "Hi! I'm ZimEduFinder \n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
       return sendTwimlText(res, reply);
     }
 

@@ -1,27 +1,27 @@
-// models/user.js (snippet)
 import mongoose from "mongoose";
-const { Schema } = mongoose;
 
-const LastPrefsSchema = new Schema({
-  city: { type: String },
-  curriculum: [{ type: String }],
-  learningEnvironment: { type: String },
-  schoolPhase: { type: String },
-  type2: [{ type: String }],
-  facilities: [{ type: String }],
-}, { _id: false });
+const UserSchema = new mongoose.Schema(
+  {
+    provider: { type: String, required: true },
+    providerId: { type: String, required: true, index: true },
+    name: String,
+    email: { type: String, index: true },
+    photo: String,
 
-const UserSchema = new Schema({
-  provider: String,
-  providerId: String,
-  name: String,
-  role: { type: String, default: "user" },
-  favourites: [{ type: Schema.Types.ObjectId, ref: "School" }],
-  // keep legacy `lastPrefs` if you depend on it elsewhere
-  lastPrefs: { type: [String], default: [] }, // leave as is if you used it previously
-  // new structured prefs
-  lastPrefsObj: { type: LastPrefsSchema, default: {} },
-  // ...
-}, { timestamps: true });
+    role: { type: String, enum: ["user", "admin"], default: "user", index: true },
+
+    favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "School" }],
+
+    lastPrefs: {
+      city: String,
+      learningEnvironment: String, // "Comprehensive" | "Enhanced" | "Advanced"
+      curriculum: [String],        // ["Cambridge","ZIMSEC","IB"]
+      type: [String],              // ["High School","Primary School","Pre-School"]
+      type2: [String],             // ["Day","Boarding"]
+      facilities: [String],        // keys in School.facilities
+    },
+  },
+  { timestamps: true }
+);
 
 export default mongoose.model("User", UserSchema);

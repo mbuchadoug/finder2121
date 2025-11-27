@@ -4,7 +4,7 @@ import multer from "multer";
 import { parse as csvParse } from "csv-parse/sync";
 import methodOverride from "method-override";
 import School from "../models/school.js";
-import User from "../models/user.js";
+import User from "../models/userCopy.js";
 
 const router = Router();
 const upload = multer({

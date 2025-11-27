@@ -29,7 +29,6 @@ function verifyTwilioRequest(req) {
     const configuredSite = (process.env.SITE_URL || "").replace(/\/$/, "");
     let url;
     if (configuredSite) {
-      // Use the configured public site URL + the incoming path Twilio called.
       url = `${configuredSite}${req.originalUrl}`;
     } else {
       const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
@@ -75,7 +74,7 @@ function parseFilters(words) {
     // curriculum
     if (/cambridge|caie/.test(word)) curriculum.push("Cambridge");
     if (/zimsec/.test(word)) curriculum.push("ZIMSEC");
-    if (/^ib$/.test(word)) curriculum.push("IB");
+    if (/ib/.test(word)) curriculum.push("IB");
 
     // boarding/day
     if (/board|boarding/.test(word)) type2.push("Boarding");
@@ -100,7 +99,7 @@ function parseFilters(words) {
   };
 }
 
-/* POST /webhook  (mount path depends on server.js) */
+/* POST /webhook  (mounted under /twilio in server.js -> full path: /twilio/webhook) */
 router.post("/webhook", async (req, res) => {
   try {
     console.log("TWILIO: incoming webhook", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
@@ -209,7 +208,6 @@ router.post("/webhook", async (req, res) => {
           return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
         }
 
-        const siteBase = (process.env.SITE_URL || "https://skoolfinder.net").replace(/\/$/, "");
         const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
         for (const r of recs.slice(0, 5)) {
           lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
@@ -219,30 +217,15 @@ router.post("/webhook", async (req, res) => {
 
           // ONLY show register link for St Eurit (case-insensitive match)
           const name = (r.name || "").toLowerCase();
-          const slug = r.slug || "";
-          const stEuritMatch = /st[\s-]*eurit/.test(name) || /st[\s-]*eurit/.test(slug.toLowerCase());
-          if (stEuritMatch) {
-            // preferred: use explicit registerUrl returned by API if it exists and looks like a URL,
-            // otherwise build using SITE_URL + /register/<slug>
-            let registerUrl = "";
-            if (r.registerUrl && typeof r.registerUrl === "string" && /^https?:\/\//i.test(r.registerUrl.trim())) {
-              registerUrl = r.registerUrl.trim();
-            } else if (slug) {
-              // ensure slug is safe in URL
-              registerUrl = `${siteBase}/register/${encodeURIComponent(slug)}`;
-            } else {
-              // fallback to the canonical St Eurit link if you want a hardcoded safety net
-              registerUrl = `${siteBase}/register/st-eurit-international-school`;
-            }
-
-            // Add register URL on its own line so WhatsApp autolinks it
-            lines.push(`  Register: ${registerUrl}`);
+          if (/st[\s-]*eurit/.test(name) || /st eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
+            const registerUrl = r.registerUrl || (r.slug ? `${process.env.SITE_URL || ""}/register/${encodeURIComponent(r.slug)}` : "");
+            if (registerUrl) lines.push(`  Register: ${registerUrl}`);
           }
         }
         lines.push("\nReply 'help' for commands.");
         return sendTwimlText(res, lines.join("\n"));
       } catch (e) {
-        console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && e.response.data)) ? (e.message || JSON.stringify(e.response.data)) : e);
+        console.error("TWILIO: recommend call failed:", e && (e.message || e.response && e.response.data) ? (e.message || JSON.stringify(e.response.data)) : e);
         return sendTwimlText(res, "Search failed — please try again later.");
       }
     }

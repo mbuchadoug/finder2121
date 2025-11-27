@@ -14,10 +14,6 @@ import MongoStore from "connect-mongo";
 import session from "express-session";
 import registerRoutes from "./routes/register.js";
 import twilioWebhookRoutes from "./routes/twilio_webhook.js";
-// ...
-
-
-
 
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
@@ -29,6 +25,36 @@ const __dirname = path.dirname(__filename);
 const app = express();
 if (PROD) app.set("trust proxy", 1);
 
+// simple request logger (temporary — useful for diagnosing webhook reachability)
+app.use((req, res, next) => {
+  console.log("REQ ->", req.method, req.originalUrl, "host:", req.get("host"), "proto:", req.get("x-forwarded-proto") || req.protocol, "ip:", req.ip || req.connection?.remoteAddress);
+  next();
+});
+
+/* Security & parsing */
+app.disable("x-powered-by");
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+/* Quick diagnostics endpoints to confirm reachability */
+// Ping to verify public/proxy routing
+app.get("/twilio/ping", (req, res) => {
+  console.log("PING /twilio/ping hit from", req.ip || req.get("host"));
+  res.send("pong");
+});
+
+// Simple webhook that immediately logs body and headers (use for external curl / Twilio tests)
+app.post("/twilio/webhook-simple", express.urlencoded({ extended: true }), (req, res) => {
+  console.log("WEBHOOK-SIMPLE: Got body:", req.body, "headers:", {
+    host: req.get("host"),
+    "x-forwarded-proto": req.get("x-forwarded-proto"),
+    "x-twilio-signature": req.header("x-twilio-signature"),
+    "content-type": req.get("content-type"),
+  });
+  res.type("text/plain").status(200).send("OK");
+});
+
 // Load Passport strategy before routes
 import "./config/passport.js";
 
@@ -38,12 +64,6 @@ import School from "./models/school.js"; // ensure this exists (or remove usage 
 import authRoutes from "./routes/auth.js";
 import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
-
-/* Security & parsing */
-app.disable("x-powered-by");
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 /* Static public */
 app.use(express.static(path.join(__dirname, "public")));
@@ -58,9 +78,7 @@ app.engine(
     partialsDir: path.join(__dirname, "views/partials"),
     helpers: {
       ifeq: (a, b, opts) => (a === b ? opts.fn(this) : opts.inverse(this)),
-      ifEquals: (a, b, opts) => (String(a) === String(b) ? opts.fn ? opts.fn(this) : "selected" : opts.inverse ? opts.inverse(this) : "")
-
-      // keep helpers small - we rely on res.locals for title/description/og vars
+      ifEquals: (a, b, opts) => (String(a) === String(b) ? opts.fn ? opts.fn(this) : "selected" : opts.inverse ? opts.inverse(this) : ""),
     },
     runtimeOptions: {
       allowProtoPropertiesByDefault: true,
@@ -291,7 +309,6 @@ app.get("/sitemap.xml", async (req, res) => {
   }
 });
 
-
 // privacy & deletion pages
 app.get("/privacy-policy", (req, res) => {
   res.render("privacy_policy", {
@@ -307,23 +324,7 @@ app.get("/data-deletion", (req, res) => {
   });
 });
 
-/* Routes: public landing (SEO-friendly)
-app.get("/", (_req, res) => {
-  res.render("landing", {
-    title: "ZimEduFinder - Find the Best Private Schools in Zimbabwe",
-    description:
-      "Smart school matching for Zimbabwean parents. Compare and discover private schools by city, curriculum (Cambridge, ZIMSEC, IB), boarding, fees band and facilities.",
-    ogTitle: "ZimEduFinder-Find Private Schools in Zimbabwe",
-    ogDescription:
-      "Find and compare private schools by curriculum, fees band, facilities and location. Start with our smart matching tool.",
-    ogImage: `${SITE_URL.replace(/\/$/, "")}/static/img/og-cover.jpg`,
-    canonicalPath: "/",
-  });
-}); */
-
-
-
-
+/* Routes: public landing (SEO-friendly) */
 app.get("/", (_req, res) => {
   res.render("landing", {
     title: "ZimEduFinder|Best Private Schools in Zimbabwe",
@@ -337,14 +338,16 @@ app.get("/", (_req, res) => {
   });
 });
 
-
 /* Auth / API / Admin routes */
 app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 app.use("/register", registerRoutes);
-app.use("/twilio/webhook", twilioWebhookRoutes);
 
+// Mount Twilio routes under /twilio
+// Note: the twilioWebhookRoutes file expects router.post("/webhook") internally,
+// so the final endpoint will be /twilio/webhook
+app.use("/twilio", twilioWebhookRoutes);
 
 /* Protected recommend page */
 app.get("/recommend", ensureAuth, (req, res) => {
@@ -364,7 +367,6 @@ app.get("/signed-out", (_req, res) => {
 app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 /* ---------- Optional: OG image generation (requires 'canvas') ---------- */
-/* If you don't want to install native deps, remove this block and rely on static images in /public/static/img/ */
 try {
   // lazy import canvas so app still runs if canvas isn't installed
   const { createCanvas, loadImage } = await (async () => {

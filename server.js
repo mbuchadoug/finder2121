@@ -455,6 +455,17 @@ try {
   console.warn("OG image setup skipped:", e?.message || e);
 }
 
+app.get("/diag/env", (req, res) => {
+  res.json({
+    TWILIO_ACCOUNT_SID: (process.env.TWILIO_ACCOUNT_SID || "").slice(0,6) + "...",
+    TWILIO_AUTH_TOKEN: (process.env.TWILIO_AUTH_TOKEN || "").slice(0,6) + "...",
+    SITE_URL: process.env.SITE_URL || null,
+    DEBUG_TWILIO_SKIP_VERIFY: process.env.DEBUG_TWILIO_SKIP_VERIFY || null,
+  });
+});
+
+
+
 const PORT = process.env.PORT || 9000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 EduLocate listening on 0.0.0.0:${PORT}`);

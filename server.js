@@ -347,8 +347,8 @@ app.use("/register", registerRoutes);
 // Mount Twilio routes under /twilio
 // Note: the twilioWebhookRoutes file expects router.post("/webhook") internally,
 // so the final endpoint will be /twilio/webhook
-app.use("/twilio", twilioWebhookRoutes);
 
+app.use("/twilio", twilioWebhookRoutes);
 /* Protected recommend page */
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {

@@ -156,14 +156,35 @@ router.post("/webhook", async (req, res) => {
       const facilities = [];
 
       // Build a plain object for lastPrefs (fixes earlier CastError where an array was being saved)
-      const lastPrefs = {
-        city: String(city),
-        curriculum: toArraySafe(curriculum),
-        learningEnvironment: undefined,
-        type: [],
-        type2: toArraySafe(type2),
-        facilities: toArraySafe(facilities),
-      };
+      // --- replace the current lastPrefs save block with this ---
+const lastPrefs = {
+  city: String(city),
+  curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
+  learningEnvironment: undefined,
+  schoolPhase: undefined,
+  type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
+  facilities: [], // placeholder
+};
+
+// defensive logging so we can see exactly what gets written
+try {
+  console.log("TWILIO: about to save lastPrefs (type check):", {
+    providerId,
+    lastPrefsType: typeof lastPrefs,
+    lastPrefsIsArray: Array.isArray(lastPrefs),
+    lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
+  });
+
+  await User.findOneAndUpdate(
+    { provider: "whatsapp", providerId },
+    { $set: { lastPrefs } }, // important: set to object (not array)
+    { new: true, upsert: true }
+  );
+  console.log("TWILIO: lastPrefs saved for", providerId);
+} catch (e) {
+  // make the error message fully visible in logs
+  console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+};
 
       try {
         // Save as an object (not an array) to match your schema

@@ -1,10 +1,10 @@
-// routes/twilio_webhook.js
+// routes/twilio_webhook.js  (replace your existing file)
 import express from "express";
 import { Router } from "express";
 import twilio from "twilio";
 import axios from "axios";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
-import User from "../models/user.js"; // adjust if your model path differs
+import User from "../models/user.js"; // ensure this path matches your project
 
 const router = Router();
 
@@ -16,30 +16,23 @@ router.use(express.urlencoded({ extended: true }));
  * - accepts a single string OR an array of strings.
  * - If array, sends each item as a separate <Message> — useful to keep URLs intact.
  */
-function sendTwimlText(res, textOrArray) {
+function sendTwimlText(res, text) {
   try {
     const twiml = new MessagingResponse();
-    if (Array.isArray(textOrArray)) {
-      for (const t of textOrArray) {
-        // ensure we send plain string
+    if (Array.isArray(text)) {
+      for (const t of text) {
         twiml.message(String(t || ""));
       }
     } else {
-      twiml.message(String(textOrArray || ""));
+      twiml.message(String(text || ""));
     }
     res.set("Content-Type", "text/xml");
     return res.send(twiml.toString());
   } catch (e) {
-    // fallback to plain text
-    try {
-      if (Array.isArray(textOrArray)) {
-        res.type("text/plain").send(textOrArray.join("\n"));
-      } else {
-        res.type("text/plain").send(String(textOrArray || ""));
-      }
-    } catch (e2) {
-      res.status(500).end();
-    }
+    // fallback
+    res.set("Content-Type", "text/plain");
+    if (Array.isArray(text)) return res.send(text.join("\n"));
+    return res.send(String(text || ""));
   }
 }
 
@@ -75,6 +68,7 @@ function verifyTwilioRequest(req) {
       }
       url = `${proto}://${host}${req.originalUrl}`;
     }
+    // Important: Twilio expects the *raw* params used in the signature check.
     const params = Object.assign({}, req.body || {});
     const ok = twilio.validateRequest(authToken, signature, url, params);
     if (!ok) console.warn("TWILIO_VERIFY: signature invalid for", url, "signature:", signature);
@@ -86,13 +80,14 @@ function verifyTwilioRequest(req) {
 }
 
 router.post("/webhook", async (req, res) => {
-  // Top-level logs
+  // Aggressive top-level logging to ensure we see everything
   console.log("TWILIO: webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
   console.log("TWILIO: debug env:", {
     SITE_URL: process.env.SITE_URL ? "[set]" : "[missing]",
     DEBUG_TWILIO_SKIP_VERIFY: process.env.DEBUG_TWILIO_SKIP_VERIFY || "[not set]",
     TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]"
   });
+
   console.log("TWILIO: headers:", {
     host: req.get("host"),
     "x-forwarded-proto": req.get("x-forwarded-proto"),
@@ -100,20 +95,23 @@ router.post("/webhook", async (req, res) => {
     "content-type": req.get("content-type"),
   });
 
+  // Print body safely (avoid circular)
   try {
-    console.log("TWILIO: body (raw):", JSON.stringify(req.body || {}));
+    console.log("TWILIO: body (raw):", JSON.stringify(req.body));
   } catch (e) {
-    console.log("TWILIO: body (raw) - keys:", Object.keys(req.body || {}));
+    console.log("TWILIO: body (raw) - non-serializable; keys:", Object.keys(req.body || {}));
   }
 
-  // Verify request
+  // Verify
   const ok = verifyTwilioRequest(req);
   if (!ok) {
-    console.warn("TWILIO: request verification failed -> replying 403");
+    console.warn("TWILIO: request verification failed -> replying 403 (signature mismatch or missing headers)");
+    // Respond with TwiML too so Twilio gets a valid response body even if 403
     res.status(403);
     return sendTwimlText(res, "Invalid Twilio signature");
   }
 
+  // From here onward we have a verified request (or skip enabled)
   try {
     const params = req.body || {};
     const rawFrom = String(params.From || params.from || "");
@@ -147,7 +145,7 @@ router.post("/webhook", async (req, res) => {
     const text = (bodyRaw || "").trim();
     const lctext = text.toLowerCase();
 
-    // greetings/help
+    // BASIC commands: greeting/help -> reply immediately
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
       const reply =
         "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
@@ -169,30 +167,50 @@ router.post("/webhook", async (req, res) => {
       const curriculum = words.filter((w) => /cambridge|caie|zimsec|ib/.test(w));
       const facilities = [];
 
-      // Build lastPrefs as plain object (not an array) to match schema
+      // Build a plain object for lastPrefs (fixes earlier CastError where an array was being saved)
+      // --- replace the current lastPrefs save block with this ---
       const lastPrefs = {
         city: String(city),
         curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
         learningEnvironment: undefined,
         schoolPhase: undefined,
         type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
-        facilities: [],
+        facilities: [], // placeholder
       };
 
-      // Defensive log before saving
+      // defensive logging so we can see exactly what gets written
       try {
-        console.log("TWILIO: about to save lastPrefs:", { providerId, lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000) });
+        console.log("TWILIO: about to save lastPrefs (type check):", {
+          providerId,
+          lastPrefsType: typeof lastPrefs,
+          lastPrefsIsArray: Array.isArray(lastPrefs),
+          lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
+        });
+
+        await User.findOneAndUpdate(
+          { provider: "whatsapp", providerId },
+          { $set: { lastPrefs } }, // important: set to object (not array)
+          { new: true, upsert: true }
+        );
+        console.log("TWILIO: lastPrefs saved for", providerId);
+      } catch (e) {
+        // make the error message fully visible in logs
+        console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+      };
+
+      try {
+        // Save as an object (not an array) to match your schema
         await User.findOneAndUpdate(
           { provider: "whatsapp", providerId },
           { $set: { lastPrefs } },
           { new: true, upsert: true }
         );
-        console.log("TWILIO: lastPrefs saved for", providerId);
+        console.log("TWILIO: lastPrefs saved for", providerId, lastPrefs);
       } catch (e) {
-        console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+        console.error("TWILIO: failed saving lastPrefs:", e && e.message ? e.message : e);
       }
 
-      // Call recommend endpoint
+      // call recommend endpoint
       try {
         const site = (process.env.SITE_URL || "").replace(/\/$/, "");
         if (!site) throw new Error("SITE_URL not configured");
@@ -210,29 +228,26 @@ router.post("/webhook", async (req, res) => {
           return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
         }
 
-        // Build output as an array of messages so URLs are sent cleanly
-        const outMessages = [];
-        outMessages.push(`Top ${Math.min(5, recs.length)} matches for ${city}:`);
+        // NOTE: we now build `lines` as an array and send it as multiple <Message> entries.
+        const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
         for (const r of recs.slice(0, 5)) {
-          outMessages.push(`• ${r.name}${r.city ? " — " + r.city : ""}`);
-          if (r.curriculum) outMessages.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
-          if (r.fees) outMessages.push(`  Fees: ${r.fees}`);
-          if (r.website) outMessages.push(`  Website: ${r.website}`);
-
-          // Only show register link for St Eurit — send the label and the URL as separate messages
+          lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
+          if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
+          if (r.fees) lines.push(`  Fees: ${r.fees}`);
+          if (r.website) lines.push(`  Website: ${r.website}`);
+          // Only show register link for St Eurit — send label and URL separately so the URL stays clickable
           const name = (r.name || "").toLowerCase();
           if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
             const registerUrl = r.registerUrl || (r.slug ? `${process.env.SITE_URL || ""}/register/${encodeURIComponent(r.slug)}` : "");
             if (registerUrl) {
-              outMessages.push("Register:");      // label as its own message
-              outMessages.push(`${registerUrl}`); // URL as its own message (prevents WhatsApp from breaking link)
+              lines.push("  Register:");        // label as its own message-line
+              lines.push(`${registerUrl}`);     // URL as its own message-line — Twilio will emit a separate <Message>
             }
           }
         }
-        outMessages.push("Reply 'help' for commands.");
-
-        // Send multiple messages (MessagingResponse will create multiple <Message> elements)
-        return sendTwimlText(res, outMessages);
+        lines.push("\nReply 'help' for commands.");
+        // send as multiple Messages so URLs are not broken
+        return sendTwimlText(res, lines);
       } catch (e) {
         console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && JSON.stringify(e.response.data))) ? (e.message || JSON.stringify(e.response.data)) : e);
         return sendTwimlText(res, "Search failed — please try again later.");

@@ -11,27 +11,15 @@ const router = Router();
 // Ensure router parses form-encoded bodies (Twilio uses application/x-www-form-urlencoded)
 router.use(express.urlencoded({ extended: true }));
 
-/**
- * sendTwimlText:
- * - accepts a single string OR an array of strings.
- * - If array, sends each item as a separate <Message> — useful to keep URLs intact.
- */
 function sendTwimlText(res, text) {
   try {
     const twiml = new MessagingResponse();
-    if (Array.isArray(text)) {
-      for (const t of text) {
-        twiml.message(String(t || ""));
-      }
-    } else {
-      twiml.message(String(text || ""));
-    }
+    twiml.message(text || "");
     res.set("Content-Type", "text/xml");
     return res.send(twiml.toString());
   } catch (e) {
     // fallback
     res.set("Content-Type", "text/plain");
-    if (Array.isArray(text)) return res.send(text.join("\n"));
     return res.send(String(text || ""));
   }
 }
@@ -169,34 +157,34 @@ router.post("/webhook", async (req, res) => {
 
       // Build a plain object for lastPrefs (fixes earlier CastError where an array was being saved)
       // --- replace the current lastPrefs save block with this ---
-      const lastPrefs = {
-        city: String(city),
-        curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
-        learningEnvironment: undefined,
-        schoolPhase: undefined,
-        type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
-        facilities: [], // placeholder
-      };
+const lastPrefs = {
+  city: String(city),
+  curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
+  learningEnvironment: undefined,
+  schoolPhase: undefined,
+  type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
+  facilities: [], // placeholder
+};
 
-      // defensive logging so we can see exactly what gets written
-      try {
-        console.log("TWILIO: about to save lastPrefs (type check):", {
-          providerId,
-          lastPrefsType: typeof lastPrefs,
-          lastPrefsIsArray: Array.isArray(lastPrefs),
-          lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
-        });
+// defensive logging so we can see exactly what gets written
+try {
+  console.log("TWILIO: about to save lastPrefs (type check):", {
+    providerId,
+    lastPrefsType: typeof lastPrefs,
+    lastPrefsIsArray: Array.isArray(lastPrefs),
+    lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
+  });
 
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $set: { lastPrefs } }, // important: set to object (not array)
-          { new: true, upsert: true }
-        );
-        console.log("TWILIO: lastPrefs saved for", providerId);
-      } catch (e) {
-        // make the error message fully visible in logs
-        console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
-      };
+  await User.findOneAndUpdate(
+    { provider: "whatsapp", providerId },
+    { $set: { lastPrefs } }, // important: set to object (not array)
+    { new: true, upsert: true }
+  );
+  console.log("TWILIO: lastPrefs saved for", providerId);
+} catch (e) {
+  // make the error message fully visible in logs
+  console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+};
 
       try {
         // Save as an object (not an array) to match your schema
@@ -228,26 +216,21 @@ router.post("/webhook", async (req, res) => {
           return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
         }
 
-        // NOTE: we now build `lines` as an array and send it as multiple <Message> entries.
         const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
         for (const r of recs.slice(0, 5)) {
           lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
           if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
           if (r.fees) lines.push(`  Fees: ${r.fees}`);
           if (r.website) lines.push(`  Website: ${r.website}`);
-          // Only show register link for St Eurit — send label and URL separately so the URL stays clickable
+          // Only show register link for St Eurit
           const name = (r.name || "").toLowerCase();
           if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
             const registerUrl = r.registerUrl || (r.slug ? `${process.env.SITE_URL || ""}/register/${encodeURIComponent(r.slug)}` : "");
-            if (registerUrl) {
-              lines.push("  Register:");        // label as its own message-line
-              lines.push(`${registerUrl}`);     // URL as its own message-line — Twilio will emit a separate <Message>
-            }
+            if (registerUrl) lines.push(`  Register: ${registerUrl}`);
           }
         }
         lines.push("\nReply 'help' for commands.");
-        // send as multiple Messages so URLs are not broken
-        return sendTwimlText(res, lines);
+        return sendTwimlText(res, lines.join("\n"));
       } catch (e) {
         console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && JSON.stringify(e.response.data))) ? (e.message || JSON.stringify(e.response.data)) : e);
         return sendTwimlText(res, "Search failed — please try again later.");

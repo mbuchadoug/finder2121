@@ -1,53 +1,54 @@
 // routes/twilio_webhook.js
 import { Router } from "express";
+import express from "express";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 
 const router = Router();
 
-/**
- * Always reply with something, no DB, no verification.
- * This is ONLY for testing webhook reachability.
- */
+// Use urlencoded for *this route only* to guarantee parsing regardless of global middleware order
+const urlencoded = express.urlencoded({ extended: true });
 
-router.post("/webhook", async (req, res) => {
+router.post("/webhook", urlencoded, (req, res) => {
   try {
     console.log("TWILIO TEST WEBHOOK HIT");
     console.log("Headers:", {
       host: req.get("host"),
       "x-forwarded-proto": req.get("x-forwarded-proto"),
       "x-twilio-signature": req.header("x-twilio-signature"),
+      "content-type": req.get("content-type"),
     });
-    console.log("Body:", req.body);
+    console.log("Raw body object:", req.body);
 
-    const body = (req.body.Body || "").trim().toLowerCase();
-    const from = req.body.From || "";
+    // tolerate either Body / body / text
+    const rawBody = (req.body.Body || req.body.body || req.body.message || "").toString();
+    const body = rawBody.trim().toLowerCase();
+    const from = req.body.From || req.body.from || "";
 
     const twiml = new MessagingResponse();
 
-    // Basic test responses
     if (!body) {
       twiml.message(
-        "👋 Hey! I received your message — but it was empty.\n\nTry sending:\nhello\nhi\nanything"
+        "👋 Received your request but it looked empty. Try sending: 'hi' or 'find harare'"
       );
     } else if (["hi", "hello", "hey"].includes(body)) {
-      twiml.message(
-        "👋 Hi there! Your webhook is working perfectly.\n\nSend *anything else* and I'll echo it back."
-      );
+      twiml.message("👋 Hi! Webhook reached the server and replied successfully.");
     } else {
-      twiml.message(`🔁 I got your message:\n"${body}"\n\nWebhook is alive!`);
+      twiml.message(`🔁 Echo: "${rawBody}"\n\nWebhook is alive and responding.`);
     }
 
     res.set("Content-Type", "text/xml");
-    return res.send(twiml.toString());
+    return res.status(200).send(twiml.toString());
   } catch (err) {
-    console.error("TWILIO TEST WEBHOOK ERROR:", err);
-
-    // If something fails, send generic TwiML response
-    const twiml = new MessagingResponse();
-    twiml.message("⚠️ Server error — but your webhook DID reach the server.");
-
-    res.set("Content-Type", "text/xml");
-    return res.send(twiml.toString());
+    console.error("TWILIO TEST WEBHOOK ERROR:", err && (err.stack || err));
+    try {
+      const twiml = new MessagingResponse();
+      twiml.message("⚠️ Server error but webhook reached the server.");
+      res.set("Content-Type", "text/xml");
+      return res.status(500).send(twiml.toString());
+    } catch (e) {
+      // last resort
+      res.status(500).send("server error");
+    }
   }
 });
 

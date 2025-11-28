@@ -225,7 +225,8 @@ try {
           // Only show register link for St Eurit
           const name = (r.name || "").toLowerCase();
           if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
-            const registerUrl = r.registerUrl || (r.slug ? `${process.env.SITE_URL || ""}/register/${encodeURIComponent(r.slug)}` : "");
+          const registerUrl = "https://skoolfinder.net/register/st-eurit-international-school";
+
             if (registerUrl) lines.push(`  Register: ${registerUrl}`);
           }
         }

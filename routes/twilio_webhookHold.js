@@ -11,8 +11,6 @@ const router = Router();
 // Ensure router parses form-encoded bodies (Twilio uses application/x-www-form-urlencoded)
 router.use(express.urlencoded({ extended: true }));
 
-/* ---------- helpers ---------- */
-
 function sendTwimlText(res, text) {
   try {
     const twiml = new MessagingResponse();
@@ -23,27 +21,6 @@ function sendTwimlText(res, text) {
     // fallback
     res.set("Content-Type", "text/plain");
     return res.send(String(text || ""));
-  }
-}
-
-/**
- * Send TwiML message with text and one-or-more Media URLs.
- * mediaUrls should be absolute URLs accessible by Twilio.
- */
-function sendTwimlWithMedia(res, text, mediaUrls = []) {
-  try {
-    const twiml = new MessagingResponse();
-    const msg = twiml.message();
-    if (text) msg.body(text);
-    for (const m of (mediaUrls || [])) {
-      if (m) msg.media(m);
-    }
-    res.set("Content-Type", "text/xml");
-    return res.send(twiml.toString());
-  } catch (e) {
-    console.error("sendTwimlWithMedia error:", e);
-    // fallback to plain text
-    return sendTwimlText(res, text || "");
   }
 }
 
@@ -90,8 +67,6 @@ function verifyTwilioRequest(req) {
   }
 }
 
-/* ---------- webhook route ---------- */
-
 router.post("/webhook", async (req, res) => {
   // Aggressive top-level logging to ensure we see everything
   console.log("TWILIO: webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
@@ -124,6 +99,7 @@ router.post("/webhook", async (req, res) => {
     return sendTwimlText(res, "Invalid Twilio signature");
   }
 
+  // From here onward we have a verified request (or skip enabled)
   try {
     const params = req.body || {};
     const rawFrom = String(params.From || params.from || "");
@@ -137,16 +113,6 @@ router.post("/webhook", async (req, res) => {
     }
 
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
-
-    // --- ADMIN OVERRIDE: if incoming number is one of the admin numbers, send "hi admin" and return ---
-    const adminNumbersRaw = ["+263 789 901 058", "+263 774 716 074"];
-    const normalize = (p) => String(p || "").replace(/\s+/g, "").trim();
-    const adminSet = new Set(adminNumbersRaw.map(normalize));
-
-    if (adminSet.has(normalize(providerId))) {
-      console.log("TWILIO: admin number hit ->", providerId);
-      return sendTwimlText(res, "hi admin");
-    }
 
     // ensure user exists and keep name updated
     let user = await User.findOne({ provider: "whatsapp", providerId });
@@ -190,46 +156,53 @@ router.post("/webhook", async (req, res) => {
       const facilities = [];
 
       // Build a plain object for lastPrefs (fixes earlier CastError where an array was being saved)
-      const lastPrefs = {
-        city: String(city),
-        curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
-        learningEnvironment: undefined,
-        schoolPhase: undefined,
-        type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
-        facilities: [], // placeholder
-      };
+      // --- replace the current lastPrefs save block with this ---
+const lastPrefs = {
+  city: String(city),
+  curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
+  learningEnvironment: undefined,
+  schoolPhase: undefined,
+  type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
+  facilities: [], // placeholder
+};
 
-      // defensive logging so we can see exactly what gets written
+// defensive logging so we can see exactly what gets written
+try {
+  console.log("TWILIO: about to save lastPrefs (type check):", {
+    providerId,
+    lastPrefsType: typeof lastPrefs,
+    lastPrefsIsArray: Array.isArray(lastPrefs),
+    lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
+  });
+
+  await User.findOneAndUpdate(
+    { provider: "whatsapp", providerId },
+    { $set: { lastPrefs } }, // important: set to object (not array)
+    { new: true, upsert: true }
+  );
+  console.log("TWILIO: lastPrefs saved for", providerId);
+} catch (e) {
+  // make the error message fully visible in logs
+  console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+};
+
       try {
-        console.log("TWILIO: about to save lastPrefs (type check):", {
-          providerId,
-          lastPrefsType: typeof lastPrefs,
-          lastPrefsIsArray: Array.isArray(lastPrefs),
-          lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
-        });
-
+        // Save as an object (not an array) to match your schema
         await User.findOneAndUpdate(
           { provider: "whatsapp", providerId },
-          { $set: { lastPrefs } }, // important: set to object (not array)
+          { $set: { lastPrefs } },
           { new: true, upsert: true }
         );
-        console.log("TWILIO: lastPrefs saved for", providerId);
+        console.log("TWILIO: lastPrefs saved for", providerId, lastPrefs);
       } catch (e) {
-        // make the error message fully visible in logs
-        console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+        console.error("TWILIO: failed saving lastPrefs:", e && e.message ? e.message : e);
       }
 
       // call recommend endpoint
       try {
         const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        if (!site) {
-          // attempt to build base url from request
-          const proto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
-          const host = req.get("host");
-          if (!host) throw new Error("SITE_URL not configured and host header missing");
-        }
-
-        const resp = await axios.post(`${site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`}/api/recommend`, {
+        if (!site) throw new Error("SITE_URL not configured");
+        const resp = await axios.post(`${site}/api/recommend`, {
           city: lastPrefs.city,
           curriculum: lastPrefs.curriculum,
           learningEnvironment: lastPrefs.learningEnvironment,
@@ -239,64 +212,31 @@ router.post("/webhook", async (req, res) => {
         }, { timeout: 10000 });
 
         const recs = (resp.data && resp.data.recommendations) || [];
-        const pinnedSchool = (resp.data && resp.data.pinnedSchool) || null;
-
         if (!recs.length) {
           return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
         }
 
-        // Build textual reply lines
         const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
-        let foundStEurit = false;
-
         for (const r of recs.slice(0, 5)) {
           lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
           if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
           if (r.fees) lines.push(`  Fees: ${r.fees}`);
           if (r.website) lines.push(`  Website: ${r.website}`);
+          // Only show register link for St Eurit
+          const name = (r.name || "").toLowerCase();
+          if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
+          const registerUrl = "https://skoolfinder.net/register/st-eurit-international-school";
 
-          // Only show register link for St Eurit (and detect it)
-          const nameLower = (r.name || "").toLowerCase();
-          const slugLower = (r.slug || "").toLowerCase();
-          if (/st[\s-]*eurit/.test(nameLower) || /st-eurit/.test(slugLower)) {
-            foundStEurit = true;
-            const registerUrl = `${process.env.SITE_URL ? process.env.SITE_URL.replace(/\/$/, "") : `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`}/register/st-eurit-international-school`;
-            lines.push(`  Register: ${registerUrl}`);
+            if (registerUrl) lines.push(`  Register: ${registerUrl}`);
           }
         }
-
         lines.push("\nReply 'help' for commands.");
-
-        // If St Eurit found -> include media (images + pdfs)
-        if (foundStEurit) {
-          // Build base url for media
-          const baseUrl = process.env.SITE_URL
-            ? process.env.SITE_URL.replace(/\/$/, "")
-            : `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-
-          // Media URLs (make sure the files are in public/docs/)
-          const mediaUrls = [
-            `${baseUrl}/docs/st-eurit.jpg`,
-            `${baseUrl}/docs/st-eurit-pic2.jpg`,
-            // PDFs - Twilio will treat these as media; note that some clients may not preview PDFs inline,
-            // but Twilio will deliver them as media attachments.
-            `${baseUrl}/docs/st-eurit-registration.pdf`,
-            `${baseUrl}/docs/st-eurit-profile.pdf`,
-            `${baseUrl}/docs/st-eurit-enrollment-requirements.pdf`,
-          ].filter(Boolean);
-
-          const textReply = lines.join("\n");
-          console.log("TWILIO: sending St Eurit reply with media to", providerId, "media:", mediaUrls);
-          return sendTwimlWithMedia(res, textReply, mediaUrls);
-        }
-
-        // otherwise send plain text reply
         return sendTwimlText(res, lines.join("\n"));
       } catch (e) {
-        console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && JSON.stringify(e.response.data))) ? (e.message || JSON.stringify(e.response && e.response.data)) : e);
+        console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && JSON.stringify(e.response.data))) ? (e.message || JSON.stringify(e.response.data)) : e);
         return sendTwimlText(res, "Search failed — please try again later.");
       }
-    } // end find
+    }
 
     // fav add
     if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {

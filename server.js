@@ -13,7 +13,7 @@ import { ensureAuth } from "./middleware/ensureAuth.js";
 import MongoStore from "connect-mongo";
 import session from "express-session";
 import registerRoutes from "./routes/register.js";
-import twilioWebhookRoutes from "./routes/twilio_webhook 2DEC.js";
+import twilioWebhookRoutes from "./routes/twilio_webhook.js";
 
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
@@ -62,7 +62,7 @@ import "./config/passport.js";
 import School from "./models/school.js"; // ensure this exists (or remove usage in sitemap/og)
 
 import authRoutes from "./routes/auth.js";
-import apiRoutes from "./routes/api 2DEC.js";
+import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
 
 /* Static public */

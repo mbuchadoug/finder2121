@@ -31,6 +31,12 @@ function toArraySafe(v) {
   return [String(v)];
 }
 
+// strip formatting and any "whatsapp:" prefix to produce only digits for comparisons
+function normalizePhone(p) {
+  if (!p) return "";
+  return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
+}
+
 function verifyTwilioRequest(req) {
   if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY: DEBUG skip enabled");
@@ -113,6 +119,18 @@ router.post("/webhook", async (req, res) => {
     }
 
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
+    const providerIdNormalized = normalizePhone(providerId); // digits only
+
+    // ADMIN OVERRIDE: if this is one of the admin numbers, reply "hi admin" and return.
+    // Keep list here (or move to process.env if you prefer)
+    const adminNumbers = [
+      normalizePhone("+263 789 901 058"),
+      normalizePhone("+263 774 716 074")
+    ];
+    if (adminNumbers.includes(providerIdNormalized)) {
+      console.log("TWILIO: admin number detected ->", providerId);
+      return sendTwimlText(res, "hi admin");
+    }
 
     // ensure user exists and keep name updated
     let user = await User.findOne({ provider: "whatsapp", providerId });
@@ -157,34 +175,34 @@ router.post("/webhook", async (req, res) => {
 
       // Build a plain object for lastPrefs (fixes earlier CastError where an array was being saved)
       // --- replace the current lastPrefs save block with this ---
-const lastPrefs = {
-  city: String(city),
-  curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
-  learningEnvironment: undefined,
-  schoolPhase: undefined,
-  type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
-  facilities: [], // placeholder
-};
+      const lastPrefs = {
+        city: String(city),
+        curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
+        learningEnvironment: undefined,
+        schoolPhase: undefined,
+        type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
+        facilities: [], // placeholder
+      };
 
-// defensive logging so we can see exactly what gets written
-try {
-  console.log("TWILIO: about to save lastPrefs (type check):", {
-    providerId,
-    lastPrefsType: typeof lastPrefs,
-    lastPrefsIsArray: Array.isArray(lastPrefs),
-    lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
-  });
+      // defensive logging so we can see exactly what gets written
+      try {
+        console.log("TWILIO: about to save lastPrefs (type check):", {
+          providerId,
+          lastPrefsType: typeof lastPrefs,
+          lastPrefsIsArray: Array.isArray(lastPrefs),
+          lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
+        });
 
-  await User.findOneAndUpdate(
-    { provider: "whatsapp", providerId },
-    { $set: { lastPrefs } }, // important: set to object (not array)
-    { new: true, upsert: true }
-  );
-  console.log("TWILIO: lastPrefs saved for", providerId);
-} catch (e) {
-  // make the error message fully visible in logs
-  console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
-};
+        await User.findOneAndUpdate(
+          { provider: "whatsapp", providerId },
+          { $set: { lastPrefs } }, // important: set to object (not array)
+          { new: true, upsert: true }
+        );
+        console.log("TWILIO: lastPrefs saved for", providerId);
+      } catch (e) {
+        // make the error message fully visible in logs
+        console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+      };
 
       try {
         // Save as an object (not an array) to match your schema
@@ -225,7 +243,7 @@ try {
           // Only show register link for St Eurit
           const name = (r.name || "").toLowerCase();
           if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
-          const registerUrl = "https://skoolfinder.net/register/st-eurit-international-school";
+            const registerUrl = "https://skoolfinder.net/register/st-eurit-international-school";
 
             if (registerUrl) lines.push(`  Register: ${registerUrl}`);
           }

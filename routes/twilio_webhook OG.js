@@ -1,16 +1,15 @@
-// routes/twilio_webhook.js  (replace your existing file)
+// routes/twilio_webhook.js  (synchronous TwiML responder, sends media for St Eurit)
 import express from "express";
 import { Router } from "express";
 import twilio from "twilio";
 import axios from "axios";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
-import User from "../models/user.js"; // ensure this path matches your project
+import User from "../models/user.js";
 
 const router = Router();
-
-// Ensure router parses form-encoded bodies (Twilio uses application/x-www-form-urlencoded)
 router.use(express.urlencoded({ extended: true }));
 
+/* ---------- helpers ---------- */
 function sendTwimlText(res, text) {
   try {
     const twiml = new MessagingResponse();
@@ -18,20 +17,48 @@ function sendTwimlText(res, text) {
     res.set("Content-Type", "text/xml");
     return res.send(twiml.toString());
   } catch (e) {
-    // fallback
     res.set("Content-Type", "text/plain");
     return res.send(String(text || ""));
   }
 }
 
+function sendTwimlWithMedia(res, text, mediaUrls = []) {
+  try {
+    const twiml = new MessagingResponse();
+    const msg = twiml.message();
+    if (text) msg.body(text);
+    for (const m of (mediaUrls || [])) {
+      if (m) msg.media(m);
+    }
+    res.set("Content-Type", "text/xml");
+    return res.send(twiml.toString());
+  } catch (e) {
+    console.error("sendTwimlWithMedia error:", e);
+    return sendTwimlText(res, text || "");
+  }
+}
+
 function toArraySafe(v) {
-  if (!v && v !== 0) return [];
+  if (v === undefined || v === null || v === "") return [];
   if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
   if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
   return [String(v)];
 }
 
+/**
+ * Normalize various incoming identifiers to a canonical no-space form.
+ * e.g. "+263 789 901 058" -> "+263789901058"
+ */
+function normalizePhone(s = "") {
+  return String(s || "")
+    .replace(/^whatsapp:/i, "")
+    .replace(/[^\d\+]/g, "") // keep plus and digits only
+    .replace(/\s+/g, "")
+    .trim();
+}
+
 function verifyTwilioRequest(req) {
+  // keep existing behaviour: allow skipping verification during debugging/dev
   if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY: DEBUG skip enabled");
     return true;
@@ -56,7 +83,6 @@ function verifyTwilioRequest(req) {
       }
       url = `${proto}://${host}${req.originalUrl}`;
     }
-    // Important: Twilio expects the *raw* params used in the signature check.
     const params = Object.assign({}, req.body || {});
     const ok = twilio.validateRequest(authToken, signature, url, params);
     if (!ok) console.warn("TWILIO_VERIFY: signature invalid for", url, "signature:", signature);
@@ -67,39 +93,29 @@ function verifyTwilioRequest(req) {
   }
 }
 
+/* ---------- webhook ---------- */
 router.post("/webhook", async (req, res) => {
-  // Aggressive top-level logging to ensure we see everything
   console.log("TWILIO: webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
   console.log("TWILIO: debug env:", {
     SITE_URL: process.env.SITE_URL ? "[set]" : "[missing]",
     DEBUG_TWILIO_SKIP_VERIFY: process.env.DEBUG_TWILIO_SKIP_VERIFY || "[not set]",
-    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]"
+    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]",
   });
 
-  console.log("TWILIO: headers:", {
-    host: req.get("host"),
-    "x-forwarded-proto": req.get("x-forwarded-proto"),
-    "x-twilio-signature": req.header("x-twilio-signature"),
-    "content-type": req.get("content-type"),
-  });
-
-  // Print body safely (avoid circular)
   try {
     console.log("TWILIO: body (raw):", JSON.stringify(req.body));
   } catch (e) {
-    console.log("TWILIO: body (raw) - non-serializable; keys:", Object.keys(req.body || {}));
+    console.log("TWILIO: body (raw) - keys:", Object.keys(req.body || {}));
   }
 
-  // Verify
+  // Verify Twilio signature
   const ok = verifyTwilioRequest(req);
   if (!ok) {
-    console.warn("TWILIO: request verification failed -> replying 403 (signature mismatch or missing headers)");
-    // Respond with TwiML too so Twilio gets a valid response body even if 403
+    console.warn("TWILIO: request verification failed -> replying 403");
     res.status(403);
     return sendTwimlText(res, "Invalid Twilio signature");
   }
 
-  // From here onward we have a verified request (or skip enabled)
   try {
     const params = req.body || {};
     const rawFrom = String(params.From || params.from || "");
@@ -113,8 +129,18 @@ router.post("/webhook", async (req, res) => {
     }
 
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
+    const normProvider = normalizePhone(providerId);
 
-    // ensure user exists and keep name updated
+    // Admin numbers (normalize them similarly). Accept either spaced or plain formats.
+    const adminNumbersRaw = ["+263 789 901 058", "+263 774 716 074"];
+    const adminNumbers = adminNumbersRaw.map(normalizePhone);
+
+    if (adminNumbers.includes(normProvider)) {
+      console.log("TWILIO: admin number detected ->", providerId);
+      return sendTwimlText(res, "hi admin");
+    }
+
+    // Upsert / create user record and keep name updated
     let user = await User.findOne({ provider: "whatsapp", providerId });
     if (!user) {
       user = await User.create({
@@ -133,7 +159,7 @@ router.post("/webhook", async (req, res) => {
     const text = (bodyRaw || "").trim();
     const lctext = text.toLowerCase();
 
-    // BASIC commands: greeting/help -> reply immediately
+    // Greetings/help
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
       const reply =
         "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
@@ -146,98 +172,6 @@ router.post("/webhook", async (req, res) => {
       return sendTwimlText(res, reply);
     }
 
-    // find command
-    const words = lctext.split(/\s+/).filter(Boolean);
-    if (words[0] === "find") {
-      const city = words[1] || "Harare";
-      const wantsBoarding = words.some((w) => /board|boarding/.test(w));
-      const type2 = wantsBoarding ? ["Boarding"] : [];
-      const curriculum = words.filter((w) => /cambridge|caie|zimsec|ib/.test(w));
-      const facilities = [];
-
-      // Build a plain object for lastPrefs (fixes earlier CastError where an array was being saved)
-      // --- replace the current lastPrefs save block with this ---
-const lastPrefs = {
-  city: String(city),
-  curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
-  learningEnvironment: undefined,
-  schoolPhase: undefined,
-  type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
-  facilities: [], // placeholder
-};
-
-// defensive logging so we can see exactly what gets written
-try {
-  console.log("TWILIO: about to save lastPrefs (type check):", {
-    providerId,
-    lastPrefsType: typeof lastPrefs,
-    lastPrefsIsArray: Array.isArray(lastPrefs),
-    lastPrefsPreview: JSON.stringify(lastPrefs).slice(0, 1000)
-  });
-
-  await User.findOneAndUpdate(
-    { provider: "whatsapp", providerId },
-    { $set: { lastPrefs } }, // important: set to object (not array)
-    { new: true, upsert: true }
-  );
-  console.log("TWILIO: lastPrefs saved for", providerId);
-} catch (e) {
-  // make the error message fully visible in logs
-  console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
-};
-
-      try {
-        // Save as an object (not an array) to match your schema
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $set: { lastPrefs } },
-          { new: true, upsert: true }
-        );
-        console.log("TWILIO: lastPrefs saved for", providerId, lastPrefs);
-      } catch (e) {
-        console.error("TWILIO: failed saving lastPrefs:", e && e.message ? e.message : e);
-      }
-
-      // call recommend endpoint
-      try {
-        const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        if (!site) throw new Error("SITE_URL not configured");
-        const resp = await axios.post(`${site}/api/recommend`, {
-          city: lastPrefs.city,
-          curriculum: lastPrefs.curriculum,
-          learningEnvironment: lastPrefs.learningEnvironment,
-          schoolPhase: lastPrefs.schoolPhase,
-          type2: lastPrefs.type2,
-          facilities: lastPrefs.facilities,
-        }, { timeout: 10000 });
-
-        const recs = (resp.data && resp.data.recommendations) || [];
-        if (!recs.length) {
-          return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
-        }
-
-        const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
-        for (const r of recs.slice(0, 5)) {
-          lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
-          if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
-          if (r.fees) lines.push(`  Fees: ${r.fees}`);
-          if (r.website) lines.push(`  Website: ${r.website}`);
-          // Only show register link for St Eurit
-          const name = (r.name || "").toLowerCase();
-          if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
-          const registerUrl = "https://skoolfinder.net/register/st-eurit-international-school";
-
-            if (registerUrl) lines.push(`  Register: ${registerUrl}`);
-          }
-        }
-        lines.push("\nReply 'help' for commands.");
-        return sendTwimlText(res, lines.join("\n"));
-      } catch (e) {
-        console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && JSON.stringify(e.response.data))) ? (e.message || JSON.stringify(e.response.data)) : e);
-        return sendTwimlText(res, "Search failed — please try again later.");
-      }
-    }
-
     // fav add
     if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {
       const slug = bodyRaw.split(/\s+/).slice(2).join(" ").trim();
@@ -245,8 +179,9 @@ try {
 
       try {
         const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        const resp = await axios.get(`${site}/api/school-by-slug/${encodeURIComponent(slug)}`, { timeout: 5000 }).catch(() => null);
-        const school = resp && resp.data && resp.data.school;
+        const baseForApi = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+        const resp2 = await axios.get(`${baseForApi}/api/school-by-slug/${encodeURIComponent(slug)}`, { timeout: 5000 }).catch(() => null);
+        const school = resp2 && resp2.data && resp2.data.school;
         if (!school) return sendTwimlText(res, `School not found for slug "${slug}"`);
         await User.findOneAndUpdate({ provider: "whatsapp", providerId }, { $addToSet: { favourites: school._id } }, { upsert: true });
         return sendTwimlText(res, `Added "${school.name}" to your favourites.`);
@@ -254,6 +189,103 @@ try {
         console.error("TWILIO: fav add error:", e && e.message ? e.message : e);
         return sendTwimlText(res, "Could not add favourite — try again later.");
       }
+    }
+
+    // find command -> synchronous recommend + TwiML reply (includes St Eurit media)
+    const words = lctext.split(/\s+/).filter(Boolean);
+    if (words[0] === "find") {
+      const city = words[1] || "Harare";
+      const wantsBoarding = words.some((w) => /board|boarding/.test(w));
+      const type2 = wantsBoarding ? ["Boarding"] : [];
+      const curriculum = words.filter((w) => /cambridge|caie|zimsec|ib/.test(w));
+
+      const lastPrefs = {
+        city: String(city),
+        curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum),
+        learningEnvironment: undefined,
+        schoolPhase: undefined,
+        type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
+        facilities: [],
+      };
+
+      // save lastPrefs (defensive)
+      try {
+        console.log("TWILIO: saving lastPrefs for", providerId, JSON.stringify(lastPrefs).slice(0, 1000));
+        await User.findOneAndUpdate({ provider: "whatsapp", providerId }, { $set: { lastPrefs } }, { new: true, upsert: true });
+      } catch (e) {
+        console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+      }
+
+      // build recommend endpoint url
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      const baseForApi = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+      const recommendUrl = `${baseForApi}/api/recommend`;
+
+      // call recommend
+      let resp;
+      try {
+        resp = await axios.post(
+          recommendUrl,
+          {
+            city: lastPrefs.city,
+            curriculum: lastPrefs.curriculum,
+            learningEnvironment: lastPrefs.learningEnvironment,
+            schoolPhase: lastPrefs.schoolPhase,
+            type2: lastPrefs.type2,
+            facilities: lastPrefs.facilities,
+          },
+          { timeout: 10000 }
+        );
+      } catch (err) {
+        console.error("TWILIO: recommend axios error:", {
+          message: err?.message,
+          status: err?.response?.status,
+          data: err?.response?.data,
+        });
+        return sendTwimlText(res, "Search failed — please try again later.");
+      }
+
+      const recs = (resp.data && resp.data.recommendations) || [];
+      if (!recs.length) {
+        return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
+      }
+
+      const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
+      let foundStEurit = false;
+
+      for (const r of recs.slice(0, 5)) {
+        lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
+        if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
+        if (r.fees) lines.push(`  Fees: ${r.fees}`);
+        if (r.website) lines.push(`  Website: ${r.website}`);
+
+        const nameLower = (r.name || "").toLowerCase();
+        const slugLower = (r.slug || "").toLowerCase();
+        if (/st[\s-]*eurit/.test(nameLower) || /st-eurit/.test(slugLower)) {
+          foundStEurit = true;
+          const registerUrl = `${baseForApi.replace(/\/$/, "")}/register/st-eurit-international-school`;
+          lines.push(`  Register: ${registerUrl}`);
+        }
+      }
+
+      lines.push("\nReply 'help' for commands.");
+
+      // If St Eurit found, include images + PDFs (served from /docs)
+      if (foundStEurit) {
+        const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+        const mediaUrls = [
+          `${baseForMedia}/docs/st-eurit.jpg`,
+          `${baseForMedia}/docs/st-eurit-pic2.jpg`,
+          `${baseForMedia}/docs/st-eurit-registration.pdf`,
+          `${baseForMedia}/docs/st-eurit-profile.pdf`,
+          `${baseForMedia}/docs/st-eurit-enrollment-requirements.pdf`,
+        ];
+        console.log("TWILIO: sending St Eurit media to", providerId, { mediaUrls });
+        return sendTwimlWithMedia(res, lines.join("\n"), mediaUrls);
+      }
+
+      // otherwise send textual list
+      return sendTwimlText(res, lines.join("\n"));
     }
 
     // fallback

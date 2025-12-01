@@ -1,38 +1,14 @@
 import { Router } from "express";
 import School from "../models/school.js";
-
 const router = Router();
 
-/* ---------------- helpers ---------------- */
 const esc = (s = "") => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-// case-insensitive "contains" and tolerant to extra whitespace
-const rxContains = (s) =>
-  new RegExp(esc(String(s).trim()).replace(/\s+/g, "\\s+"), "i");
-
-// normalize any value to array
+const rxContains = (s) => new RegExp(esc(String(s).trim()).replace(/\s+/g, "\\s+"), "i");
 const toArray = (v) =>
-  Array.isArray(v)
-    ? v
-    : typeof v === "string" && v
-    ? v.split(",").map((s) => s.trim()).filter(Boolean)
-    : [];
+  Array.isArray(v) ? v : typeof v === "string" && v ? v.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-// synonyms (for messy data)
-const CURR_SYNONYMS = {
-  Cambridge: ["cambridge", "caie", "cie"],
-  ZIMSEC: ["zimsec"],
-  IB: ["ib", "international baccalaureate"],
-};
-
-const PHASE_SYNONYMS = {
-  "Pre-School": ["pre-school", "preschool", "early years", "ece"],
-  "Primary School": ["primary school", "primary", "junior"],
-  "High School": ["high school", "secondary", "senior"],
-};
-
-const TYPE2_DAY = ["day", "day & boarding", "day and boarding"];
-const TYPE2_BOARDING = ["boarding", "day & boarding", "day and boarding"];
+const CURR_SYNONYMS = { Cambridge: ["cambridge", "caie", "cie"], ZIMSEC: ["zimsec"], IB: ["ib", "international baccalaureate"] };
+const PHASE_SYNONYMS = { "Pre-School": ["pre-school", "preschool", "early years", "ece"], "Primary School": ["primary", "primary school"], "High School": ["high school", "secondary", "senior"] };
 
 const makeContainsRegexes = (values, dict = null) => {
   const regs = [];
@@ -45,56 +21,27 @@ const makeContainsRegexes = (values, dict = null) => {
   return regs;
 };
 
-/* ---------------- route ---------------- */
 router.post("/recommend", async (req, res) => {
   try {
-    const {
-      city = "Harare",
-      learningEnvironment,
-      curriculum,
-      type,
-      type2,
-      facilities,
-    } = req.body || {};
-
-    // Build as a list of AND conditions, then combine
+    const { city = "Harare", learningEnvironment, curriculum, type, type2, facilities } = req.body || {};
     const and = [];
-
     if (city) and.push({ city: { $regex: rxContains(city) } });
-
-    if (learningEnvironment) {
-      and.push({ learningEnvironment: { $regex: rxContains(learningEnvironment) } });
-    }
+    if (learningEnvironment) and.push({ learningEnvironment: { $regex: rxContains(learningEnvironment) } });
 
     const cur = toArray(curriculum);
-    if (cur.length) {
-      const regs = makeContainsRegexes(cur, CURR_SYNONYMS);
-      and.push({ curriculum_list: { $in: regs } });
-    }
+    if (cur.length) and.push({ curriculum_list: { $in: makeContainsRegexes(cur, CURR_SYNONYMS) } });
 
     const phases = toArray(type);
-    if (phases.length) {
-      const regs = makeContainsRegexes(phases, PHASE_SYNONYMS);
-      and.push({ type: { $in: regs } });
-    }
+    if (phases.length) and.push({ type: { $in: makeContainsRegexes(phases, PHASE_SYNONYMS) } });
 
     const boardingType = toArray(type2);
     if (boardingType.length) {
       const wantDay = boardingType.some((v) => /day/i.test(v));
       const wantBoarding = boardingType.some((v) => /boarding/i.test(v));
-
-      if (wantDay && wantBoarding) {
-        // both selected → no filter (means "any")
-      } else if (wantBoarding) {
-        const regs = makeContainsRegexes(TYPE2_BOARDING);
-        and.push({
-          $or: [{ type2: { $in: regs } }, { "facilities.boarding": true }],
-        });
-      } else if (wantDay) {
-        const regs = makeContainsRegexes(TYPE2_DAY);
-        and.push({
-          $or: [{ type2: { $in: regs } }, { "facilities.boarding": { $ne: true } }],
-        });
+      if (!wantDay && wantBoarding) {
+        and.push({ $or: [{ type2: { $in: makeContainsRegexes(["boarding"]) } }, { "facilities.boarding": true }] });
+      } else if (wantDay && !wantBoarding) {
+        and.push({ $or: [{ type2: { $in: makeContainsRegexes(["day"]) } }, { "facilities.boarding": { $ne: true } }] });
       }
     }
 
@@ -103,24 +50,9 @@ router.post("/recommend", async (req, res) => {
     }
 
     const filter = and.length ? (and.length === 1 ? and[0] : { $and: and }) : {};
-
-    if (process.env.DEBUG_RECO === "1") {
-      console.log("recommend.filter =", JSON.stringify(filter, null, 2));
-    }
-
-    /* ---------- fetch matching docs ---------- */
     let docs = await School.find(filter).sort({ tier: 1, name: 1 }).limit(100).lean();
 
-    /* ---------- CONDITIONAL PINNING ---------- */
-    const selectedZimsec = toArray(curriculum).some((v) => /zimsec/i.test(v));
-    const selectedHighSchool = toArray(type).some((v) =>
-      /high\s*school|secondary|senior/i.test(v)
-    );
-    const selectedBoarding = toArray(type2).some((v) => /boarding/i.test(v));
-
-    // Force pinning for all recommend requests (your current behaviour)
-    const shouldPin = true;
-
+    // PINNING: look for special pinned school(s)
     const PINNED = (process.env.PINNED_SCHOOLS || "St Eurit International School")
       .split(/[|,]/)
       .map((s) => s.trim().toLowerCase())
@@ -133,124 +65,56 @@ router.post("/recommend", async (req, res) => {
       return PINNED.includes(name) || PINNED.includes(slug) || PINNED.includes(norm);
     };
 
-    if (shouldPin && !docs.some(isPinnedDoc)) {
-      const cityRegex = city ? { $regex: rxContains(city) } : undefined;
-      const pinnedNameRegs = PINNED.map((p) => new RegExp(`^${esc(p)}$`, "i"));
-
+    if (!docs.some(isPinnedDoc)) {
       const pinnedDoc = await School.findOne({
-        ...(city ? { city: cityRegex } : {}),
-        $or: [{ name: { $in: pinnedNameRegs } }, { slug: { $in: PINNED } }, { normalizedName: { $in: PINNED } }],
+        ...(city ? { city: { $regex: rxContains(city) } } : {}),
+        $or: [{ name: new RegExp(`^${esc(PINNED[0])}$`, "i") }, { slug: PINNED[0] }, { normalizedName: PINNED[0] }],
       }).lean();
-
-      if (pinnedDoc) {
-        docs.unshift(pinnedDoc);
-      } else {
-        if (process.env.DEBUG_RECO === "1") {
-          console.log("DEBUG_RECO: No pinnedDoc found for PINNED:", PINNED);
-        }
-      }
+      if (pinnedDoc) docs.unshift(pinnedDoc);
     }
 
-    /* ---------- pinnedSchool object (stable, separate) ---------- */
+    // pinnedSchool object with downloads (only for pinned school)
     let pinnedSchool = null;
-    try {
-      if (PINNED.length) {
+    if (PINNED.length) {
+      try {
         const pinnedQueryOr = [];
         for (const p of PINNED) {
-          // try slug, normalizedName and exact name match
           pinnedQueryOr.push({ slug: p });
           pinnedQueryOr.push({ normalizedName: p });
           pinnedQueryOr.push({ name: new RegExp(`^${esc(p)}$`, "i") });
         }
-        if (pinnedQueryOr.length) {
-          const pinnedDoc = await School.findOne({ $or: pinnedQueryOr }).select("name slug").lean();
-          if (pinnedDoc) {
-            pinnedSchool = {
-              id: pinnedDoc._id,
-              name: pinnedDoc.name,
-              slug: pinnedDoc.slug,
-              registerUrl: pinnedDoc.slug ? `/register/${encodeURIComponent(pinnedDoc.slug)}` : undefined,
-              downloads: {
-                registration: "/download/st-eurit-registration",
-                profile: "/download/st-eurit-profile",
-              },
-            };
-          }
+        const pinnedDoc = await School.findOne({ $or: pinnedQueryOr }).select("name slug").lean();
+        if (pinnedDoc) {
+          pinnedSchool = {
+            id: pinnedDoc._id,
+            name: pinnedDoc.name,
+            slug: pinnedDoc.slug,
+            registerUrl: pinnedDoc.slug ? `/register/${encodeURIComponent(pinnedDoc.slug)}` : undefined,
+            // expose downloads only for pinned school (these resolvable endpoints are in server.js)
+            downloads: {
+              registration: "/download/st-eurit-registration",
+              profile: "/download/st-eurit-profile",
+              enrollment: "/download/st-eurit-enrollment",
+            },
+            // hero image (in public/docs)
+            heroImage: "/docs/st-eurit.jpg",
+          };
         }
+      } catch (e) {
+        console.warn("pinnedSchool lookup failed:", e && e.message ? e.message : e);
       }
-    } catch (e) {
-      console.warn("pinnedSchool lookup failed:", e && e.message ? e.message : e);
-      pinnedSchool = null;
     }
 
-    /* ---------- scoring + reasons ---------- */
     const recommendations = docs.map((d) => {
       const reasons = [];
-      const phases = toArray(type);
-      const boardingType = toArray(type2);
-      const cur = toArray(curriculum);
-
-      if (learningEnvironment && rxContains(learningEnvironment).test(d.learningEnvironment || ""))
-        reasons.push(`${d.learningEnvironment} learning environment`);
-
-      if (phases.length && (d.type || []).some((x) => makeContainsRegexes(phases, PHASE_SYNONYMS).some((r) => r.test(x))))
-        reasons.push((d.type || []).join(" & "));
-
-      if (boardingType.length) {
-        const wantDay = boardingType.some((v) => /day/i.test(v));
-        const wantBoarding = boardingType.some((v) => /boarding/i.test(v));
-        const dayHit =
-          (d.type2 || []).some((x) => makeContainsRegexes(TYPE2_DAY).some((r) => r.test(x))) ||
-          d.facilities?.boarding !== true;
-        const boardingHit =
-          (d.type2 || []).some((x) => makeContainsRegexes(TYPE2_BOARDING).some((r) => r.test(x))) ||
-          d.facilities?.boarding === true;
-
-        if (wantDay && dayHit) reasons.push("Day");
-        if (wantBoarding && boardingHit) reasons.push("Boarding");
-      }
-
-      if (cur.length && (d.curriculum_list || []).some((x) => makeContainsRegexes(cur, CURR_SYNONYMS).some((r) => r.test(x))))
-        reasons.push((d.curriculum_list || []).join(", "));
-
-      if (Array.isArray(facilities) && facilities.length) {
-        const have = facilities.filter((f) => d.facilities?.[f]);
-        if (have.length) reasons.push(`Facilities: ${have.join(", ")}`);
-      }
-
-      let matched = 0;
-      if (learningEnvironment && rxContains(learningEnvironment).test(d.learningEnvironment || "")) matched++;
-      if (phases.length && (d.type || []).some((x) => makeContainsRegexes(phases, PHASE_SYNONYMS).some((r) => r.test(x)))) matched++;
-      if (boardingType.length) {
-        const wantDay = boardingType.some((v) => /day/i.test(v));
-        const wantBoarding = boardingType.some((v) => /boarding/i.test(v));
-        const dayHit =
-          (d.type2 || []).some((x) => makeContainsRegexes(TYPE2_DAY).some((r) => r.test(x))) ||
-          d.facilities?.boarding !== true;
-        const boardingHit =
-          (d.type2 || []).some((x) => makeContainsRegexes(TYPE2_BOARDING).some((r) => r.test(x))) ||
-          d.facilities?.boarding === true;
-        if (wantDay && dayHit) matched++;
-        if (wantBoarding && boardingHit) matched++;
-      }
-      if (cur.length && (d.curriculum_list || []).some((x) => makeContainsRegexes(cur, CURR_SYNONYMS).some((r) => r.test(x)))) matched++;
-      if (Array.isArray(facilities) && facilities.length && facilities.every((f) => d.facilities?.[f])) matched++;
-
-      const denom =
-        (learningEnvironment ? 1 : 0) +
-        (phases.length ? 1 : 0) +
-        (boardingType.length ? (boardingType.length > 1 ? 2 : 1) : 0) +
-        (cur.length ? 1 : 0) +
-        (facilities?.length ? 1 : 0);
-
-      const match = denom ? (matched / denom) * 100 : 100;
-
-      // Ensure pinned detection is explicit & stable
-      const pinnedFlag = isPinnedDoc(d) && shouldPin;
-
+      if (learningEnvironment && rxContains(learningEnvironment).test(d.learningEnvironment || "")) reasons.push(`${d.learningEnvironment} learning environment`);
+      if (toArray(type).length && (d.type || []).length) reasons.push((d.type || []).join(" & "));
+      if (toArray(type2).length && (d.type2 || []).length) reasons.push((d.type2 || []).join(", "));
+      if (toArray(curriculum).length && (d.curriculum_list || []).length) reasons.push((d.curriculum_list || []).join(", "));
+      const pinnedFlag = isPinnedDoc(d);
       return {
         id: d._id,
-        slug: d.slug, // expose slug
+        slug: d.slug,
         name: d.name,
         city: d.city,
         curriculum: d.curriculum_list || [],
@@ -259,33 +123,29 @@ router.post("/recommend", async (req, res) => {
         learningEnvironment: d.learningEnvironment,
         website: d.website,
         facebook: d.facebookUrl,
-        match,
         reason: reasons.join(" · "),
         logo: d.logo,
         heroImage: d.heroImage,
-        _pinned: isPinnedDoc(d),
+        _pinned: pinnedFlag,
         pinned: pinnedFlag,
-        // Only expose registerUrl for pinned docs
         registerUrl: pinnedFlag && d.slug ? `/register/${encodeURIComponent(d.slug)}` : undefined,
+        // only expose downloads for pinned (keep small)
+        downloads: pinnedFlag ? {
+          registration: "/download/st-eurit-registration",
+          profile: "/download/st-eurit-profile",
+          enrollment: "/download/st-eurit-enrollment",
+        } : undefined,
       };
     });
 
-    // Sort: pinned first, then highest match, then name
+    // sort pinned first
     recommendations.sort((a, b) => {
-      const aPinned = a._pinned && (a.pinned === true);
-      const bPinned = b._pinned && (b.pinned === true);
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
-      if (b.match !== a.match) return b.match - a.match;
-      return (a.name || "").localeCompare(b.name || "");
+      if (a._pinned && !b._pinned) return -1;
+      if (!a._pinned && b._pinned) return 1;
+      return (b.match || 0) - (a.match || 0);
     });
 
     const clean = recommendations.map(({ _pinned, ...rest }) => rest);
-
-    if (process.env.DEBUG_RECO === "1") {
-      console.log("DEBUG_RECO: final recommendations (clean):", JSON.stringify(clean, null, 2));
-      console.log("DEBUG_RECO: pinnedSchool:", JSON.stringify(pinnedSchool, null, 2));
-    }
 
     return res.json({ recommendations: clean, pinnedSchool });
   } catch (err) {

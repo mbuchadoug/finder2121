@@ -30,6 +30,7 @@
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
+    "pdfkit": "^0.17.2",
     "puppeteer": "^19.7.2",
     "twilio": "^5.10.6",
     "xmlbuilder2": "^4.0.1"

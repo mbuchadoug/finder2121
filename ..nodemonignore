@@ -1,0 +1,5 @@
+# Ignore all generated PDFs and runtime counters so nodemon does NOT restart
+public/docs/generated
+public/docs/generated/**
+data
+data/**

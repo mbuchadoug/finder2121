@@ -1,4 +1,4 @@
-// routes/twilio_webhook.js
+// routes/twilio_webhook.js  (synchronous TwiML responder, sends media for St Eurit)
 import express from "express";
 import { Router } from "express";
 import twilio from "twilio";
@@ -17,7 +17,6 @@ function sendTwimlText(res, text) {
     res.set("Content-Type", "text/xml");
     return res.send(twiml.toString());
   } catch (e) {
-    console.error("sendTwimlText error:", e);
     res.set("Content-Type", "text/plain");
     return res.send(String(text || ""));
   }
@@ -40,20 +39,26 @@ function sendTwimlWithMedia(res, text, mediaUrls = []) {
 }
 
 function toArraySafe(v) {
-  if (!v && v !== 0) return [];
+  if (v === undefined || v === null || v === "") return [];
   if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
   if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
   return [String(v)];
 }
 
-// normalize phone-like string for matching (strip non-digits)
-function normalizePhone(p) {
-  if (!p) return "";
-  // remove "whatsapp:", plus signs, spaces, parentheses, hyphens
-  return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
+/**
+ * Normalize various incoming identifiers to a canonical no-space form.
+ * e.g. "+263 789 901 058" -> "+263789901058"
+ */
+function normalizePhone(s = "") {
+  return String(s || "")
+    .replace(/^whatsapp:/i, "")
+    .replace(/[^\d\+]/g, "") // keep plus and digits only
+    .replace(/\s+/g, "")
+    .trim();
 }
 
 function verifyTwilioRequest(req) {
+  // keep existing behaviour: allow skipping verification during debugging/dev
   if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY: DEBUG skip enabled");
     return true;
@@ -94,7 +99,7 @@ router.post("/webhook", async (req, res) => {
   console.log("TWILIO: debug env:", {
     SITE_URL: process.env.SITE_URL ? "[set]" : "[missing]",
     DEBUG_TWILIO_SKIP_VERIFY: process.env.DEBUG_TWILIO_SKIP_VERIFY || "[not set]",
-    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]"
+    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]",
   });
 
   try {
@@ -103,7 +108,7 @@ router.post("/webhook", async (req, res) => {
     console.log("TWILIO: body (raw) - keys:", Object.keys(req.body || {}));
   }
 
-  // Verify signature
+  // Verify Twilio signature
   const ok = verifyTwilioRequest(req);
   if (!ok) {
     console.warn("TWILIO: request verification failed -> replying 403");
@@ -123,23 +128,24 @@ router.post("/webhook", async (req, res) => {
       return sendTwimlText(res, "Missing sender info");
     }
 
-    const providerIdRaw = rawFrom.replace(/^whatsapp:/i, "").trim();
-    const providerId = normalizePhone(providerIdRaw); // digits only
+    const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
+    const normProvider = normalizePhone(providerId);
 
-    // Admin override — compare using normalized digits only
-    const adminList = (process.env.ADMIN_WHATSAPP_NUMBERS || "+263789901058,+263774716074");
-    const adminNumbers = adminList.split(",").map((s) => normalizePhone(s));
-    if (adminNumbers.includes(providerId)) {
-      console.log("TWILIO: admin number detected ->", providerIdRaw);
+    // Admin numbers (normalize them similarly). Accept either spaced or plain formats.
+    const adminNumbersRaw = ["+263 789 901 058", "+263 774 716 074"];
+    const adminNumbers = adminNumbersRaw.map(normalizePhone);
+
+    if (adminNumbers.includes(normProvider)) {
+      console.log("TWILIO: admin number detected ->", providerId);
       return sendTwimlText(res, "hi admin");
     }
 
-    // Upsert user
-    let user = await User.findOne({ provider: "whatsapp", providerId: providerIdRaw });
+    // Upsert / create user record and keep name updated
+    let user = await User.findOne({ provider: "whatsapp", providerId });
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
-        providerId: providerIdRaw,
+        providerId,
         name: profileName || undefined,
         role: "user",
       });
@@ -153,6 +159,7 @@ router.post("/webhook", async (req, res) => {
     const text = (bodyRaw || "").trim();
     const lctext = text.toLowerCase();
 
+    // Greetings/help
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
       const reply =
         "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
@@ -165,7 +172,26 @@ router.post("/webhook", async (req, res) => {
       return sendTwimlText(res, reply);
     }
 
-    /* ---------- find command ---------- */
+    // fav add
+    if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {
+      const slug = bodyRaw.split(/\s+/).slice(2).join(" ").trim();
+      if (!slug) return sendTwimlText(res, "Please provide the school slug, e.g. 'fav add st-eurit-international-school'");
+
+      try {
+        const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+        const baseForApi = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+        const resp2 = await axios.get(`${baseForApi}/api/school-by-slug/${encodeURIComponent(slug)}`, { timeout: 5000 }).catch(() => null);
+        const school = resp2 && resp2.data && resp2.data.school;
+        if (!school) return sendTwimlText(res, `School not found for slug "${slug}"`);
+        await User.findOneAndUpdate({ provider: "whatsapp", providerId }, { $addToSet: { favourites: school._id } }, { upsert: true });
+        return sendTwimlText(res, `Added "${school.name}" to your favourites.`);
+      } catch (e) {
+        console.error("TWILIO: fav add error:", e && e.message ? e.message : e);
+        return sendTwimlText(res, "Could not add favourite — try again later.");
+      }
+    }
+
+    // find command -> synchronous recommend + TwiML reply (includes St Eurit media)
     const words = lctext.split(/\s+/).filter(Boolean);
     if (words[0] === "find") {
       const city = words[1] || "Harare";
@@ -182,19 +208,20 @@ router.post("/webhook", async (req, res) => {
         facilities: [],
       };
 
+      // save lastPrefs (defensive)
       try {
-        console.log("TWILIO: saving lastPrefs for", providerIdRaw, JSON.stringify(lastPrefs).slice(0, 1000));
-        await User.findOneAndUpdate({ provider: "whatsapp", providerId: providerIdRaw }, { $set: { lastPrefs } }, { new: true, upsert: true });
+        console.log("TWILIO: saving lastPrefs for", providerId, JSON.stringify(lastPrefs).slice(0, 1000));
+        await User.findOneAndUpdate({ provider: "whatsapp", providerId }, { $set: { lastPrefs } }, { new: true, upsert: true });
       } catch (e) {
         console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
       }
 
-      // Prepare recommend URL (SITE_URL wins, otherwise construct from request)
+      // build recommend endpoint url
       const site = (process.env.SITE_URL || "").replace(/\/$/, "");
       const baseForApi = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
       const recommendUrl = `${baseForApi}/api/recommend`;
 
-      // Call recommend endpoint
+      // call recommend
       let resp;
       try {
         resp = await axios.post(
@@ -243,7 +270,7 @@ router.post("/webhook", async (req, res) => {
 
       lines.push("\nReply 'help' for commands.");
 
-      // If pinned St Eurit found, return TwiML with media attachments referencing /docs paths
+      // If St Eurit found, include images + PDFs (served from /docs)
       if (foundStEurit) {
         const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
         const mediaUrls = [
@@ -253,31 +280,12 @@ router.post("/webhook", async (req, res) => {
           `${baseForMedia}/docs/st-eurit-profile.pdf`,
           `${baseForMedia}/docs/st-eurit-enrollment-requirements.pdf`,
         ];
-        console.log("TWILIO: sending St Eurit media to", providerIdRaw);
+        console.log("TWILIO: sending St Eurit media to", providerId, { mediaUrls });
         return sendTwimlWithMedia(res, lines.join("\n"), mediaUrls);
       }
 
-      // Otherwise just reply with text TwiML
+      // otherwise send textual list
       return sendTwimlText(res, lines.join("\n"));
-    }
-
-    /* ---------- fav add ---------- */
-    if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {
-      const slug = bodyRaw.split(/\s+/).slice(2).join(" ").trim();
-      if (!slug) return sendTwimlText(res, "Please provide the school slug, e.g. 'fav add st-eurit-international-school'");
-
-      try {
-        const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        const baseForApi = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-        const resp2 = await axios.get(`${baseForApi}/api/school-by-slug/${encodeURIComponent(slug)}`, { timeout: 5000 }).catch(() => null);
-        const school = resp2 && resp2.data && resp2.data.school;
-        if (!school) return sendTwimlText(res, `School not found for slug "${slug}"`);
-        await User.findOneAndUpdate({ provider: "whatsapp", providerId: providerIdRaw }, { $addToSet: { favourites: school._id } }, { upsert: true });
-        return sendTwimlText(res, `Added "${school.name}" to your favourites.`);
-      } catch (e) {
-        console.error("TWILIO: fav add error:", e && e.message ? e.message : e);
-        return sendTwimlText(res, "Could not add favourite — try again later.");
-      }
     }
 
     // fallback

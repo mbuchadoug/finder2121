@@ -58,6 +58,29 @@ function normalizePhone(p) {
   return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
+// parse flexible due date -> returns {date:Date, iso: 'YYYY-MM-DD'} or null
+function parseDueDate(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim();
+
+  // Replace a range of dash-like chars, slashes, dots and multiple spaces with normal hyphen
+  // includes Unicode hyphens U+2010..U+2015, U+2212 etc
+  s = s.replace(/[\u2010-\u2015\u2212\/\.\s]+/g, "-");
+
+  // Normalize any multiple hyphens to single
+  s = s.replace(/-+/g, "-");
+
+  // Accept yyyy-mm-dd or dd-mm-yyyy? We'll require YYYY-MM-DD for now
+  // If user used DD-MM-YYYY, it's ambiguous — reject to be safe.
+  const isoMatch = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoMatch.test(s)) return null;
+
+  // Create a date in UTC midnight so DB stores the correct day
+  const dt = new Date(s + "T00:00:00Z");
+  if (Number.isNaN(dt.getTime())) return null;
+  return { date: dt, iso: s };
+}
+
 function verifyTwilioRequest(req) {
   if (process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY: DEBUG skip enabled");
@@ -170,7 +193,6 @@ function drawTable(doc, items, startX, startY, columnWidths) {
 
 async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "" }) {
   // type: 'invoice' | 'quote' | 'receipt'
-  const now = new Date();
   const baseDir = await ensurePublicSubdirs();
   const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
@@ -185,11 +207,11 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       // Branding / header
       const logoPath = path.join(process.cwd(), "public", "docs", "logo.png"); // adjust if needed
       if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 50, 45, { width: 90 });
+        try { doc.image(logoPath, 50, 45, { width: 90 }); } catch (e) { /* ignore image errors */ }
       }
       doc.fontSize(20).text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
       doc.fontSize(10).text(`No: ${number}`, 400, 75, { align: "right" });
-      doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
+      if (date) doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
       if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, 400, 105, { align: "right" });
 
       doc.moveDown(4);
@@ -371,7 +393,7 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
               billingTo,
               email,
               items,
-              notes: parsed.fields.notes || ""
+              notes: parsed.fields.notes || (Array.isArray(parsed.fields._text) ? parsed.fields._text.join(" | ") : (parsed.fields._text || ""))
             });
 
             const site = (process.env.SITE_URL || "").replace(/\/$/, "");
@@ -386,14 +408,16 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
           const numberStr = (type === "invoice" ? `INV-${String(numValue).padStart(6,"0")}` : `QT-${String(numValue).padStart(6,"0")}`);
           const date = new Date();
           let dueDate = null;
+
           if (parsed.fields.due) {
-            const d = new Date(parsed.fields.due);
-            if (!isNaN(d)) dueDate = d;
-            else {
-              // try flexible parse (YYYY-MM-DD only is supported), else skip dueDate but log
+            const parsedDue = parseDueDate(parsed.fields.due);
+            if (!parsedDue) {
               console.warn("TWILIO: invalid due date provided:", parsed.fields.due);
+              return sendTwimlText(res, "Invalid due date. Use YYYY-MM-DD (e.g. 2025-12-25).");
             }
+            dueDate = parsedDue.date;
           }
+
           const billingTo = parsed.fields.customer || parsed.fields.name || "";
           const email = parsed.fields.email || "";
           const items = Array.isArray(parsed.fields.items) ? parsed.fields.items : [];
@@ -404,6 +428,7 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
 
           // Generate PDF
           try {
+            const notesText = parsed.fields.notes || (Array.isArray(parsed.fields._text) ? parsed.fields._text.join(" | ") : (parsed.fields._text || ""));
             const { filename } = await generatePDF({
               type,
               number: numberStr,
@@ -412,7 +437,7 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
               billingTo,
               email,
               items,
-              notes: parsed.fields.notes || parsed.fields._text ? (Array.isArray(parsed.fields._text) ? parsed.fields._text.join(" | ") : parsed.fields._text) : ""
+              notes: notesText
             });
             const site = (process.env.SITE_URL || "").replace(/\/$/, "");
             const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;

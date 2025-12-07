@@ -53,7 +53,7 @@ router.post("/webhook", async (req, res) => {
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
       return sendTwimlText(
         res,
-        "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. find harare cambridge boarding primary urban\n• help"
+        "Hi! I'm ZimEduFinder \n\nCommands:\n• find [city] [filters]\n   e.g. find harare cambridge boarding primary urban\n• help"
       );
     }
 
@@ -92,7 +92,7 @@ router.post("/webhook", async (req, res) => {
       let attachStEuritMedia = false;
 
       for (const r of recs.slice(0, 5)) {
-        lines.push(`\n• ${r.name} — ${r.city}`);
+        lines.push(`\n• ${r.name} | ${r.city}`);
         if (r.curriculum)
           lines.push(
             `  Curriculum: ${Array.isArray(r.curriculum)
@@ -122,10 +122,10 @@ router.post("/webhook", async (req, res) => {
       if (attachStEuritMedia) {
         const mediaBase = site;
 
-        const img1 = twiml.message("St Eurit International School – Campus");
+        const img1 = twiml.message("St Eurit International School");
         img1.media(`${mediaBase}/docs/st-eurit.jpg`);
 
-        const img2 = twiml.message("St Eurit – Second View");
+        const img2 = twiml.message("St Eurit Internaational School");
         img2.media(`${mediaBase}/docs/st-eurit-pic2.jpg`);
 
         const pdf1 = twiml.message("St Eurit – School Profile (PDF)");

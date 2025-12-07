@@ -12,16 +12,10 @@ router.use(express.urlencoded({ extended: true }));
 /* ---------- Helpers ---------- */
 
 function sendTwimlText(res, text) {
-  try {
-    const twiml = new MessagingResponse();
-    twiml.message(text || "");
-    res.set("Content-Type", "text/xml");
-    return res.send(twiml.toString());
-  } catch (e) {
-    console.error("sendTwimlText error:", e?.message || e);
-    res.set("Content-Type", "text/plain");
-    return res.send(String(text || ""));
-  }
+  const twiml = new MessagingResponse();
+  twiml.message(text || "");
+  res.set("Content-Type", "text/xml");
+  return res.send(twiml.toString());
 }
 
 function normalizePhone(p) {
@@ -30,17 +24,18 @@ function normalizePhone(p) {
 }
 
 /**
- * Very forgiving word → filters mapper.
- * We NEVER throw here – unknown words are just ignored.
+ * Parse words after the city into structured filters.
+ * Example command:
+ *   find harare cambridge boarding primary advanced girls swimming
  */
 function parseFiltersFromWords(words) {
   const filters = {
-    curriculum: [],          // ["Cambridge", "Zimsec", "IB"]
-    type2: [],               // ["Day", "Boarding"]
-    schoolPhase: [],         // ["Pre-School", "Primary School", "High School"]
+    curriculum: [],          // ["Cambridge","Zimsec","IB"]
+    type2: [],               // ["Day","Boarding"]
+    schoolPhase: [],         // ["Pre-School","Primary School","High School"]
     learningEnvironment: "", // "Comprehensive" | "Enhanced" | "Advanced"
     gender: "",              // "Boys" | "Girls" | "Mixed"
-    facilities: []           // list of facility labels
+    facilities: []           // schema keys: e.g. ["swimmingPool","scienceLabs"]
   };
 
   const addUnique = (arr, val) => {
@@ -51,142 +46,167 @@ function parseFiltersFromWords(words) {
   for (const raw of words) {
     const w = raw.toLowerCase();
 
-    // curriculum
-    if (/^camb?r?idg?e$/.test(w) || /cambridge/.test(w)) {
+    // ----- Curriculum -----
+    if (/^cam(b|br)?(idg|rid)?e?$/.test(w) || w === "cambridge") {
       addUnique(filters.curriculum, "Cambridge");
       continue;
     }
-    if (/zimsec/.test(w)) {
+    if (w === "zimsec") {
       addUnique(filters.curriculum, "Zimsec");
       continue;
     }
-    if (/^ib$/.test(w)) {
+    if (w === "ib") {
       addUnique(filters.curriculum, "IB");
       continue;
     }
 
-    // boarding / day
-    if (/board|boarding/.test(w)) {
+    // ----- Boarding / Day (type2) -----
+    if (w === "boarding" || w === "board") {
       addUnique(filters.type2, "Boarding");
       continue;
     }
-    if (/^day$/.test(w)) {
+    if (w === "day") {
       addUnique(filters.type2, "Day");
       continue;
     }
 
-    // school phase
-    if (/pre[- ]?school/.test(w)) {
+    // ----- School phase -----
+    if (w === "pre" || w === "preschool" || w === "pre-school" || w === "early") {
       addUnique(filters.schoolPhase, "Pre-School");
       continue;
     }
-    if (/primary/.test(w)) {
+    if (w === "primary" || w === "junior") {
       addUnique(filters.schoolPhase, "Primary School");
       continue;
     }
-    if (/high|secondary/.test(w)) {
+    if (w === "high" || w === "secondary" || w === "senior") {
       addUnique(filters.schoolPhase, "High School");
       continue;
     }
 
-    // learning environment
-    if (/advanced/.test(w)) {
-      filters.learningEnvironment = "Advanced";
-      continue;
-    }
-    if (/enhanced/.test(w)) {
-      filters.learningEnvironment = "Enhanced";
-      continue;
-    }
-    if (/comprehensive|standard|core/.test(w)) {
+    // ----- Learning environment -----
+    if (w === "comprehensive" || w === "comp") {
       filters.learningEnvironment = "Comprehensive";
       continue;
     }
+    if (w === "enhanced" || w === "enhance") {
+      filters.learningEnvironment = "Enhanced";
+      continue;
+    }
+    if (w === "advanced" || w === "advance") {
+      filters.learningEnvironment = "Advanced";
+      continue;
+    }
 
-    // gender
-    if (/boys?/.test(w)) {
+    // ----- Gender -----
+    if (w === "boys" || w === "boy") {
       filters.gender = "Boys";
       continue;
     }
-    if (/girls?/.test(w)) {
+    if (w === "girls" || w === "girl") {
       filters.gender = "Girls";
       continue;
     }
-    if (/mixed|coed|co-ed/.test(w)) {
+    if (w === "mixed" || w === "coed" || w === "co-ed") {
       filters.gender = "Mixed";
       continue;
     }
 
-    // facilities (very loose matching)
-    if (/science/.test(w)) {
-      addUnique(filters.facilities, "Science Labs");
+    // ----- Facilities (map to schema keys) -----
+
+    // Academics
+    if (w === "science" || w === "labs" || w === "lab") {
+      addUnique(filters.facilities, "scienceLabs");
       continue;
     }
-    if (/computer|ict|it/.test(w)) {
-      addUnique(filters.facilities, "Computer Lab");
+    if (w === "computer" || w === "ict" || w === "computers") {
+      addUnique(filters.facilities, "computerLab");
       continue;
     }
-    if (/library/.test(w)) {
-      addUnique(filters.facilities, "Library");
+    if (w === "library" || w === "libraries") {
+      addUnique(filters.facilities, "library");
       continue;
     }
-    if (/steam|robot/.test(w)) {
-      addUnique(filters.facilities, "STEAM / Robotics");
+    if (w === "steam" || w === "robotics" || w === "maker") {
+      addUnique(filters.facilities, "makerSpaceSteamLab");
       continue;
     }
-    if (/cambridgecent(er|re)|cambridgecentre/.test(w)) {
-      addUnique(filters.facilities, "Cambridge Centre");
+    if (w === "cambridgecentre" || w === "cambridgecenter") {
+      addUnique(filters.facilities, "examCentreCambridge");
       continue;
     }
-    if (/zimsec/.test(w)) {
-      addUnique(filters.facilities, "ZIMSEC Centre");
+    if (w === "zimseccentre") {
+      addUnique(filters.facilities, "examCentreZimsec");
       continue;
     }
-    if (/swim|pool/.test(w)) {
-      addUnique(filters.facilities, "Swimming Pool");
+
+    // Sports
+    if (w === "swimming" || w === "swim" || w === "pool") {
+      addUnique(filters.facilities, "swimmingPool");
       continue;
     }
-    if (/rugby/.test(w)) {
-      addUnique(filters.facilities, "Rugby");
+    if (w === "rugby") {
+      addUnique(filters.facilities, "rugbyField");
       continue;
     }
-    if (/hockey/.test(w)) {
-      addUnique(filters.facilities, "Hockey");
+    if (w === "hockey") {
+      addUnique(filters.facilities, "hockeyField");
       continue;
     }
-    if (/tennis/.test(w)) {
-      addUnique(filters.facilities, "Tennis");
+    if (w === "tennis") {
+      addUnique(filters.facilities, "tennisCourts");
       continue;
     }
-    if (/basketball/.test(w)) {
-      addUnique(filters.facilities, "Basketball");
+    if (w === "basketball") {
+      addUnique(filters.facilities, "basketballCourt");
       continue;
     }
-    if (/football|soccer/.test(w)) {
-      addUnique(filters.facilities, "Football");
+    if (w === "football" || w === "soccer") {
+      addUnique(filters.facilities, "footballPitch");
       continue;
     }
-    if (/counsel+ing/.test(w)) {
-      addUnique(filters.facilities, "Counselling");
+    if (w === "cricket") {
+      addUnique(filters.facilities, "cricketField");
       continue;
     }
-    if (/sen|support/.test(w)) {
-      addUnique(filters.facilities, "Learning Support (SEN)");
+
+    // Support & welfare
+    if (w === "counselling" || w === "counseling") {
+      addUnique(filters.facilities, "counseling");
       continue;
     }
-    if (/clinic|nurse/.test(w)) {
-      addUnique(filters.facilities, "School Clinic / Nurse");
+    if (w === "sen") {
+      addUnique(filters.facilities, "learningSupportSEN");
       continue;
     }
-    if (/aftercare|after-school/.test(w)) {
-      addUnique(filters.facilities, "Aftercare");
+    if (w === "clinic" || w === "nurse") {
+      addUnique(filters.facilities, "schoolClinicNurse");
       continue;
     }
-    if (/transport|bus/.test(w)) {
-      addUnique(filters.facilities, "School Transport");
+    if (w === "aftercare" || w === "after") {
+      addUnique(filters.facilities, "aftercare");
       continue;
     }
-    // "boarding" as facility is already captured under type2
+
+    // Boarding & logistics
+    if (w === "transport" || w === "bus" || w === "buses") {
+      addUnique(filters.facilities, "transportBuses");
+      continue;
+    }
+
+    // Campus & safety
+    if (w === "wifi" || w === "wi-fi") {
+      addUnique(filters.facilities, "wifiCampus");
+      continue;
+    }
+    if (w === "cctv" || w === "security") {
+      addUnique(filters.facilities, "cctvSecurity");
+      continue;
+    }
+    if (w === "generator" || w === "backup" || w === "power") {
+      addUnique(filters.facilities, "powerBackup");
+      continue;
+    }
   }
 
   return filters;
@@ -200,12 +220,6 @@ router.post("/webhook", async (req, res) => {
     const rawFrom = String(params.From || "");
     const bodyRaw = String(params.Body || "").trim();
     const profileName = String(params.ProfileName || "");
-
-    console.log("TWILIO webhook hit:", {
-      from: rawFrom,
-      body: bodyRaw,
-      profileName,
-    });
 
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
 
@@ -253,191 +267,144 @@ router.post("/webhook", async (req, res) => {
       }
     }
 
-    const text = bodyRaw || "";
-    const lctext = text.toLowerCase().trim();
+    const text = (bodyRaw || "").trim();
+    const lctext = text.toLowerCase();
 
     /* ---------- Basic commands ---------- */
 
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    const mediaBase = site || "https://skoolfinder.net";
+    // Show full help with all filters
+    const helpMessage = [
+      "Hi! I'm ZimEduFinder 🤖",
+      "",
+      "Type:",
+      "find [city] [filters]",
+      "",
+      "Examples you can type:",
+      "find harare cambridge",
+      "find harare primary girls",
+      "find harare boarding swimming",
+      "find harare cambridge advanced mixed",
+      "find harare cambridge boarding primary enhanced girls swimming",
+      "",
+      "Learning environment: comprehensive, enhanced, advanced",
+      "Gender: boys, girls, mixed",
+      "Curriculum: cambridge, zimsec, ib",
+      "Phases: pre, primary, high",
+      "Facilities: science, computer, library, robotics, cambridgecentre, zimseccentre, swimming, rugby, hockey, tennis, basketball, football, cricket, counselling, sen, clinic, aftercare, transport, wifi, cctv, generator",
+      "",
+      "Other:",
+      "fav add <slug>",
+      "help",
+    ].join("\n");
 
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
-      const helpText = [
-        "Hi! I'm ZimEduFinder 🤖",
-        "",
-        "You can search like this:",
-        "• find [city] [filters]",
-        "",
-        "🧭 City:",
-        "  harare, bulawayo, mutare, gweru, masvingo, etc.",
-        "",
-        "🏫 Learning environment:",
-        "  comprehensive, enhanced, advanced",
-        "",
-        "📘 Curriculum:",
-        "  cambridge, zimsec, ib",
-        "",
-        "🎓 School phase:",
-        "  preschool, primary, high / secondary",
-        "",
-        "🛏 Boarding / Day:",
-        "  boarding, day",
-        "",
-        "🚻 Gender:",
-        "  boys, girls, mixed",
-        "",
-        "🏟 Facilities keywords:",
-        "  science, computer, library, robotics, cambridgecentre, zimseccentre,",
-        "  swimming, rugby, hockey, tennis, basketball, football,",
-        "  counselling, sen, clinic, aftercare, transport, boarding",
-        "",
-        "✅ Examples you can type:",
-        "  find harare cambridge",
-        "  find harare primary girls",
-        "  find harare boarding swimming",
-        "  find harare cambridge advanced mixed",
-        "  find harare cambridge boarding primary enhanced girls swimming",
-        "",
-        "⭐ Other:",
-        "  fav add <slug>",
-        "  help",
-      ].join("\n");
-
-      return sendTwimlText(res, helpText);
+      return sendTwimlText(res, helpMessage);
     }
 
     if (lctext === "help") {
-      const helpText = [
-        "ZimEduFinder Help 🤖",
-        "",
-        "Type:",
-        "  find [city] [filters]",
-        "",
-        "Filters you can use:",
-        "• City: harare, bulawayo, mutare, gweru, masvingo, etc.",
-        "• Learning environment: comprehensive, enhanced, advanced",
-        "• Curriculum: cambridge, zimsec, ib",
-        "• School phase: preschool, primary, high / secondary",
-        "• Boarding/Day: boarding, day",
-        "• Gender: boys, girls, mixed",
-        "• Facilities: science, computer, library, robotics, cambridgecentre,",
-        "             zimseccentre, swimming, rugby, hockey, tennis, basketball,",
-        "             football, counselling, sen, clinic, aftercare, transport",
-        "",
-        "Examples:",
-        "  find harare cambridge",
-        "  find harare primary girls",
-        "  find harare boarding swimming",
-        "  find harare cambridge advanced mixed",
-        "  find harare cambridge boarding primary enhanced girls swimming",
-      ].join("\n");
-
-      return sendTwimlText(res, helpText);
+      return sendTwimlText(res, helpMessage);
     }
 
     /* ---------- FIND COMMAND ---------- */
 
     const words = lctext.split(/\s+/).filter(Boolean);
     if (words[0] === "find") {
-      const city = (words[1] || "harare").trim();
+      const city = (words[1] || "harare").toLowerCase();
+      const niceCity = city.charAt(0).toUpperCase() + city.slice(1);
+
+      // everything after city is filters
       const filterWords = words.slice(2);
-
-      // always include old simple behaviour
-      const wantsBoarding = filterWords.some((w) => /board|boarding/.test(w));
-      const type2Basic = wantsBoarding ? ["Boarding"] : [];
-
-      const curriculumBasic = filterWords.filter((w) =>
-        /cambridge|caie|zimsec|ib/.test(w)
-      );
-
-      // new, richer filters (but safe)
       const parsed = parseFiltersFromWords(filterWords);
 
-      // merge basic + parsed so we don't lose old behaviour
-      const curriculum = [
-        ...new Set([
-          ...curriculumBasic.map((c) =>
-            /zimsec/.test(c) ? "Zimsec" : /ib/.test(c) ? "IB" : "Cambridge"
-          ),
-          ...parsed.curriculum,
-        ]),
-      ];
-      const type2 = [
-        ...new Set([
-          ...type2Basic,
-          ...parsed.type2,
-        ]),
-      ];
+      const curriculum = parsed.curriculum;
+      const type2 = parsed.type2;
+      const schoolPhase = parsed.schoolPhase;
+      const learningEnvironment = parsed.learningEnvironment || undefined;
+      const gender = parsed.gender || undefined;
+      const facilities = parsed.facilities;
 
-      const lastPrefs = {
-        city,
-        curriculum,
-        type2,
-        schoolPhase: parsed.schoolPhase,
-        learningEnvironment: parsed.learningEnvironment || undefined,
-        gender: parsed.gender || undefined,
-        facilities: parsed.facilities,
-      };
-
-      // Save user search preferences (extra details)
+      // Save user prefs
       try {
-        user.lastPrefs = lastPrefs;
+        user.lastPrefs = {
+          city: niceCity,
+          curriculum,
+          type2,
+          schoolPhase,
+          learningEnvironment,
+          gender,
+          facilities,
+        };
         await user.save();
       } catch (e) {
         console.warn("TWILIO: failed to save lastPrefs:", e?.message || e);
       }
 
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
       if (!site) {
         console.error("SITE_URL env missing");
         return sendTwimlText(
           res,
-          "Search is currently unavailable. Please try again later."
+          "Search currently unavailable. Please try again later."
         );
       }
 
-      let resp;
+      let recs = [];
       try {
-        resp = await axios.post(`${site}/api/recommend`, {
-          city: lastPrefs.city,
-          curriculum: lastPrefs.curriculum,
-          learningEnvironment: lastPrefs.learningEnvironment,
-          schoolPhase: lastPrefs.schoolPhase,
-          type2: lastPrefs.type2,
-          gender: lastPrefs.gender,
-          facilities: lastPrefs.facilities,
+        const payload = {
+          city: niceCity,
+          curriculum,
+          type2,
+          schoolPhase,
+          learningEnvironment,
+          gender,
+          facilities,
+        };
+
+        console.log("TWILIO: calling /api/recommend with:", payload);
+        const resp = await axios.post(`${site}/api/recommend`, payload, {
+          timeout: 10000,
         });
+        recs = resp.data?.recommendations || [];
       } catch (e) {
         console.error(
-          "TWILIO: /api/recommend failed:",
-          e?.response?.data || e?.message || e
+          "TWILIO: /api/recommend error:",
+          e?.message || e?.toString()
         );
         return sendTwimlText(
           res,
-          "Sorry, the search failed. Please try again in a moment."
+          "Search failed — please try again in a moment."
         );
       }
 
-      const recs = (resp.data && resp.data.recommendations) || [];
-      if (!recs.length)
+      if (!recs.length) {
         return sendTwimlText(
           res,
-          `No schools found for "${city}". Try fewer filters or just "find ${city} cambridge".`
+          `No schools found for "${niceCity}" with those filters. Try removing some filters or send 'help'.`
         );
+      }
 
-      const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
+      const lines = [`Top ${Math.min(5, recs.length)} matches for ${niceCity.toLowerCase()}:`];
+
       let attachStEuritMedia = false;
 
       for (const r of recs.slice(0, 5)) {
-        lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
+        lines.push(`\n• ${r.name}${r.city ? " — " + r.city.toLowerCase() : ""}`);
 
         if (r.curriculum) {
-          const cur =
-            Array.isArray(r.curriculum) && r.curriculum.length
-              ? r.curriculum.join(", ")
-              : r.curriculum;
-          lines.push(`  Curriculum: ${cur}`);
+          lines.push(
+            `  Curriculum: ${
+              Array.isArray(r.curriculum)
+                ? r.curriculum.join(", ")
+                : r.curriculum
+            }`
+          );
         }
-        if (r.fees) lines.push(`  Fees: ${r.fees}`);
+        if (r.learningEnvironment) {
+          lines.push(`  Learning environment: ${r.learningEnvironment}`);
+        }
+        if (r.gender) {
+          lines.push(`  Gender: ${r.gender}`);
+        }
         if (r.website) lines.push(`  Website: ${r.website}`);
 
         const name = (r.name || "").toLowerCase();
@@ -447,7 +414,7 @@ router.post("/webhook", async (req, res) => {
         if (/st[\s-]*eurit/.test(name) || /st-eurit/.test(slug)) {
           attachStEuritMedia = true;
           lines.push(
-            "  Register: https://skoolfinder.net/register/st-eurit-international-school"
+            `  Register: https://skoolfinder.net/register/st-eurit-international-school`
           );
         }
       }
@@ -457,28 +424,24 @@ router.post("/webhook", async (req, res) => {
       /* ---------- MEDIA FIRST (ONLY ST EURIT) ---------- */
 
       if (attachStEuritMedia) {
-        console.log("TWILIO: attaching St Eurit media for", providerId);
+        const mediaBase = site;
 
-        // Images
         const img1 = twiml.message(
-          "Pinned school: St Eurit International School – Campus"
+          "⭐ Pinned school: St Eurit International School\n📍 City: Harare\n📘 Curriculum: Cambridge\nTo apply:\n👉 Register: https://skoolfinder.net/register/st-eurit-international-school"
         );
         img1.media(`${mediaBase}/docs/st-eurit.jpg`);
 
         const img2 = twiml.message("St Eurit – second view");
         img2.media(`${mediaBase}/docs/st-eurit-pic2.jpg`);
 
-        // PDFs
-        const pdfProfile = twiml.message("St Eurit – School Profile (PDF)");
-        pdfProfile.media(`${mediaBase}/docs/st-eurit-profile.pdf`);
+        const pdf1 = twiml.message("St Eurit – School Profile (PDF)");
+        pdf1.media(`${mediaBase}/docs/st-eurit-profile.pdf`);
 
-        const pdfReg = twiml.message("St Eurit – Registration Form (PDF)");
-        pdfReg.media(`${mediaBase}/docs/st-eurit-registration.pdf`);
+        const pdf2 = twiml.message("St Eurit – Registration Form (PDF)");
+        pdf2.media(`${mediaBase}/docs/st-eurit-registration.pdf`);
 
-        const pdfEnroll = twiml.message(
-          "St Eurit – Enrolment Requirements (PDF)"
-        );
-        pdfEnroll.media(
+        const pdf3 = twiml.message("St Eurit – Enrolment Requirements (PDF)");
+        pdf3.media(
           `${mediaBase}/docs/st-eurit-enrollment-requirements.pdf`
         );
       }
@@ -491,65 +454,12 @@ router.post("/webhook", async (req, res) => {
       return res.send(twiml.toString());
     }
 
-    /* ---------- Favourites (unchanged simple version) ---------- */
-
-    if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {
-      const slug = bodyRaw.split(/\s+/).slice(2).join(" ").trim();
-      if (!slug) {
-        return sendTwimlText(
-          res,
-          "Please provide the school slug, e.g. 'fav add st-eurit-international-school'"
-        );
-      }
-
-      try {
-        if (!site) throw new Error("SITE_URL not configured");
-        const resp = await axios
-          .get(`${site}/api/school-by-slug/${encodeURIComponent(slug)}`, {
-            timeout: 5000,
-          })
-          .catch(() => null);
-
-        const school = resp && resp.data && resp.data.school;
-        if (!school) {
-          return sendTwimlText(res, `School not found for slug "${slug}"`);
-        }
-
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $addToSet: { favourites: school._id } },
-          { upsert: true }
-        );
-
-        return sendTwimlText(
-          res,
-          `Added "${school.name}" to your favourites.`
-        );
-      } catch (e) {
-        console.error("TWILIO: fav add error:", e?.message || e);
-        return sendTwimlText(
-          res,
-          "Could not add favourite right now. Please try again later."
-        );
-      }
-    }
-
     /* ---------- Fallback ---------- */
 
-    return sendTwimlText(
-      res,
-      'Sorry, I did not understand that. Send "help" to see how to search.'
-    );
+    return sendTwimlText(res, "Unknown command. Send 'help' for options.");
   } catch (err) {
-    console.error("TWILIO webhook fatal error:", err);
-    try {
-      return sendTwimlText(
-        res,
-        "Oops, something went wrong on our side. Please try again."
-      );
-    } catch {
-      return res.status(500).end();
-    }
+    console.error("TWILIO ERROR:", err);
+    return sendTwimlText(res, "Server error. Please try again.");
   }
 });
 

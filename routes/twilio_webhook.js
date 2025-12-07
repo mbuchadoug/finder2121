@@ -301,7 +301,6 @@ router.post("/webhook", async (req, res) => {
       "Facilities: science, computer, library, robotics, cambridgecentre, zimseccentre, swimming, rugby, hockey, tennis, basketball, football, cricket, counselling, sen, clinic, aftercare, transport, wifi, cctv, generator",
       "",
       "Other:",
-      "fav add <slug>",
       "help",
     ].join("\n");
 

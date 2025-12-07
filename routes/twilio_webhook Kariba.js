@@ -148,27 +148,20 @@ function drawTable(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
   let y = startY;
   doc.fontSize(10).fillColor("black");
-
   doc.text("Description", startX, y, { width: columnWidths[0] });
   doc.text("Qty", startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
   doc.text("Unit", startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
   doc.text("Total", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
   y += lineHeight;
-
   try {
-    doc
-      .moveTo(startX, y - 6)
-      .lineTo(startX + columnWidths.reduce((a, b) => a + b, 0) + 40, y - 6)
-      .strokeOpacity(0.08)
-      .stroke();
-  } catch (e) {}
-
+    doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b) => a + b, 0) + 40, y - 6).strokeOpacity(0.08).stroke();
+  } catch(e) {}
   for (const it of items) {
     doc.fontSize(10).fillColor("black");
     doc.text(it.description, startX, y, { width: columnWidths[0] });
     doc.text(String(it.qty), startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
     doc.text(formatMoney(it.unit), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
-    doc.text(formatMoney((it.qty || 0) * (it.unit || 0)), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
+    doc.text(formatMoney((it.qty||0) * (it.unit||0)), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
     y += lineHeight;
   }
   return y;
@@ -178,10 +171,7 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
   if (!PDFDocument) throw new Error("pdfkit not available. Install with: npm install pdfkit");
 
   const baseDir = await ensurePublicSubdirs();
-  const folder = path.join(
-    baseDir,
-    type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts"
-  );
+  const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
 
@@ -193,20 +183,12 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
       const logoPath = path.join(process.cwd(), "public", "docs", "logo.png");
       if (fs.existsSync(logoPath)) {
-        try {
-          doc.image(logoPath, 50, 45, { width: 90 });
-        } catch (e) {}
+        try { doc.image(logoPath, 50, 45, { width: 90 }); } catch (e) {}
       }
-
-      doc.fontSize(20).fillColor("#111").text(
-        type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT",
-        400,
-        50,
-        { align: "right" }
-      );
+      doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
       doc.fontSize(10).fillColor("#333").text(`No: ${number}`, 400, 75, { align: "right" });
-      doc.text(`Date: ${date.toISOString().slice(0, 10)}`, 400, 90, { align: "right" });
-      if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0, 10)}`, 400, 105, { align: "right" });
+      doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
+      if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, 400, 105, { align: "right" });
 
       doc.moveDown(2);
       doc.fontSize(12).fillColor("#000").text("Bill To:", 50, 140);
@@ -217,25 +199,12 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       const columnWidths = [260, 60, 80, 80];
       const afterTableY = drawTable(doc, items, 50, startY, columnWidths);
 
-      let subtotal = items.reduce(
-        (s, it) => s + (Number(it.qty || 0) * Number(it.unit || 0)),
-        0
-      );
+      let subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
       const tax = 0;
       const total = subtotal + tax;
-      doc.fontSize(10).fillColor("#111").text(
-        `Subtotal: ${formatMoney(subtotal)}`,
-        400,
-        afterTableY + 10,
-        { align: "right" }
-      );
+      doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal)}`, 400, afterTableY + 10, { align: "right" });
       if (tax) doc.text(`Tax: ${formatMoney(tax)}`, 400, afterTableY + 25, { align: "right" });
-      doc.fontSize(12).fillColor("#000").text(
-        `Total: ${formatMoney(total)}`,
-        400,
-        afterTableY + 40,
-        { align: "right" }
-      );
+      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, 400, afterTableY + 40, { align: "right" });
 
       if (notes) {
         doc.moveDown(2);
@@ -243,10 +212,7 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
         doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 });
       }
 
-      doc.fontSize(9).fillColor("gray").text("-----------", 50, 760, {
-        align: "center",
-        width: 500
-      });
+      doc.fontSize(9).fillColor("gray").text("-----------", 50, 760, { align: "center", width: 500 });
 
       doc.end();
       stream.on("finish", () => resolve({ filepath, filename }));
@@ -259,10 +225,7 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
 /* ---------- Admin command parsing ---------- */
 function parseAdminCommand(bodyRaw) {
-  const parts = bodyRaw
-    .split("|")
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const parts = bodyRaw.split("|").map(p => p.trim()).filter(Boolean);
   const command = parts.shift() || "";
   const cmdWords = command.split(/\s+/).filter(Boolean);
   const action = (cmdWords[0] || "").toLowerCase();
@@ -280,7 +243,7 @@ function parseAdminCommand(bodyRaw) {
     const val = p.slice(idx + 1).trim();
     if (key === "item") {
       if (!result.fields.items) result.fields.items = [];
-      const itemParts = val.split(",").map((x) => x.trim());
+      const itemParts = val.split(",").map(x => x.trim());
       const description = itemParts[0] || "";
       const qty = Number(itemParts[1] || 1);
       const unit = Number(itemParts[2] || 0);
@@ -295,26 +258,24 @@ function parseAdminCommand(bodyRaw) {
 /* Robust date parser that normalizes weird hyphens and whitespace */
 function parseDateFlexible(s) {
   if (!s) return null;
-  const norm = String(s)
-    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-")
-    .replace(/[^\x20-\x7E\-:]/g, "")
-    .trim();
+  // convert any unicode dash to normal hyphen, remove non-printable
+  const norm = String(s).replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-").replace(/[^\x20-\x7E\-:]/g, "").trim();
+  // supported formats: YYYY-MM-DD, YYYYMMDD, DD-MM-YYYY, ISO fallback
   if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
     const d = new Date(norm);
     if (!isNaN(d)) return d;
   }
   if (/^\d{8}$/.test(norm)) {
-    const y = norm.slice(0, 4),
-      m = norm.slice(4, 6),
-      d = norm.slice(6, 8);
+    const y = norm.slice(0,4), m = norm.slice(4,6), d = norm.slice(6,8);
     const dt = new Date(`${y}-${m}-${d}`);
     if (!isNaN(dt)) return dt;
   }
   if (/^\d{2}-\d{2}-\d{4}$/.test(norm)) {
-    const [dd, mm, yy] = norm.split("-");
+    const [dd,mm,yy] = norm.split("-");
     const dt = new Date(`${yy}-${mm}-${dd}`);
     if (!isNaN(dt)) return dt;
   }
+  // try Date parser
   const dt = new Date(norm);
   if (!isNaN(dt)) return dt;
   return null;
@@ -322,21 +283,14 @@ function parseDateFlexible(s) {
 
 /* ---------- Main webhook ---------- */
 router.post("/webhook", async (req, res) => {
-  console.log("TWILIO: webhook hit ->", {
-    path: req.path,
-    ip: req.ip || req.connection?.remoteAddress
-  });
+  console.log("TWILIO: webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
   console.log("TWILIO: debug env:", {
     SITE_URL: process.env.SITE_URL ? "[set]" : "[missing]",
     DEBUG_TWILIO_SKIP_VERIFY: process.env.DEBUG_TWILIO_SKIP_VERIFY || "[not set]",
     TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]"
   });
 
-  try {
-    console.log("TWILIO: body (raw):", JSON.stringify(req.body));
-  } catch (e) {
-    console.log("TWILIO: body (raw) - keys:", Object.keys(req.body || {}));
-  }
+  try { console.log("TWILIO: body (raw):", JSON.stringify(req.body)); } catch (e) { console.log("TWILIO: body (raw) - keys:", Object.keys(req.body || {})); }
 
   const ok = verifyTwilioRequest(req);
   if (!ok) {
@@ -366,7 +320,7 @@ router.post("/webhook", async (req, res) => {
       console.log("TWILIO: admin command from", providerId);
       const trimmed = (bodyRaw || "").trim();
       const lctext = trimmed.toLowerCase();
-      if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
+      if (!lctext || ["hi","hello","hey"].includes(lctext)) {
         const help = `Admin commands:
 invoice create|customer:Name|email:em@ill|item:Desc,qty,unit|item:Desc,qty,unit|due:YYYY-MM-DD|notes:...
 quote create|customer:Name|email:em@ill|item:Desc,qty,unit|...
@@ -380,71 +334,40 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
           return sendTwimlText(res, "Invalid admin command. Send 'hi' for usage.");
         }
 
-        if (["invoice", "quote", "receipt"].includes(parsed.action) && parsed.verb === "create") {
+        if (["invoice","quote","receipt"].includes(parsed.action) && parsed.verb === "create") {
           if (!PDFDocument) {
             console.error("TWILIO: pdfkit not installed; cannot create PDF");
-            return sendTwimlText(
-              res,
-              "PDF generation is not available: please `npm install pdfkit` on the server."
-            );
+            return sendTwimlText(res, "PDF generation is not available: please `npm install pdfkit` on the server.");
           }
 
           if (parsed.action === "receipt") {
             const amount = Number(parsed.fields.amount || parsed.fields.total || 0);
             if (isNaN(amount) || amount <= 0) {
-              return sendTwimlText(
-                res,
-                "Receipt creation failed: invalid or missing amount. Use amount:100"
-              );
+              return sendTwimlText(res, "Receipt creation failed: invalid or missing amount. Use amount:100");
             }
             const num = await incrementCounter("receipt");
             const numberStr = `R-${String(num).padStart(6, "0")}`;
             const date = new Date();
             const billingTo = parsed.fields.customer || parsed.fields.name || "";
             const email = parsed.fields.email || "";
-            const items = [
-              { description: parsed.fields.description || "Payment", qty: 1, unit: amount }
-            ];
+            const items = [{ description: parsed.fields.description || "Payment", qty: 1, unit: amount }];
 
             try {
-              const { filename } = await generatePDF({
-                type: "receipt",
-                number: numberStr,
-                date,
-                dueDate: null,
-                billingTo,
-                email,
-                items,
-                notes: parsed.fields.notes || ""
-              });
+              const { filename } = await generatePDF({ type: "receipt", number: numberStr, date, dueDate: null, billingTo, email, items, notes: parsed.fields.notes || "" });
               const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-              const baseForMedia =
-                site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+              const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
               const url = `${baseForMedia}/docs/generated/receipts/${filename}`;
-              return sendTwimlWithMedia(
-                res,
-                `Receipt ${numberStr} created. Download: ${url}`,
-                [url]
-              );
+              return sendTwimlWithMedia(res, `Receipt ${numberStr} created. Download: ${url}`, [url]);
             } catch (err) {
-              console.error(
-                "TWILIO: receipt pdf generation failed:",
-                err && (err.stack || err.message) ? err.stack || err.message : err
-              );
-              return sendTwimlText(
-                res,
-                "Failed to generate receipt PDF; check server logs."
-              );
+              console.error("TWILIO: receipt pdf generation failed:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
+              return sendTwimlText(res, "Failed to generate receipt PDF; check server logs.");
             }
           }
 
           // invoice / quote
           const type = parsed.action === "invoice" ? "invoice" : "quote";
           const numValue = await incrementCounter(type);
-          const numberStr =
-            type === "invoice"
-              ? `INV-${String(numValue).padStart(6, "0")}`
-              : `QT-${String(numValue).padStart(6, "0")}`;
+          const numberStr = (type === "invoice" ? `INV-${String(numValue).padStart(6,"0")}` : `QT-${String(numValue).padStart(6,"0")}`);
           const date = new Date();
 
           let dueDate = null;
@@ -453,6 +376,8 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
             if (maybe) dueDate = maybe;
             else {
               console.warn("TWILIO: invalid due date provided:", parsed.fields.due);
+              // Inform admin but continue (we don't abort invoice creation)
+              // small note appended to PDF
             }
           }
 
@@ -461,232 +386,99 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
           const items = Array.isArray(parsed.fields.items) ? parsed.fields.items : [];
 
           if (parsed.action === "invoice" && items.length === 0) {
-            return sendTwimlText(
-              res,
-              "Invoice creation failed: no items provided. Use item:desc,qty,unit"
-            );
+            return sendTwimlText(res, "Invoice creation failed: no items provided. Use item:desc,qty,unit");
           }
 
           try {
-            const notes =
-              parsed.fields.notes ||
-              (parsed.fields._text
-                ? Array.isArray(parsed.fields._text)
-                  ? parsed.fields._text.join(" | ")
-                  : parsed.fields._text
-                : "");
-            const fullNotes = dueDate
-              ? notes
-              : `${notes}${notes ? " | " : ""}NOTE: due date invalid or missing, please check.`;
-            const { filename } = await generatePDF({
-              type,
-              number: numberStr,
-              date,
-              dueDate,
-              billingTo,
-              email,
-              items,
-              notes: fullNotes
-            });
+            const notes = parsed.fields.notes || (parsed.fields._text ? (Array.isArray(parsed.fields._text) ? parsed.fields._text.join(" | ") : parsed.fields._text) : "");
+            const fullNotes = (dueDate ? notes : `${notes}${notes ? " | " : ""}NOTE: due date invalid or missing, please check.`);
+            const { filename } = await generatePDF({ type, number: numberStr, date, dueDate, billingTo, email, items, notes: fullNotes });
             const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-            const baseForMedia =
-              site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-            const url = `${baseForMedia}/docs/generated/${
-              type === "invoice" ? "invoices" : "quotes"
-            }/${filename}`;
-            return sendTwimlWithMedia(
-              res,
-              `${type[0].toUpperCase() + type.slice(1)} ${numberStr} created. Download: ${url}`,
-              [url]
-            );
+            const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+            const url = `${baseForMedia}/docs/generated/${type === "invoice" ? "invoices" : "quotes"}/${filename}`;
+            return sendTwimlWithMedia(res, `${type[0].toUpperCase() + type.slice(1)} ${numberStr} created. Download: ${url}`, [url]);
           } catch (err) {
-            console.error(
-              "TWILIO: pdf generation failed:",
-              err && (err.stack || err.message) ? err.stack || err.message : err
-            );
+            console.error("TWILIO: pdf generation failed:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
             return sendTwimlText(res, "Failed to generate PDF; check server logs.");
           }
         } else {
           return sendTwimlText(res, "Unknown admin command. Send 'hi' for usage.");
         }
       } catch (err) {
-        console.error(
-          "TWILIO: admin command error:",
-          err && (err.stack || err.message) ? err.stack || err.message : err
-        );
+        console.error("TWILIO: admin command error:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
         return sendTwimlText(res, "Server error; try again later.");
       }
     } // end admin
 
-    // ---------- non-admin flow (unchanged behaviour except St Eurit media) ----------
+    // ---------- non-admin flow (unchanged behaviour) ----------
     let user = await User.findOne({ provider: "whatsapp", providerId });
     if (!user) {
-      user = await User.create({
-        provider: "whatsapp",
-        providerId,
-        name: profileName || undefined,
-        role: "user"
-      });
+      user = await User.create({ provider: "whatsapp", providerId, name: profileName || undefined, role: "user" });
       console.log("TWILIO: created user", user._id?.toString());
     } else if (profileName && user.name !== profileName) {
-      user.name = profileName;
-      await user.save();
-      console.log("TWILIO: updated user name", user._id?.toString());
+      user.name = profileName; await user.save(); console.log("TWILIO: updated user name", user._id?.toString());
     }
 
     const text = (bodyRaw || "").trim();
     const lctext = text.toLowerCase();
 
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
-      const reply =
-        "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
+      const reply = "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. 'find harare cambridge boarding primary urban'\n• fav add <slug>\n• help";
       return sendTwimlText(res, reply);
     }
 
     if (lctext === "help") {
-      const reply =
-        "ZimEduFinder Help:\n• find [city] [filters]\nFilters: curriculum (cambridge, zimsec, ib), boarding/day, phase (primary/secondary/preschool), environment (urban/suburban/rural)\nExamples:\n• find harare cambridge boarding primary urban\n• find bulawayo zimsec day secondary";
+      const reply = "ZimEduFinder Help:\n• find [city] [filters]\nFilters: curriculum (cambridge, zimsec, ib), boarding/day, phase (primary/secondary/preschool), environment (urban/suburban/rural)\nExamples:\n• find harare cambridge boarding primary urban\n• find bulawayo zimsec day secondary";
       return sendTwimlText(res, reply);
     }
 
     const words = lctext.split(/\s+/).filter(Boolean);
-
-    // >>> UPDATED FIND HANDLER WITH ST EURIT MEDIA <<<
     if (words[0] === "find") {
       const city = words[1] || "Harare";
       const wantsBoarding = words.some((w) => /board|boarding/.test(w));
       const type2 = wantsBoarding ? ["Boarding"] : [];
       const curriculum = words.filter((w) => /cambridge|caie|zimsec|ib/.test(w));
-      const lastPrefs = {
-        city: String(city),
-        curriculum: Array.isArray(curriculum)
-          ? curriculum.map(String)
-          : toArraySafe(curriculum),
-        learningEnvironment: undefined,
-        schoolPhase: undefined,
-        type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2),
-        facilities: []
-      };
+      const lastPrefs = { city: String(city), curriculum: Array.isArray(curriculum) ? curriculum.map(String) : toArraySafe(curriculum), learningEnvironment: undefined, schoolPhase: undefined, type2: Array.isArray(type2) ? type2.map(String) : toArraySafe(type2), facilities: [] };
 
       try {
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $set: { lastPrefs } },
-          { new: true, upsert: true }
-        );
-      } catch (e) {
-        console.error(
-          "TWILIO: failed saving lastPrefs:",
-          e && (e.stack || e.message) ? e.stack || e.message : e
-        );
-      }
+        await User.findOneAndUpdate({ provider: "whatsapp", providerId }, { $set: { lastPrefs } }, { new: true, upsert: true });
+      } catch (e) { console.error("TWILIO: failed saving lastPrefs:", e && (e.stack || e.message) ? (e.stack || e.message) : e); }
 
       try {
         const site = (process.env.SITE_URL || "").replace(/\/$/, "");
         if (!site) throw new Error("SITE_URL not configured");
-
-        const resp = await axios.post(
-          `${site}/api/recommend`,
-          {
-            city: lastPrefs.city,
-            curriculum: lastPrefs.curriculum,
-            learningEnvironment: lastPrefs.learningEnvironment,
-            schoolPhase: lastPrefs.schoolPhase,
-            type2: lastPrefs.type2,
-            facilities: lastPrefs.facilities
-          },
-          { timeout: 10000 }
-        );
-
+        const resp = await axios.post(`${site}/api/recommend`, { city: lastPrefs.city, curriculum: lastPrefs.curriculum, learningEnvironment: lastPrefs.learningEnvironment, schoolPhase: lastPrefs.schoolPhase, type2: lastPrefs.type2, facilities: lastPrefs.facilities }, { timeout: 10000 });
         const recs = (resp.data && resp.data.recommendations) || [];
-        if (!recs.length) {
-          return sendTwimlText(
-            res,
-            `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`
-          );
-        }
-
+        if (!recs.length) return sendTwimlText(res, `No matches found for "${city}" with those filters. Try fewer filters or 'help'.`);
         const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
-        const mediaUrls = [];
-
-        // absolute base for images/PDFs served from /public/docs
-        const baseForMedia =
-          site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-
-        for (const r of recs.slice(0, 5)) {
+        for (const r of recs.slice(0,5)) {
           lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
-          if (r.curriculum) {
-            lines.push(
-              `  Curriculum: ${
-                Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum
-              }`
-            );
-          }
+          if (r.curriculum) lines.push(`  Curriculum: ${Array.isArray(r.curriculum) ? r.curriculum.join(", ") : r.curriculum}`);
           if (r.fees) lines.push(`  Fees: ${r.fees}`);
           if (r.website) lines.push(`  Website: ${r.website}`);
-
           const name = (r.name || "").toLowerCase();
-
-          // ST EURIT SPECIAL HANDLING
           if (/st[\s-]*eurit/.test(name) || (r.slug && /st-eurit/.test(r.slug))) {
-            const registerUrl =
-              "https://skoolfinder.net/register/st-eurit-international-school";
+            const registerUrl = "https://skoolfinder.net/register/st-eurit-international-school";
             if (registerUrl) lines.push(`  Register: ${registerUrl}`);
-
-            // Attach photos + PDFs for St Eurit
-            mediaUrls.push(
-              `${baseForMedia}/docs/st-eurit-pic2.jpg`,
-              `${baseForMedia}/docs/st-eurit.jpg`,
-              `${baseForMedia}/docs/st-eurit-profile.pdf`,
-              `${baseForMedia}/docs/st-eurit-registration.pdf`,
-              `${baseForMedia}/docs/st-eurit-enrollment-requirements.pdf`
-            );
           }
         }
-
         lines.push("\nReply 'help' for commands.");
-
-        if (mediaUrls.length) {
-          // send one message with text + media (WhatsApp will show previews / download buttons)
-          return sendTwimlWithMedia(res, lines.join("\n"), mediaUrls);
-        }
-
         return sendTwimlText(res, lines.join("\n"));
       } catch (e) {
-        console.error(
-          "TWILIO: recommend call failed:",
-          e && (e.message || (e.response && JSON.stringify(e.response.data)))
-            ? e.message || JSON.stringify(e.response.data)
-            : e
-        );
+        console.error("TWILIO: recommend call failed:", e && (e.message || (e.response && JSON.stringify(e.response.data))) ? (e.message || JSON.stringify(e.response.data)) : e);
         return sendTwimlText(res, "Search failed — please try again later.");
       }
     }
-    // <<< END UPDATED FIND HANDLER >>>
 
     if (lctext.startsWith("fav add ") || lctext.startsWith("favorite add ")) {
       const slug = bodyRaw.split(/\s+/).slice(2).join(" ").trim();
-      if (!slug)
-        return sendTwimlText(
-          res,
-          "Please provide the school slug, e.g. 'fav add st-eurit-international-school'"
-        );
+      if (!slug) return sendTwimlText(res, "Please provide the school slug, e.g. 'fav add st-eurit-international-school'");
       try {
         const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        const resp = await axios
-          .get(`${site}/api/school-by-slug/${encodeURIComponent(slug)}`, {
-            timeout: 5000
-          })
-          .catch(() => null);
+        const resp = await axios.get(`${site}/api/school-by-slug/${encodeURIComponent(slug)}`, { timeout: 5000 }).catch(() => null);
         const school = resp && resp.data && resp.data.school;
-        if (!school) {
-          return sendTwimlText(res, `School not found for slug "${slug}"`);
-        }
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $addToSet: { favourites: school._id } },
-          { upsert: true }
-        );
+        if (!school) return sendTwimlText(res, `School not found for slug "${slug}"`);
+        await User.findOneAndUpdate({ provider: "whatsapp", providerId }, { $addToSet: { favourites: school._id } }, { upsert: true });
         return sendTwimlText(res, `Added "${school.name}" to your favourites.`);
       } catch (e) {
         console.error("TWILIO: fav add error:", e && e.message ? e.message : e);
@@ -696,15 +488,8 @@ receipt create|amount:100|description:Payment|customer:Name|email:...`;
 
     return sendTwimlText(res, "Sorry, I didn't understand. Send 'help' for usage.");
   } catch (err) {
-    console.error(
-      "TWILIO: webhook handler error:",
-      err && err.stack ? err.stack : err
-    );
-    try {
-      return sendTwimlText(res, "Server error; try again later.");
-    } catch (e) {
-      return res.status(500).end();
-    }
+    console.error("TWILIO: webhook handler error:", err && err.stack ? err.stack : err);
+    try { return sendTwimlText(res, "Server error; try again later."); } catch (e) { return res.status(500).end(); }
   }
 });
 

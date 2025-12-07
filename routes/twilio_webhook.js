@@ -273,7 +273,7 @@ router.post("/webhook", async (req, res) => {
     /* ---------- Help + menu text ---------- */
 
     const helpMessage = [
-      "Hi! I'm ZimEduFinder 🤖",
+      "Hi! I'm ZimEduFinder",
       "",
       "You can either *type a search* or *reply with a number*.",
       "",
@@ -301,7 +301,6 @@ router.post("/webhook", async (req, res) => {
       "Facilities: science, computer, library, robotics, cambridgecentre, zimseccentre, swimming, rugby, hockey, tennis, basketball, football, cricket, counselling, sen, clinic, aftercare, transport, wifi, cctv, generator",
       "",
       "⭐ Other:",
-      "fav add <slug>",
       "help",
     ].join("\n");
 
@@ -389,7 +388,7 @@ router.post("/webhook", async (req, res) => {
         console.error("TWILIO: fav add error:", e?.message || e);
         return sendTwimlText(
           res,
-          "Could not add favourite — please try again later."
+          "Could not add favourite | please try again later."
         );
       }
     }
@@ -462,7 +461,7 @@ router.post("/webhook", async (req, res) => {
         );
         return sendTwimlText(
           res,
-          "Search failed — please try again in a moment."
+          "Search failed | please try again in a moment."
         );
       }
 
@@ -480,7 +479,7 @@ router.post("/webhook", async (req, res) => {
       let attachStEuritMedia = false;
 
       for (const r of recs.slice(0, 5)) {
-        lines.push(`\n• ${r.name}${r.city ? " — " + r.city.toLowerCase() : ""}`);
+        lines.push(`\n• ${r.name}${r.city ? " | " + r.city.toLowerCase() : ""}`);
 
         if (r.curriculum) {
           lines.push(
@@ -523,16 +522,16 @@ router.post("/webhook", async (req, res) => {
         );
         img1.media(`${mediaBase}/docs/st-eurit.jpg`);
 
-        const img2 = twiml.message("St Eurit – second view");
+        const img2 = twiml.message("St Eurit | second view");
         img2.media(`${mediaBase}/docs/st-eurit-pic2.jpg`);
 
-        const pdf1 = twiml.message("St Eurit – School Profile (PDF)");
+        const pdf1 = twiml.message("St Eurit | School Profile (PDF)");
         pdf1.media(`${mediaBase}/docs/st-eurit-profile.pdf`);
 
-        const pdf2 = twiml.message("St Eurit – Registration Form (PDF)");
+        const pdf2 = twiml.message("St Eurit | Registration Form (PDF)");
         pdf2.media(`${mediaBase}/docs/st-eurit-registration.pdf`);
 
-        const pdf3 = twiml.message("St Eurit – Enrolment Requirements (PDF)");
+        const pdf3 = twiml.message("St Eurit | Enrolment Requirements (PDF)");
         pdf3.media(
           `${mediaBase}/docs/st-eurit-enrollment-requirements.pdf`
         );

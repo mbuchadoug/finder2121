@@ -37,58 +37,23 @@ router.post("/webhook", async (req, res) => {
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
     const providerIdNormalized = normalizePhone(providerId);
 
-    /* ---------- Load / create user (no duplicates) ---------- */
-
     let user = await User.findOne({ provider: "whatsapp", providerId });
-
     if (!user) {
-      // New user – create once
       user = await User.create({
         provider: "whatsapp",
         providerId,
-        phone: providerIdNormalized || undefined,
         name: profileName || undefined,
         role: "user",
-        firstSeenAt: new Date(),
-        lastSeenAt: new Date(),
-        lastMessage: bodyRaw || undefined,
       });
-      console.log("TWILIO: created user", user._id?.toString());
-    } else {
-      // Existing user – update details, but don't duplicate
-      let changed = false;
-
-      if (profileName && user.name !== profileName) {
-        user.name = profileName;
-        changed = true;
-      }
-
-      if (providerIdNormalized && user.phone !== providerIdNormalized) {
-        user.phone = providerIdNormalized;
-        changed = true;
-      }
-
-      user.lastSeenAt = new Date();
-      if (bodyRaw) {
-        user.lastMessage = bodyRaw;
-        changed = true;
-      }
-
-      if (changed) {
-        await user.save();
-        console.log("TWILIO: updated user", user._id?.toString());
-      }
     }
 
-    const text = (bodyRaw || "").trim();
+    const text = bodyRaw.trim();
     const lctext = text.toLowerCase();
-
-    /* ---------- Basic commands ---------- */
 
     if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
       return sendTwimlText(
         res,
-        "Hi! I'm ZimEduFinder 🤖\n\nCommands:\n• find [city] [filters]\n   e.g. find harare cambridge boarding primary urban\n• help"
+        "Hi! I'm ZimEduFinder \n\nCommands:\n• find [city] [filters]\n   e.g. find harare cambridge boarding primary urban\n• help"
       );
     }
 
@@ -110,23 +75,7 @@ router.post("/webhook", async (req, res) => {
         /cambridge|caie|zimsec|ib/.test(w)
       );
 
-      // Save user search preferences (extra details)
-      try {
-        user.lastPrefs = {
-          city,
-          curriculum,
-          type2,
-        };
-        await user.save();
-      } catch (e) {
-        console.warn("TWILIO: failed to save lastPrefs:", e?.message || e);
-      }
-
-      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-      if (!site) {
-        console.error("SITE_URL env missing");
-        return sendTwimlText(res, "Search currently unavailable. Try again later.");
-      }
+      const site = process.env.SITE_URL.replace(/\/$/, "");
 
       const resp = await axios.post(`${site}/api/recommend`, {
         city,
@@ -136,30 +85,29 @@ router.post("/webhook", async (req, res) => {
 
       const recs = resp.data.recommendations || [];
       if (!recs.length)
-        return sendTwimlText(res, `No schools found for "${city}".`);
+        return sendTwimlText(res, "No schools found.");
 
       const lines = [`Top ${Math.min(5, recs.length)} matches for ${city}:`];
 
       let attachStEuritMedia = false;
 
       for (const r of recs.slice(0, 5)) {
-        lines.push(`\n• ${r.name}${r.city ? " — " + r.city : ""}`);
-
+        lines.push(`\n• ${r.name} | ${r.city}`);
         if (r.curriculum)
           lines.push(
-            `  Curriculum: ${
-              Array.isArray(r.curriculum)
-                ? r.curriculum.join(", ")
-                : r.curriculum
-            }`
+            `  Curriculum: ${Array.isArray(r.curriculum)
+              ? r.curriculum.join(", ")
+              : r.curriculum}`
           );
         if (r.website) lines.push(`  Website: ${r.website}`);
 
         const name = (r.name || "").toLowerCase();
         const slug = r.slug || "";
 
-        // Detect St Eurit (pinned school)
-        if (/st[\s-]*eurit/.test(name) || /st-eurit/.test(slug)) {
+        if (
+          /st[\s-]*eurit/.test(name) ||
+          /st-eurit/.test(slug)
+        ) {
           attachStEuritMedia = true;
           lines.push(
             `  Register: https://skoolfinder.net/register/st-eurit-international-school`
@@ -174,35 +122,30 @@ router.post("/webhook", async (req, res) => {
       if (attachStEuritMedia) {
         const mediaBase = site;
 
-        // Images
-        const img1 = twiml.message("St Eurit International School – Campus");
+        const img1 = twiml.message("St Eurit International School");
         img1.media(`${mediaBase}/docs/st-eurit.jpg`);
 
-        const img2 = twiml.message("St Eurit – Second View");
+        const img2 = twiml.message("St Eurit Internaational School");
         img2.media(`${mediaBase}/docs/st-eurit-pic2.jpg`);
 
-        // PDFs
-        const pdf1 = twiml.message("St Eurit – School Profile (PDF)");
+        const pdf1 = twiml.message("St Eurit | School Profile (PDF)");
         pdf1.media(`${mediaBase}/docs/st-eurit-profile.pdf`);
 
-        const pdf2 = twiml.message("St Eurit – Registration Form (PDF)");
+        const pdf2 = twiml.message("St Eurit | Registration Form (PDF)");
         pdf2.media(`${mediaBase}/docs/st-eurit-registration.pdf`);
 
-        const pdf3 = twiml.message("St Eurit – Enrolment Requirements (PDF)");
+        const pdf3 = twiml.message("St Eurit | Enrolment Requirements (PDF)");
         pdf3.media(
           `${mediaBase}/docs/st-eurit-enrollment-requirements.pdf`
         );
       }
 
-      /* ---------- TEXT LIST LAST (ALL SCHOOLS) ---------- */
-
+      /* ---------- TEXT LIST LAST ---------- */
       twiml.message(lines.join("\n"));
 
       res.set("Content-Type", "text/xml");
       return res.send(twiml.toString());
     }
-
-    /* ---------- Fallback ---------- */
 
     return sendTwimlText(res, "Unknown command. Send 'help'.");
   } catch (err) {

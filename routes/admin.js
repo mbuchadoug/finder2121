@@ -280,4 +280,68 @@ router.get("/test", ensureAuthed, ensureAdmin, (_req, res) => {
   res.send("admin base works");
 });
 
+
+
+// ----- Import page
+router.get("/import", ensureAuthed, ensureAdmin, (_req, res) => {
+  res.render("admin/import", { title: "Admin · Import Schools" });
+});
+
+// Import handler (JSON array or CSV)
+router.post("/import", ensureAuthed, ensureAdmin, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).send("No file uploaded");
+  const filename = (req.file.originalname || "").toLowerCase();
+
+  try {
+    let items = [];
+    if (filename.endsWith(".json")) {
+      items = JSON.parse(req.file.buffer.toString("utf-8"));
+      if (!Array.isArray(items)) throw new Error("JSON must be an array of schools");
+    } else if (filename.endsWith(".csv")) {
+      items = csvParse(req.file.buffer.toString("utf-8"), {
+        columns: true,
+        skip_empty_lines: true,
+      });
+    } else {
+      throw new Error("Unsupported file type. Use .json or .csv");
+    }
+
+    let upserted = 0;
+    for (const item of items) {
+      const doc = normalizeSchoolPayload(item);
+
+      // recompute normalizedName from name; never trust incoming column
+      const normalizedName = String(doc.name || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!normalizedName) continue;
+
+      const city = doc.city || "Harare";
+
+      // IMPORTANT: never include normalizedName in $set to avoid conflict
+      const { normalizedName: _ignore, ...setDoc } = doc;
+
+      await School.updateOne(
+        { city, normalizedName },
+        {
+          $set: setDoc,
+          $setOnInsert: { source: "admin-import", normalizedName },
+        },
+        { upsert: true }
+      );
+      upserted++;
+    }
+
+    res.render("admin/import", {
+      title: "Admin · Import Schools",
+      msg: `Import complete: ${upserted} records processed.`,
+    });
+  } catch (e) {
+    res
+      .status(400)
+      .render("admin/import", { title: "Admin · Import Schools", error: e.message });
+  }
+});
+
 export default router;

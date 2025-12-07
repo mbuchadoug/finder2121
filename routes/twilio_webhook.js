@@ -30,12 +30,12 @@ function normalizePhone(p) {
  */
 function parseFiltersFromWords(words) {
   const filters = {
-    curriculum: [],          // ["Cambridge","Zimsec","IB"]
-    type2: [],               // ["Day","Boarding"]
-    schoolPhase: [],         // ["Pre-School","Primary School","High School"]
-    learningEnvironment: "", // "Comprehensive" | "Enhanced" | "Advanced"
-    gender: "",              // "Boys" | "Girls" | "Mixed"
-    facilities: []           // schema keys: e.g. ["swimmingPool","scienceLabs"]
+    curriculum: [],
+    type2: [],
+    schoolPhase: [],
+    learningEnvironment: "",
+    gender: "",
+    facilities: [],
   };
 
   const addUnique = (arr, val) => {
@@ -112,7 +112,7 @@ function parseFiltersFromWords(words) {
       continue;
     }
 
-    // ----- Facilities (map to schema keys) -----
+    // ----- Facilities -----
 
     // Academics
     if (w === "science" || w === "labs" || w === "lab") {
@@ -270,13 +270,21 @@ router.post("/webhook", async (req, res) => {
     const text = (bodyRaw || "").trim();
     const lctext = text.toLowerCase();
 
-    /* ---------- Basic commands ---------- */
+    /* ---------- Help + menu text ---------- */
 
-    // Show full help with all filters
     const helpMessage = [
       "Hi! I'm ZimEduFinder 🤖",
       "",
-      "Type:",
+      "You can either *type a search* or *reply with a number*.",
+      "",
+      "🔢 Quick options:",
+      "1) Harare Cambridge (all levels)",
+      "2) Harare Cambridge boarding primary",
+      "3) Harare boarding (any curriculum)",
+      "4) Harare schools with swimming pool",
+      "5) Help / all filters & examples",
+      "",
+      "📝 Or type:",
       "find [city] [filters]",
       "",
       "Examples you can type:",
@@ -297,7 +305,9 @@ router.post("/webhook", async (req, res) => {
       "help",
     ].join("\n");
 
-    if (!lctext || ["hi", "hello", "hey"].includes(lctext)) {
+    /* ---------- hi / help / menu ---------- */
+
+    if (!lctext || ["hi", "hello", "hey", "menu", "options"].includes(lctext)) {
       return sendTwimlText(res, helpMessage);
     }
 
@@ -305,12 +315,39 @@ router.post("/webhook", async (req, res) => {
       return sendTwimlText(res, helpMessage);
     }
 
-    /* ---------- FIND COMMAND ---------- */
+    /* ---------- Map numeric shortcuts to commands ---------- */
 
-    const words = lctext.split(/\s+/).filter(Boolean);
+    let command = lctext;
+
+    if (/^[1-5]$/.test(lctext)) {
+      switch (lctext) {
+        case "1":
+          command = "find harare cambridge";
+          break;
+        case "2":
+          command = "find harare cambridge boarding primary";
+          break;
+        case "3":
+          command = "find harare boarding";
+          break;
+        case "4":
+          command = "find harare swimming";
+          break;
+        case "5":
+          // Just show full help
+          return sendTwimlText(res, helpMessage);
+        default:
+          break;
+      }
+    }
+
+    /* ---------- FIND COMMAND (works for typed or numeric-mapped) ---------- */
+
+    const words = command.split(/\s+/).filter(Boolean);
+
     if (words[0] === "find") {
-      const city = (words[1] || "harare").toLowerCase();
-      const niceCity = city.charAt(0).toUpperCase() + city.slice(1);
+      const cityWord = (words[1] || "harare").toLowerCase();
+      const niceCity = cityWord.charAt(0).toUpperCase() + cityWord.slice(1);
 
       // everything after city is filters
       const filterWords = words.slice(2);
@@ -427,7 +464,7 @@ router.post("/webhook", async (req, res) => {
         const mediaBase = site;
 
         const img1 = twiml.message(
-          "⭐ Pinned school: St Eurit International School\n📍 City: Harare\n📘 Curriculum: Cambridge\nTo apply:\n👉 Register: https://skoolfinder.net/register/st-eurit-international-school"
+          "⭐ Pinned school: St Eurit International School\n📍 City: harare\n📘 Curriculum: Cambridge\nTo apply:\n👉 Register: https://skoolfinder.net/register/st-eurit-international-school"
         );
         img1.media(`${mediaBase}/docs/st-eurit.jpg`);
 
@@ -456,7 +493,10 @@ router.post("/webhook", async (req, res) => {
 
     /* ---------- Fallback ---------- */
 
-    return sendTwimlText(res, "Unknown command. Send 'help' for options.");
+    return sendTwimlText(
+      res,
+      "I didn't quite get that. Reply with a number (1–5) or send 'help'."
+    );
   } catch (err) {
     console.error("TWILIO ERROR:", err);
     return sendTwimlText(res, "Server error. Please try again.");

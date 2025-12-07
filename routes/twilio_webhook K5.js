@@ -273,7 +273,7 @@ router.post("/webhook", async (req, res) => {
     /* ---------- Help + menu text ---------- */
 
     const helpMessage = [
-      "Hi! I'm ZimEduFinder 🤖",
+      "Hi! I'm ZimEduFinder ",
       "",
       "You can either *type a search* or *reply with a number*.",
       "",
@@ -300,8 +300,7 @@ router.post("/webhook", async (req, res) => {
       "Phases: pre, primary, high",
       "Facilities: science, computer, library, robotics, cambridgecentre, zimseccentre, swimming, rugby, hockey, tennis, basketball, football, cricket, counselling, sen, clinic, aftercare, transport, wifi, cctv, generator",
       "",
-      "⭐ Other:",
-      "fav add <slug>",
+      "Other:",
       "help",
     ].join("\n");
 
@@ -322,75 +321,22 @@ router.post("/webhook", async (req, res) => {
     if (/^[1-5]$/.test(lctext)) {
       switch (lctext) {
         case "1":
-          command = "find harare cambridge";
+          command = "find harare cambridge primary advanced";
           break;
         case "2":
-          command = "find harare cambridge boarding primary";
+          command = "find harare cambridge boarding primary ";
           break;
         case "3":
           command = "find harare boarding";
           break;
         case "4":
-          command = "find harare swimming";
+          command = "find harare swimming tennis basketball hockey football";
           break;
         case "5":
+          // Just show full help
           return sendTwimlText(res, helpMessage);
         default:
           break;
-      }
-    }
-
-    /* ---------- fav add / favorite add ---------- */
-
-    if (command.startsWith("fav add ") || command.startsWith("favorite add ")) {
-      const slug = bodyRaw.split(/\s+/).slice(2).join(" ").trim();
-      if (!slug) {
-        return sendTwimlText(
-          res,
-          "Please provide the school slug, e.g. 'fav add st-eurit-international-school'"
-        );
-      }
-
-      try {
-        const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-        if (!site) {
-          console.error("SITE_URL env missing for fav add");
-          return sendTwimlText(
-            res,
-            "Cannot add favourites right now. Please try later."
-          );
-        }
-
-        const resp = await axios
-          .get(`${site}/api/school-by-slug/${encodeURIComponent(slug)}`, {
-            timeout: 5000,
-          })
-          .catch(() => null);
-
-        const school = resp?.data?.school;
-        if (!school) {
-          return sendTwimlText(
-            res,
-            `School not found for slug "${slug}". Please check the link on the website and try again.`
-          );
-        }
-
-        await User.findOneAndUpdate(
-          { provider: "whatsapp", providerId },
-          { $addToSet: { favourites: school._id } },
-          { upsert: true }
-        );
-
-        return sendTwimlText(
-          res,
-          `Added "${school.name}" to your favourites.`
-        );
-      } catch (e) {
-        console.error("TWILIO: fav add error:", e?.message || e);
-        return sendTwimlText(
-          res,
-          "Could not add favourite — please try again later."
-        );
       }
     }
 
@@ -462,7 +408,7 @@ router.post("/webhook", async (req, res) => {
         );
         return sendTwimlText(
           res,
-          "Search failed — please try again in a moment."
+          "Search failed | please try again in a moment."
         );
       }
 
@@ -473,14 +419,12 @@ router.post("/webhook", async (req, res) => {
         );
       }
 
-      const lines = [
-        `Top ${Math.min(5, recs.length)} matches for ${niceCity.toLowerCase()}:`,
-      ];
+      const lines = [`Top ${Math.min(5, recs.length)} matches for ${niceCity.toLowerCase()}:`];
 
       let attachStEuritMedia = false;
 
       for (const r of recs.slice(0, 5)) {
-        lines.push(`\n• ${r.name}${r.city ? " — " + r.city.toLowerCase() : ""}`);
+        lines.push(`\n• ${r.name}${r.city ? " | " + r.city.toLowerCase() : ""}`);
 
         if (r.curriculum) {
           lines.push(
@@ -523,16 +467,16 @@ router.post("/webhook", async (req, res) => {
         );
         img1.media(`${mediaBase}/docs/st-eurit.jpg`);
 
-        const img2 = twiml.message("St Eurit – second view");
+        const img2 = twiml.message("St Eurit | second view");
         img2.media(`${mediaBase}/docs/st-eurit-pic2.jpg`);
 
-        const pdf1 = twiml.message("St Eurit – School Profile (PDF)");
+        const pdf1 = twiml.message("St Eurit | School Profile (PDF)");
         pdf1.media(`${mediaBase}/docs/st-eurit-profile.pdf`);
 
-        const pdf2 = twiml.message("St Eurit – Registration Form (PDF)");
+        const pdf2 = twiml.message("St Eurit | Registration Form (PDF)");
         pdf2.media(`${mediaBase}/docs/st-eurit-registration.pdf`);
 
-        const pdf3 = twiml.message("St Eurit – Enrolment Requirements (PDF)");
+        const pdf3 = twiml.message("St Eurit | Enrolment Requirements (PDF)");
         pdf3.media(
           `${mediaBase}/docs/st-eurit-enrollment-requirements.pdf`
         );
@@ -546,13 +490,15 @@ router.post("/webhook", async (req, res) => {
       return res.send(twiml.toString());
     }
 
-    /* ---------- Fallback: anything else → full menu ---------- */
+    /* ---------- Fallback ---------- */
 
-    return sendTwimlText(res, helpMessage);
+    return sendTwimlText(
+      res,
+      "I didn't quite get that. Reply with a number (1–5) or send 'help'."
+    );
   } catch (err) {
     console.error("TWILIO ERROR:", err);
-    // Even on error, send the menu so user isn't stuck
-    return sendTwimlText(res, "Something went wrong.\n\n" + err?.message || "" );
+    return sendTwimlText(res, "Server error. Please try again.");
   }
 });
 

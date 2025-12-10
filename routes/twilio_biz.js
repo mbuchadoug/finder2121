@@ -206,7 +206,7 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   return { filepath, filename, publicUrl };
 }
 
-async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return biz.save(); }
+async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return saveBiz(biz); }
 
 function sendMenu(res) {
   const msg = `ZimQuote — reply with a number:
@@ -215,7 +215,9 @@ function sendMenu(res) {
 3) Add client
 4) Upload logo
 5) Settings
-6) Help`;
+6) Help
+7) New quotation
+8) New receipt`;
   return sendTwimlText(res, msg);
 }
 
@@ -251,6 +253,7 @@ router.post("/webhook", async (req, res) => {
         currency: "ZWL",
         invoicePrefix: "INV",
         quotePrefix: "QT",
+        receiptPrefix: "RCPT",
         paymentTermsDays: 30
       });
       console.log("TWILIO (biz): created business record", biz._id?.toString());
@@ -258,7 +261,7 @@ router.post("/webhook", async (req, res) => {
 
     if (profileName && !biz.name) {
       biz.name = biz.name || profileName;
-      await biz.save().catch(() => {});
+      await saveBiz(biz).catch(() => {});
     }
 
     const text = bodyRaw || "";
@@ -281,6 +284,9 @@ router.post("/webhook", async (req, res) => {
     const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
+    // DEBUG LOG
+    console.log("TWILIO (biz): incoming trimmed:", JSON.stringify(trimmed), "sessionState:", state, "isSingleNumber:", isSingleNumber);
+
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
       const num = trimmed;
@@ -292,17 +298,25 @@ router.post("/webhook", async (req, res) => {
         await saveBiz(biz);
         return sendTwimlText(res, "Great — what's your business name? (e.g. 'ABC Traders')");
       }
-      // 2 - New invoice
-      if (num === "2") {
+
+      // 2 - New invoice / 7 - New quotation / 8 - New receipt (reuse invoice flow but set docType)
+      if (num === "2" || num === "7" || num === "8") {
         if (!biz.name) {
           biz.sessionState = "awaiting_first_choice"; await saveBiz(biz);
           return sendTwimlText(res, "You need to create a business first. Reply 1 to create.");
         }
+        let docType = "invoice";
+        if (num === "7") docType = "quote";
+        if (num === "8") docType = "receipt";
+
         biz.sessionState = "creating_invoice_choose_client";
-        biz.sessionData = { items: [] };
+        biz.sessionData = { items: [], docType };
         await saveBiz(biz);
-        return sendTwimlText(res, "Create Invoice — pick option:\n1) Use saved client\n2) New client\n3) Cancel");
+
+        const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+        return sendTwimlText(res, `Create ${label} — pick option:\n1) Use saved client\n2) New client\n3) Cancel`);
       }
+
       // 3 - Add client
       if (num === "3") {
         if (!biz.name) { biz.sessionState = "awaiting_first_choice"; await saveBiz(biz); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
@@ -329,6 +343,7 @@ router.post("/webhook", async (req, res) => {
 4) Quote prefix (current: ${biz.quotePrefix || "QT"})
 5) Change logo
 6) View clients
+7) Receipt prefix (current: ${biz.receiptPrefix || "RCPT"})
 0) Back to menu
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
@@ -342,6 +357,8 @@ Reply with number to edit.`;
 4) Upload logo
 5) Settings
 6) Help
+7) New quotation
+8) New receipt
 Type 'menu' to return here anytime.`);
       }
 
@@ -406,6 +423,7 @@ Type 'menu' to return here anytime.`);
         biz.sessionState = "settings_menu"; await saveBiz(biz);
         return sendTwimlText(res, lines.join("\n"));
       }
+      if (choice === "7") { biz.sessionState = "settings_rcpt_prefix"; await saveBiz(biz); return sendTwimlText(res, `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`); }
       return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
     }
 
@@ -431,6 +449,11 @@ Type 'menu' to return here anytime.`);
       biz.quotePrefix = trimmed; biz.sessionState = "settings_menu"; await saveBiz(biz);
       return sendTwimlText(res, `Quote prefix set to ${trimmed}. Back to settings.`);
     }
+    if (state === "settings_rcpt_prefix") {
+      if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
+      biz.receiptPrefix = trimmed; biz.sessionState = "settings_menu"; await saveBiz(biz);
+      return sendTwimlText(res, `Receipt prefix set to ${trimmed}. Back to settings.`);
+    }
 
     // Add client flows
     if (state === "adding_client_name") {
@@ -454,7 +477,7 @@ Type 'menu' to return here anytime.`);
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Reply menu to continue.`);
     }
 
-    // Invoice flows (select client)
+    // Invoice/Quote/Receipt flows (select client)
     if (state === "creating_invoice_choose_client" && isSingleNumber) {
       const choice = trimmed;
       if (choice === "1") {
@@ -475,7 +498,9 @@ Type 'menu' to return here anytime.`);
           biz.sessionData.awaitingItemDesc = false;
           biz.sessionData.lastItem = null;
           await saveBiz(biz);
-          return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
+          const docType = biz.sessionData.docType || "invoice";
+          const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+          return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description for ${label} (e.g. 'Website design')`);
         }
 
         // multiple clients -> list them
@@ -507,7 +532,9 @@ Type 'menu' to return here anytime.`);
       biz.sessionData.awaitingItemDesc = false;
       biz.sessionData.lastItem = null;
       await saveBiz(biz);
-      return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
+      const docType = biz.sessionData.docType || "invoice";
+      const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+      return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description for ${label} (e.g. 'Website design')`);
     }
 
     if (state === "creating_invoice_new_client") {
@@ -530,7 +557,9 @@ Type 'menu' to return here anytime.`);
       biz.sessionData.awaitingItemDesc = false;
       biz.sessionData.lastItem = null;
       await saveBiz(biz);
-      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
+      const docType = biz.sessionData.docType || "invoice";
+      const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description for ${label}.`);
     }
 
     //
@@ -651,7 +680,9 @@ Type 'menu' to return here anytime.`);
       // All prices done -> summarize and confirm
       const finalItems = biz.sessionData.items || [];
       const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-      let summary = `Invoice summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
+      const docType = biz.sessionData.docType || "invoice";
+      const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+      let summary = `${label} summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
       finalItems.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
       biz.sessionState = "creating_invoice_confirm";
@@ -661,7 +692,7 @@ Type 'menu' to return here anytime.`);
     }
 
     //
-    // Confirmation: generate invoice or save draft or add more items
+    // Confirmation: generate invoice/quote/receipt or add more items
     //
     if (state === "creating_invoice_confirm" && isSingleNumber) {
       const choice = trimmed;
@@ -674,21 +705,41 @@ Type 'menu' to return here anytime.`);
       if (choice === "2") {
         const items = biz.sessionData.items || [];
         const client = biz.sessionData.client;
+        const docType = (biz.sessionData.docType || "invoice"); // "invoice" | "quote" | "receipt"
+
+        // ensure counters object
         biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
-        biz.counters.invoice = (biz.counters.invoice || 0) + 1;
-        const numberStr = `${biz.invoicePrefix || "INV"}-${String(biz.counters.invoice).padStart(6, "0")}`;
+        // pick counter field name
+        const counterKey = docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt";
+        biz.counters[counterKey] = (biz.counters[counterKey] || 0) + 1;
+
+        // choose prefix field
+        const prefix = docType === "invoice" ? (biz.invoicePrefix || "INV") : docType === "quote" ? (biz.quotePrefix || "QT") : (biz.receiptPrefix || "RCPT");
+        const numberStr = `${prefix}-${String(biz.counters[counterKey]).padStart(6, "0")}`;
+
         const date = new Date();
         try {
-          const { filename } = await generatePDF({ type: "invoice", number: numberStr, date, dueDate: null, billingTo: client.name || client.phone, email: client.email || "", items, notes: "" });
+          const { filename } = await generatePDF({
+            type: docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt",
+            number: numberStr,
+            date,
+            dueDate: null,
+            billingTo: client?.name || client?.phone,
+            email: client?.email || "",
+            items,
+            notes: ""
+          });
+          // save updated counters
           await saveBiz(biz);
           const site = (process.env.SITE_URL || "").replace(/\/$/, "");
           const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-          const url = `${baseForMedia}/docs/generated/invoices/${filename}`;
+          const url = `${baseForMedia}/docs/generated/${docType === "invoice" ? "invoices" : docType === "quote" ? "quotes" : "receipts"}/${filename}`;
           await resetSession(biz);
-          return sendTwimlWithMedia(res, `Invoice ${numberStr} created. Download: ${url}`, [url]);
+          const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
+          return sendTwimlWithMedia(res, `${label} ${numberStr} created. Download: ${url}`, [url]);
         } catch (e) {
-          console.error("invoice PDF failed", e);
-          return sendTwimlText(res, "Failed to generate invoice PDF; check server logs.");
+          console.error("document PDF failed", e);
+          return sendTwimlText(res, `Failed to generate ${docType} PDF; check server logs.`);
         }
       } else {
         await resetSession(biz); return sendTwimlText(res, "Cancelled.");

@@ -292,6 +292,7 @@ router.post("/webhook", async (req, res) => {
           biz.sessionState = "awaiting_first_choice"; await biz.save();
           return sendTwimlText(res, "You need to create a business first. Reply 1 to create.");
         }
+        // docType stored in sessionData - default invoice
         let docType = "invoice";
         if (num === "7") docType = "quote";
         if (num === "8") docType = "receipt";
@@ -705,6 +706,7 @@ Type 'menu' to return here anytime.`);
             items,
             notes: ""
           });
+          // save updated counters
           await biz.save();
           const site = (process.env.SITE_URL || "").replace(/\/$/, "");
           const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;

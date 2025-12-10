@@ -122,7 +122,7 @@ async function loadCounters() {
 async function saveCounters(obj) { await ensureDataDir(); await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8"); }
 async function incrementCounter(type) { const counters = await loadCounters(); if (!counters[type]) counters[type] = 0; counters[type] = Number(counters[type]) + 1; await saveCounters(counters); return counters[type]; }
 
-/* ---------- PDF helpers (new layout) ---------- */
+/* ---------- PDF helpers (keeps your generatePDF) ---------- */
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
@@ -132,235 +132,63 @@ async function ensurePublicSubdirs() {
   return base;
 }
 
-/**
- * drawTable:
- * - columns: code, description, qty, unitPrice, discount, tax, lineTotal
- * - returns y position after table
- */
-function drawTable(doc, items, startX, startY, columnWidths, opts = {}) {
+function drawTable(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
   let y = startY;
-
-  // header row
-  doc.fontSize(10).fillColor("#111").font("Helvetica-Bold");
-  doc.text("Item", startX, y, { width: columnWidths[0] });
-  doc.text("Description", startX + columnWidths[0] + 8, y, { width: columnWidths[1] });
-  doc.text("Qty", startX + columnWidths[0] + 8 + columnWidths[1] + 8, y, { width: columnWidths[2], align: "right" });
-  doc.text("Unit", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8, y, { width: columnWidths[3], align: "right" });
-  doc.text("Discount", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8 + columnWidths[3] + 8, y, { width: columnWidths[4], align: "right" });
-  doc.text("Tax", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8, y, { width: columnWidths[5], align: "right" });
-  doc.text("Line Total", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8 + columnWidths[5] + 8, y, { width: columnWidths[6], align: "right" });
-
+  doc.fontSize(10).fillColor("black");
+  doc.text("Description", startX, y, { width: columnWidths[0] });
+  doc.text("Qty", startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
+  doc.text("Unit", startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
+  doc.text("Total", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
   y += lineHeight;
-  // thin divider
-  try { doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b)=>a+b,0) + (8*6) + 40, y - 6).strokeOpacity(0.08).stroke(); } catch(e){}
-
-  doc.font("Helvetica").fontSize(10).fillColor("#111");
-
+  try { doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b) => a + b, 0) + 40, y - 6).strokeOpacity(0.08).stroke(); } catch(e) {}
   for (const it of items) {
-    // wrap description if long
-    const descX = startX + columnWidths[0] + 8;
-    const descWidth = columnWidths[1];
-    const description = String(it.description || "");
-    // description may be multi-line: measure via doc.heightOfString
-    const descHeight = doc.heightOfString(description, { width: descWidth, align: "left", font: "Helvetica", size: 10 });
-
-    // compute needed row height
-    const rowHeight = Math.max(lineHeight, descHeight + 4);
-
-    // Draw row text
-    doc.text(it.code || "", startX, y, { width: columnWidths[0] });
-    doc.text(description, descX, y, { width: descWidth });
-    doc.text(String(it.qty || ""), descX + descWidth + 8, y, { width: columnWidths[2], align: "right" });
-    doc.text(formatMoney(it.unit || it.unitPrice || 0), descX + descWidth + 8 + columnWidths[2] + 8, y, { width: columnWidths[3], align: "right" });
-    doc.text(formatMoney(it.discount || 0), descX + descWidth + 8 + columnWidths[2] + 8 + columnWidths[3] + 8, y, { width: columnWidths[4], align: "right" });
-    doc.text(formatMoney(it.tax || 0), descX + descWidth + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8, y, { width: columnWidths[5], align: "right" });
-    doc.font("Helvetica-Bold");
-    doc.text(formatMoney(((Number(it.qty||0) * Number(it.unit || it.unitPrice || 0)) - (Number(it.discount||0))) + Number(it.tax||0)), descX + descWidth + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8 + columnWidths[5] + 8, y, { width: columnWidths[6], align: "right" });
-    doc.font("Helvetica");
-
-    // move y
-    y += rowHeight;
-
-    // small divider after each row
-    try { doc.moveTo(startX, y - 4).lineTo(startX + columnWidths.reduce((a,b)=>a+b,0) + (8*6) + 40, y - 4).strokeOpacity(0.04).stroke(); } catch(e) {}
+    doc.fontSize(10).fillColor("black");
+    doc.text(it.description, startX, y, { width: columnWidths[0] });
+    doc.text(String(it.qty), startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
+    doc.text(formatMoney(it.unit || 0), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
+    doc.text(formatMoney((it.qty||0) * (it.unit||0)), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
+    y += lineHeight;
   }
-
   return y;
 }
 
-/**
- * generatePDF - updated to use new layout, show logo or company name fallback
- * Accepts extra fields: companyName, companyAddress, companyPhone, logoUrl
- */
-async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", companyName = "", companyAddress = "", companyPhone = "", logoUrl = "" }) {
+async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "" }) {
   if (!PDFDocument) throw new Error("pdfkit not available. Install with: npm install pdfkit");
   const baseDir = await ensurePublicSubdirs();
   const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
-
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ size: "A4", margin: 48 });
+      const doc = new PDFDocument({ size: "A4", margin: 50 });
       const stream = fs.createWriteStream(filepath);
       doc.pipe(stream);
-
-      // header: logo (or fallback companyName) + company meta (left), document meta (right)
-      const leftX = 48;
-      const rightX = 420;
-      const headerY = 40;
-      // draw logo if exists (logoUrl could be a public absolute path or relative)
-      try {
-        if (logoUrl) {
-          // if logoUrl is remote (http) try to load the local cached file path in public/docs/logos if it exists
-          let logoLocal = null;
-          if (logoUrl.startsWith("/docs/logos/") || logoUrl.includes("/docs/logos/")) {
-            // local relative path
-            const tryPath = path.join(process.cwd(), "public", logoUrl.replace(/^\//, ""));
-            if (fs.existsSync(tryPath)) logoLocal = tryPath;
-          } else {
-            // try common fallback logo.png in public/docs
-            const tryPath = path.join(process.cwd(), "public", "docs", "logos", path.basename(logoUrl));
-            if (fs.existsSync(tryPath)) logoLocal = tryPath;
-          }
-          if (!logoLocal) {
-            // fallback to generic logo path (keeps previous behavior)
-            const generic = path.join(process.cwd(), "public", "docs", "logo.png");
-            if (fs.existsSync(generic)) logoLocal = generic;
-          }
-          if (logoLocal && fs.existsSync(logoLocal)) {
-            doc.image(logoLocal, leftX, headerY, { width: 84, height: 84, fit: [84,84], align: "left" });
-          } else {
-            // fallback will occur below (company name)
-          }
-        } else {
-          const generic = path.join(process.cwd(), "public", "docs", "logo.png");
-          if (fs.existsSync(generic)) doc.image(generic, leftX, headerY, { width: 84, height: 84, fit: [84,84], align: "left" });
-        }
-      } catch (e) {
-        // swallow image errors
-      }
-
-      // Company name fallback if no logo drawn
-      // We'll check if there's an image already placed by checking file existence above. If none, draw companyName text in place.
-      let usedLogo = false;
-      try {
-        // quick heuristic: if public/docs/logo.png exists or logoLocal existed, we consider logo drawn.
-        const generic = path.join(process.cwd(), "public", "docs", "logo.png");
-        if (logoUrl) {
-          const tryPath = path.join(process.cwd(), "public", "docs", "logos", path.basename(logoUrl || ""));
-          if (fs.existsSync(tryPath)) usedLogo = true;
-        }
-        if (fs.existsSync(path.join(process.cwd(), "public", "docs", "logo.png"))) usedLogo = true;
-      } catch (e) {}
-      if (!usedLogo) {
-        // draw company name inside the logo box area
-        doc.fontSize(16).fillColor("#1f6feb").font("Helvetica-Bold").text(companyName || " ", leftX, headerY + 18, { width: 200 });
-      }
-
-      // Company meta (to the right of logo area)
-      doc.font("Helvetica-Bold").fontSize(14).fillColor("#111").text(companyName || "", leftX + 100, headerY);
-      doc.font("Helvetica").fontSize(9).fillColor("#444");
-      if (companyAddress) doc.text(companyAddress, leftX + 100, headerY + 20, { width: 240 });
-      if (companyPhone) doc.text(`Phone: ${companyPhone}`, leftX + 100, headerY + 44);
-
-      // Document meta on right
-      doc.fontSize(20).fillColor("#111").font("Helvetica-Bold");
-      const label = type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT";
-      doc.text(label, rightX, headerY, { align: "right" });
-      doc.fontSize(10).fillColor("#333").font("Helvetica");
-      doc.text(`No: ${number}`, rightX, headerY + 28, { align: "right" });
-      doc.text(`Date: ${date.toISOString().slice(0,10)}`, rightX, headerY + 44, { align: "right" });
-      if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, rightX, headerY + 58, { align: "right" });
-
-      // Bill to block
-      const billY = headerY + 110;
-      doc.fontSize(11).fillColor("#111").font("Helvetica-Bold").text("Bill To:", leftX, billY);
-      doc.fontSize(10).fillColor("#111").font("Helvetica");
-      doc.text(billingTo || "-", leftX, billY + 16);
-      if (email) doc.fontSize(9).fillColor("#666").text(email, leftX, billY + 36);
-
-      // Table start
-      const startY = billY + 70;
-      const startXTable = 48;
-      // column widths (tuned for A4)
-      const columnWidths = [
-        48,   // item code
-        250,  // description
-        48,   // qty
-        70,   // unit price
-        60,   // discount
-        48,   // tax
-        76    // line total
-      ];
-
-      // Draw table rows
-      const afterTableY = drawTable(doc, items, startXTable, startY, columnWidths);
-
-      // Totals calculations
-      const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit || it.unitPrice || 0)), 0);
-      const discountTotal = items.reduce((s,it) => s + Number(it.discount||0), 0);
-      const taxTotal = items.reduce((s,it) => s + Number(it.tax||0), 0);
-      const shipping = 0;
-      const total = subtotal - discountTotal + taxTotal + (Number(shipping||0));
-
-      // Draw totals box on the right of table
-      const totalsBoxWidth = 260;
-      const totalsBoxX = 48 + columnWidths.reduce((a,b) => a + b, 0) + 20;
-      const totalsBoxY = afterTableY + 10;
-      const totalsBoxHeight = 110;
-      // background rect + border
-      doc.save();
-      doc.roundedRect(totalsBoxX, totalsBoxY, totalsBoxWidth, totalsBoxHeight, 6).lineWidth(0.6).strokeOpacity(0.12).stroke("#cfdff7");
-      // fill too-light background
-      doc.fillOpacity(0.02).rect(totalsBoxX, totalsBoxY, totalsBoxWidth, totalsBoxHeight).fill("#1f6feb");
-      doc.fillOpacity(1);
-      // content inside
-      const tx = totalsBoxX + 12;
-      let ty = totalsBoxY + 12;
-      doc.fontSize(10).fillColor("#666").font("Helvetica").text("Subtotal", tx, ty);
-      doc.font("Helvetica").text(formatMoney(subtotal), tx + 140, ty, { width: 90, align: "right" });
-      ty += 18;
-      doc.font("Helvetica").fontSize(10).fillColor("#666").text("Discounts", tx, ty);
-      doc.text(formatMoney(discountTotal), tx + 140, ty, { width: 90, align: "right" });
-      ty += 18;
-      doc.font("Helvetica").fontSize(10).fillColor("#666").text(`Tax`, tx, ty);
-      doc.text(formatMoney(taxTotal), tx + 140, ty, { width: 90, align: "right" });
-      if (shipping) {
-        ty += 18;
-        doc.font("Helvetica").fontSize(10).fillColor("#666").text("Shipping", tx, ty);
-        doc.text(formatMoney(shipping), tx + 140, ty, { width: 90, align: "right" });
-      }
-      // total row
-      ty += 18;
-      // heavier separator for total
-      doc.moveTo(tx, ty).lineTo(tx + totalsBoxWidth - 24, ty).strokeOpacity(0.08).lineWidth(1).stroke();
-      ty += 8;
-      doc.font("Helvetica-Bold").fontSize(12).fillColor("#111").text("Total", tx, ty);
-      doc.text(formatMoney(total), tx + 140, ty, { width: 90, align: "right" });
-
-      doc.restore();
-
-      // Notes area
-      const notesY = totalsBoxY + totalsBoxHeight + 18;
-      if (notes) {
-        doc.fontSize(10).fillColor("#111").font("Helvetica-Bold").text("Notes:", 48, notesY);
-        doc.fontSize(9).fillColor("#444").font("Helvetica").text(notes, 48, notesY + 16, { width: 480 });
-      }
-
-      // footer line and bank details
-      doc.fontSize(9).fillColor("#777").text("-----------", 48, 760, { align: "center", width: 500 });
-      doc.fontSize(9).fillColor("#666").text("Bank details: Account 0150011578801 • InnBucks • Borrowdale", 48, 780, { width: 500 });
-      doc.fontSize(9).fillColor("#666").text("Tax Number: 2001220346", 48, 795, { width: 500 });
-
+      const logoPath = path.join(process.cwd(), "public", "docs", "logo.png");
+      if (fs.existsSync(logoPath)) { try { doc.image(logoPath, 50, 45, { width: 90 }); } catch (e) {} }
+      doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
+      doc.fontSize(10).fillColor("#333").text(`No: ${number}`, 400, 75, { align: "right" });
+      doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
+      if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, 400, 105, { align: "right" });
+      doc.moveDown(2);
+      doc.fontSize(12).fillColor("#000").text("Bill To:", 50, 140);
+      doc.fontSize(11).fillColor("#111").text(billingTo || "-", 50, 155);
+      if (email) doc.fontSize(10).fillColor("#666").text(email, 50, 170);
+      const startY = 210;
+      const columnWidths = [260, 60, 80, 80];
+      const afterTableY = drawTable(doc, items, 50, startY, columnWidths);
+      let subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+      const tax = 0;
+      const total = subtotal + tax;
+      doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal)}`, 400, afterTableY + 10, { align: "right" });
+      if (tax) doc.text(`Tax: ${formatMoney(tax)}`, 400, afterTableY + 25, { align: "right" });
+      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, 400, afterTableY + 40, { align: "right" });
+      if (notes) { doc.moveDown(2); doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80); doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 }); }
+      doc.fontSize(9).fillColor("gray").text("-----------", 50, 760, { align: "center", width: 500 });
       doc.end();
-
       stream.on("finish", () => resolve({ filepath, filename }));
       stream.on("error", (err) => reject(err));
-    } catch (err) {
-      reject(err);
-    }
+    } catch (err) { reject(err); }
   });
 }
 
@@ -891,7 +719,6 @@ Type 'menu' to return here anytime.`);
 
         const date = new Date();
         try {
-          // CALL generatePDF with companyName and logoUrl so the header shows
           const { filename } = await generatePDF({
             type: docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt",
             number: numberStr,
@@ -900,11 +727,7 @@ Type 'menu' to return here anytime.`);
             billingTo: client?.name || client?.phone,
             email: client?.email || "",
             items,
-            notes: "",
-            companyName: biz.name || "",
-            companyAddress: biz.address || "",
-            companyPhone: biz.phone || "",
-            logoUrl: biz.logoUrl || ""
+            notes: ""
           });
           // save updated counters
           await saveBiz(biz);

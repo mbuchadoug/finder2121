@@ -63,22 +63,16 @@ function normalizePhone(p) {
   return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
-/* Persist helper: reliably save sessionData & state and return fresh biz doc */
+/* Persist helper (small abstraction so we consistently save session state/data) */
 async function persistBiz(biz) {
-  if (!biz || !biz._id) return biz;
-  const update = {
-    name: biz.name || null,
-    sessionState: biz.sessionState || null,
-    sessionData: biz.sessionData || {},
-    counters: biz.counters || { invoice: 0, quote: 0, receipt: 0 },
-    currency: biz.currency || "ZWL",
-    invoicePrefix: biz.invoicePrefix || "INV",
-    quotePrefix: biz.quotePrefix || "QT",
-    paymentTermsDays: biz.paymentTermsDays || 30,
-    logoUrl: biz.logoUrl || null
-  };
-  const updated = await Business.findByIdAndUpdate(biz._id, { $set: update }, { new: true });
-  return updated || biz;
+  try {
+    if (!biz) return;
+    // ensure sessionData exists and is plain object
+    biz.sessionData = biz.sessionData || {};
+    return await biz.save();
+  } catch (e) {
+    console.warn("persistBiz error:", e?.message || e);
+  }
 }
 
 /* verification: prefer TWILIO_BIZ_AUTH_TOKEN, fallback to TWILIO_AUTH_TOKEN */
@@ -128,7 +122,7 @@ async function loadCounters() {
 async function saveCounters(obj) { await ensureDataDir(); await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8"); }
 async function incrementCounter(type) { const counters = await loadCounters(); if (!counters[type]) counters[type] = 0; counters[type] = Number(counters[type]) + 1; await saveCounters(counters); return counters[type]; }
 
-/* ---------- PDF helpers ---------- */
+/* ---------- PDF helpers (keeps your generatePDF) ---------- */
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
@@ -259,23 +253,12 @@ router.post("/webhook", async (req, res) => {
         quotePrefix: "QT",
         paymentTermsDays: 30
       });
-      // ensure biz is fresh from DB
-      biz = await Business.findById(biz._id).lean ? await Business.findById(biz._id) : biz;
       console.log("TWILIO (biz): created business record", biz._id?.toString());
     }
 
-    // If Twilio profileName provided and biz has no name -> persist and mark ready
     if (profileName && !biz.name) {
-      biz.name = profileName;
-      biz.sessionState = biz.sessionState || "ready";
-      biz.sessionData = biz.sessionData || {};
-      biz = await persistBiz(biz);
-    }
-
-    // If biz exists but sessionState missing, normalize to 'ready' so menus work
-    if (!biz.sessionState) {
-      biz.sessionState = "ready";
-      biz = await persistBiz(biz);
+      biz.name = biz.name || profileName;
+      await persistBiz(biz).catch(() => {});
     }
 
     const text = bodyRaw || "";
@@ -298,7 +281,7 @@ router.post("/webhook", async (req, res) => {
     const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
-    // DEBUG LOG
+    // DEBUG LOG: shows incoming trimmed text and state (remove later if desired)
     console.log("TWILIO (biz): incoming trimmed:", JSON.stringify(trimmed), "sessionState:", state, "isSingleNumber:", isSingleNumber);
 
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
@@ -369,7 +352,8 @@ Type 'menu' to return here anytime.`);
       return sendMenu(res);
     }
 
-    // Onboarding and simple states
+    // If we're in a session/state, many of the flows still expect numbers (e.g. choose client), or free text (e.g. business name).
+    // Handle onboarding:
     if (state === "awaiting_business_name") {
       const name = trimmed;
       if (!name) return sendTwimlText(res, "Please send a business name (e.g. 'ABC Traders').");
@@ -478,22 +462,20 @@ Type 'menu' to return here anytime.`);
     if (state === "creating_invoice_choose_client" && isSingleNumber) {
       const choice = trimmed;
       if (choice === "1") {
-        const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(10).lean();
+        const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(5).lean();
 
-        // No saved -> create new client flow
+        // Auto-select single client
         if (!clients.length) {
           biz.sessionState = "creating_invoice_new_client";
-          biz.sessionData = {};
           await persistBiz(biz);
           return sendTwimlText(res, "No saved clients. Please enter client name:");
         }
 
-        // Auto-select when only one client exists
         if (clients.length === 1) {
           const client = clients[0];
           biz.sessionData.client = client;
-          biz.sessionData.items = []; // ensure items array exists
           biz.sessionState = "creating_invoice_add_items";
+          biz.sessionData.items = [];
           await persistBiz(biz);
           return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
         }
@@ -521,10 +503,7 @@ Type 'menu' to return here anytime.`);
       if (!idx || idx < 1 || idx > clients.length + 1) return sendTwimlText(res, "Invalid selection. Reply the client number or choose New client.");
       if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await persistBiz(biz); return sendTwimlText(res, "Client name?"); }
       const client = clients[idx-1];
-      biz.sessionData.client = client;
-      biz.sessionData.items = []; // ensure new invoice items start empty
-      biz.sessionState = "creating_invoice_add_items";
-      await persistBiz(biz);
+      biz.sessionData.client = client; biz.sessionState = "creating_invoice_add_items"; biz.sessionData.items = []; await persistBiz(biz);
       return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
     }
 
@@ -544,24 +523,56 @@ Type 'menu' to return here anytime.`);
         { $set: { name: biz.sessionData.clientName, phone } },
         { new: true, upsert: true }
       );
-      biz.sessionData.client = client;
-      biz.sessionData.items = []; // ensure items array created
-      biz.sessionState = "creating_invoice_add_items";
-      await persistBiz(biz);
+      biz.sessionData.client = client; biz.sessionData.items = []; biz.sessionState = "creating_invoice_add_items"; await persistBiz(biz);
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
     }
 
-    /* ---------- Items loop: two-phase (descriptions+qty) then prices ---------- */
+    // Items loop: two-phase flow (fixed to prioritize qty when awaiting it)
     if (state === "creating_invoice_add_items") {
       const lowered = trimmed.toLowerCase();
 
-      // short commands
+      // If we're in the middle of adding a single item (expecting qty), handle qty first
+      if (biz.sessionData.awaitingItemDesc) {
+        // expecting qty
+        if (!biz.sessionData.lastItem || !biz.sessionData.lastItem.description) {
+          // defensive: ask for description again
+          biz.sessionData.awaitingItemDesc = false;
+          biz.sessionData.lastItem = null;
+          await persistBiz(biz);
+          return sendTwimlText(res, "Sorry — please send the item description again.");
+        }
+
+        // allow cancel while waiting for qty
+        if (trimmed === "3" || /(^|\s)(cancel|abort|stop)(\s|$)/i.test(trimmed)) {
+          biz.sessionState = "ready";
+          biz.sessionData.awaitingItemDesc = false;
+          biz.sessionData.lastItem = null;
+          await persistBiz(biz);
+          return sendTwimlText(res, "Cancelled. Reply menu to continue.");
+        }
+
+        const qty = Number(trimmed);
+        if (isNaN(qty) || qty <= 0) {
+          return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
+        }
+
+        // push item with unit = null (price to be filled later)
+        biz.sessionData.items = biz.sessionData.items || [];
+        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null });
+        biz.sessionData.lastItem = null;
+        biz.sessionData.awaitingItemDesc = false;
+        await persistBiz(biz);
+        return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items\n3) Cancel`);
+      }
+
+      // Not currently awaiting qty — interpret commands / free-text description flow
+
+      // short commands (only active when NOT expecting qty)
       const isAddAnother = trimmed === "1";
-      const isEnterPrices = trimmed === "2" || /(^|\s)(prices|enter prices|prices now|enterprice|enter price|price)(\s|$)/.test(lowered);
-      const isDone = /(^|\s)(done|finish|generate|send|summary|next)(\s|$)/.test(lowered);
-      const isCancel = trimmed === "3" || /(^|\s)(cancel|abort|stop)(\s|$)/.test(lowered);
+      const isEnterPrices = trimmed === "2" || /(^|\s)(prices|enter prices|price|prices now|enterprice|enter price)(\s|$)/i.test(lowered);
+      const isDone = /(^|\s)(done|finish|generate|send|summary|next)(\s|$)/i.test(lowered);
+      const isCancel = trimmed === "3" || /(^|\s)(cancel|abort|stop)(\s|$)/i.test(lowered);
       const isSkip = /^\s*skip\s*$/i.test(trimmed);
-      const isBack = /^back$/i.test(trimmed);
 
       // If user explicitly chooses to enter prices for items collected so far
       if (isEnterPrices) {
@@ -581,23 +592,14 @@ Type 'menu' to return here anytime.`);
       }
 
       if (isAddAnother) {
-        // If there's an unfinished item (we expect qty), remind user to finish
-        if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && (!biz.sessionData.lastItem.qty)) {
-          return sendTwimlText(res, "You're in the middle of adding an item — finish qty now, or reply '3' to cancel.");
-        }
-        // otherwise prompt for next description
+        // since we're not awaiting qty, this is just a prompt for description
         return sendTwimlText(res, "Send next item description:");
       }
 
       if (isDone) {
-        // If there is a partially-entered item missing qty/price, instruct
-        if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && !biz.sessionData.lastItem.qty) {
-          return sendTwimlText(res, "You started adding an item but didn't finish qty. Enter qty now or reply '3' to cancel.");
-        }
         const items = biz.sessionData.items || [];
         if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
-        // show summary / confirm
-        const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0 || 0)), 0);
+        const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
         let summary = `Invoice summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
         items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
         summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
@@ -606,29 +608,13 @@ Type 'menu' to return here anytime.`);
         return sendTwimlText(res, summary);
       }
 
-      // free-text flow: description -> qty
-      if (!biz.sessionData.awaitingItemDesc) {
-        const desc = trimmed;
-        if (!desc) return sendTwimlText(res, "Send an item description (or reply '2' to enter prices).");
-        biz.sessionData.awaitingItemDesc = true;
-        biz.sessionData.lastItem = { description: desc };
-        await persistBiz(biz);
-        return sendTwimlText(res, "Qty? (e.g. 1)");
-      } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
-        // expecting qty
-        const qty = Number(trimmed);
-        if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
-        // push item with unit = null (price to be filled later)
-        biz.sessionData.items = biz.sessionData.items || [];
-        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null });
-        // clear lastItem and awaiting flags
-        biz.sessionData.lastItem = null;
-        biz.sessionData.awaitingItemDesc = false;
-        await persistBiz(biz);
-        return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items\n3) Cancel`);
-      } else {
-        return sendTwimlText(res, "Send item description or reply 1/2/3.");
-      }
+      // Otherwise treat as free text flow: description -> (we set awaitingItemDesc to expect qty)
+      const desc = trimmed;
+      if (!desc) return sendTwimlText(res, "Send an item description (or reply '2' to enter prices).");
+      biz.sessionData.awaitingItemDesc = true;
+      biz.sessionData.lastItem = { description: desc };
+      await persistBiz(biz);
+      return sendTwimlText(res, "Qty? (e.g. 1)");
     }
 
     // Price-entry flow: walk through items with missing price
@@ -636,21 +622,19 @@ Type 'menu' to return here anytime.`);
       const items = biz.sessionData.items || [];
       let idx = Number(biz.sessionData.priceIndex || 0);
       if (!Array.isArray(items) || items.length === 0) {
-        biz.sessionState = "creating_invoice_add_items";
-        biz.sessionData.priceIndex = 0;
-        await persistBiz(biz);
+        biz.sessionState = "creating_invoice_add_items"; biz.sessionData.priceIndex = 0; await persistBiz(biz);
         return sendTwimlText(res, "No items to price. Send item description to add items.");
       }
 
-      // back -> go back to adding items
-      if (/^back$/i.test(trimmed)) {
+      // Allow user to go back to adding items
+      if (trimmed.toLowerCase() === "back") {
         biz.sessionState = "creating_invoice_add_items";
         delete biz.sessionData.priceIndex;
         await persistBiz(biz);
         return sendTwimlText(res, "Back to adding items. Send next item description or reply '2' when ready to enter prices.");
       }
 
-      // skip -> set price 0 for current index
+      // skip sets price to 0 for current item
       if (/^skip$/i.test(trimmed)) {
         items[idx].unit = 0;
         idx += 1;
@@ -658,10 +642,9 @@ Type 'menu' to return here anytime.`);
         biz.sessionData.items = items;
         await persistBiz(biz);
       } else {
+        // parse price
         const unit = Number(trimmed);
-        if (isNaN(unit)) {
-          return sendTwimlText(res, "Invalid price. Enter a numeric unit price (e.g. 450), 'skip' to set 0, or 'back' to add more items.");
-        }
+        if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a numeric unit price (e.g. 450), 'skip' to set 0, or 'back' to add more items.");
         items[idx].unit = unit;
         idx += 1;
         biz.sessionData.priceIndex = idx;
@@ -669,7 +652,7 @@ Type 'menu' to return here anytime.`);
         await persistBiz(biz);
       }
 
-      // if more items to price
+      // If still have items to price
       if (idx < (biz.sessionData.items || []).length) {
         const next = biz.sessionData.items[idx];
         return sendTwimlText(res, `Price entry: item ${idx+1}) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
@@ -698,7 +681,6 @@ Type 'menu' to return here anytime.`);
       if (choice === "2") {
         const items = biz.sessionData.items || [];
         const client = biz.sessionData.client;
-        if (!client) return sendTwimlText(res, "Client not set. Cancel and try again.");
         biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
         biz.counters.invoice = (biz.counters.invoice || 0) + 1;
         const numberStr = `${biz.invoicePrefix || "INV"}-${String(biz.counters.invoice).padStart(6, "0")}`;

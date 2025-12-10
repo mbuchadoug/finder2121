@@ -502,44 +502,72 @@ Type 'menu' to return here anytime.`);
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
     }
 
-    // Items loop: this expects free text for description and numeric replies for choices inside the flow
+    // Items loop: this expects free text for description and numeric or text replies for choices inside the flow
     if (state === "creating_invoice_add_items") {
-      // if incoming is numeric choice 1/2/3 (after item added)
-      if (trimmed === "1") { return sendTwimlText(res, "Send next item description:"); }
-      if (trimmed === "2") {
+      const lowered = trimmed.toLowerCase();
+
+      // Recognize "done"/"finish" etc (also accept "2")
+      const isFinish = /^\s*2\s*$/.test(trimmed) || /(^|\s)(done|finish|generate|send)(\s|$)/.test(lowered);
+      const isCancel = /^\s*3\s*$/.test(trimmed) || /(^|\s)(cancel|abort|stop)(\s|$)/.test(lowered);
+
+      // If user explicitly typed '1' to add another item, begin next item description
+      if (trimmed === "1") {
+        return sendTwimlText(res, "Send next item description:");
+      }
+
+      // If user typed a finish command (numeric '2' or words), show summary / confirm
+      if (isFinish) {
         const items = biz.sessionData.items || [];
         if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
         const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-        let summary = `Invoice summary for ${biz.sessionData.client.name || biz.sessionData.client.phone}:\n`;
+        let summary = `Invoice summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
         items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
-        summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Send & generate PDF\n2) Save as draft\n3) Cancel`;
-        biz.sessionState = "creating_invoice_confirm"; await biz.save();
+        summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
+        biz.sessionState = "creating_invoice_confirm";
+        await biz.save();
         return sendTwimlText(res, summary);
       }
-      if (trimmed === "3") { await resetSession(biz); return sendTwimlText(res, "Invoice creation cancelled."); }
 
-      // otherwise it's free text expected as item description or qty/price steps
+      // Cancel shortcut
+      if (isCancel) {
+        await resetSession(biz);
+        return sendTwimlText(res, "Invoice creation cancelled.");
+      }
+
+      // otherwise it's free text expected as item description / qty / price steps
+      // Flow steps: description -> qty -> unit price -> item added -> ask add/done/cancel
       if (!biz.sessionData.awaitingItemDesc) {
+        // expecting a new item description
         const desc = trimmed;
-        if (!desc) return sendTwimlText(res, "Send an item description (or reply 2 to finish).");
-        biz.sessionData.awaitingItemDesc = true; biz.sessionData.lastItem = { description: desc }; await biz.save();
+        if (!desc) return sendTwimlText(res, "Send an item description (or reply 2/done to finish).");
+        biz.sessionData.awaitingItemDesc = true;
+        biz.sessionData.lastItem = { description: desc };
+        await biz.save();
         return sendTwimlText(res, "Qty? (e.g. 1)");
       } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
+        // expecting qty
         const qty = Number(trimmed);
-        if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1'.");
-        biz.sessionData.lastItem.qty = qty; await biz.save();
+        if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
+        biz.sessionData.lastItem.qty = qty;
+        await biz.save();
         return sendTwimlText(res, "Unit price? (e.g. 450)");
       } else if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
+        // expecting unit price
         const unit = Number(trimmed);
-        if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a number like '450'.");
+        if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a number like '450' (or '3' to cancel).");
         biz.sessionData.lastItem.unit = unit;
         biz.sessionData.items = biz.sessionData.items || [];
         biz.sessionData.items.push(biz.sessionData.lastItem);
+        // reset step flags
         biz.sessionData.lastItem = null;
         biz.sessionData.awaitingItemDesc = false;
         await biz.save();
-        return sendTwimlText(res, `Item added. Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Done (generate invoice)\n3) Cancel`);
+        // give clear options including text-based finish options
+        return sendTwimlText(res, `Item added. Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Done (generate invoice) or type 'done'/'finish'\n3) Cancel`);
       }
+
+      // fallback in this state - show the add-item prompt if nothing matched
+      return sendTwimlText(res, "Send an item description (or reply 2/done to finish, 3 to cancel).");
     }
 
     if (state === "creating_invoice_confirm" && isSingleNumber) {

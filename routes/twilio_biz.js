@@ -291,6 +291,7 @@ router.post("/webhook", async (req, res) => {
         }
         biz.sessionState = "creating_invoice_choose_client";
         biz.sessionData = { items: [] };
+        biz.markModified('sessionData');
         await biz.save();
         return sendTwimlText(res, "Create Invoice — pick option:\n1) Use saved client\n2) New client\n3) Cancel");
       }
@@ -429,6 +430,7 @@ Type 'menu' to return here anytime.`);
       if (!cname) return sendTwimlText(res, "Please send a client name.");
       biz.sessionData.clientName = cname;
       biz.sessionState = "adding_client_phone";
+      biz.markModified('sessionData');
       await biz.save();
       return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 1 to cancel.");
     }
@@ -461,8 +463,9 @@ Type 'menu' to return here anytime.`);
         if (clients.length === 1) {
           const client = clients[0];
           biz.sessionData.client = client;
-          biz.sessionState = "creating_invoice_add_items";
           biz.sessionData.items = [];
+          biz.markModified('sessionData');
+          biz.sessionState = "creating_invoice_add_items";
           await biz.save();
           return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
         }
@@ -473,6 +476,7 @@ Type 'menu' to return here anytime.`);
         lines.push(`${clients.length+1}) New client`);
         biz.sessionState = "creating_invoice_choose_client_index";
         biz.sessionData.recentClients = clients;
+        biz.markModified('sessionData');
         await biz.save();
         return sendTwimlText(res, lines.join("\n"));
       }
@@ -490,13 +494,17 @@ Type 'menu' to return here anytime.`);
       if (!idx || idx < 1 || idx > clients.length + 1) return sendTwimlText(res, "Invalid selection. Reply the client number or choose New client.");
       if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await biz.save(); return sendTwimlText(res, "Client name?"); }
       const client = clients[idx-1];
-      biz.sessionData.client = client; biz.sessionState = "creating_invoice_add_items"; biz.sessionData.items = []; await biz.save();
+      biz.sessionData.client = client;
+      biz.sessionData.items = [];
+      biz.markModified('sessionData');
+      biz.sessionState = "creating_invoice_add_items";
+      await biz.save();
       return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
     }
 
     if (state === "creating_invoice_new_client") {
       if (!biz.sessionData.clientName && trimmed) {
-        biz.sessionData.clientName = trimmed; biz.sessionState = "creating_invoice_new_client_phone"; await biz.save();
+        biz.sessionData.clientName = trimmed; biz.sessionState = "creating_invoice_new_client_phone"; biz.markModified('sessionData'); await biz.save();
         return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 1 to cancel.");
       }
     }
@@ -510,7 +518,8 @@ Type 'menu' to return here anytime.`);
         { $set: { name: biz.sessionData.clientName, phone } },
         { new: true, upsert: true }
       );
-      biz.sessionData.client = client; biz.sessionData.items = []; biz.sessionState = "creating_invoice_add_items"; await biz.save();
+      biz.sessionData.client = client; biz.sessionData.items = []; biz.markModified('sessionData');
+      biz.sessionState = "creating_invoice_add_items"; await biz.save();
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
     }
 
@@ -532,7 +541,7 @@ Type 'menu' to return here anytime.`);
         // prepare price-entry index if needed
         biz.sessionState = "creating_invoice_enter_prices";
         biz.sessionData.priceIndex = 0;
-        biz.sessionData.items = items;
+        biz.markModified('sessionData');
         await biz.save();
         const next = biz.sessionData.items[0];
         return sendTwimlText(res, `Price entry: item 1) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
@@ -576,6 +585,7 @@ Type 'menu' to return here anytime.`);
         if (!desc) return sendTwimlText(res, "Send an item description (or reply 2 to enter prices).");
         biz.sessionData.awaitingItemDesc = true;
         biz.sessionData.lastItem = { description: desc };
+        biz.markModified('sessionData');
         await biz.save();
         return sendTwimlText(res, "Qty? (e.g. 1)");
       } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
@@ -586,11 +596,15 @@ Type 'menu' to return here anytime.`);
         // save item with unit=null (we'll collect prices in second phase)
         biz.sessionData.items = biz.sessionData.items || [];
         biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null });
+        // mark modified so mongoose persists nested changes
+        biz.markModified('sessionData');
         // clear lastItem but keep awaitingItemDesc false
         biz.sessionData.lastItem = null;
         biz.sessionData.awaitingItemDesc = false;
         await biz.save();
-        return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items\n3) Cancel`);
+
+        // Clear, explicit options so user can indicate they're done adding items and move to price-entry
+        return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items (or reply 'done'/'enter prices')\n3) Cancel`);
       } else {
         // fallback
         return sendTwimlText(res, "Send item description or reply 1/2/3.");
@@ -610,6 +624,7 @@ Type 'menu' to return here anytime.`);
       if (trimmed.toLowerCase() === "back") {
         biz.sessionState = "creating_invoice_add_items";
         delete biz.sessionData.priceIndex;
+        biz.markModified('sessionData');
         await biz.save();
         return sendTwimlText(res, "Back to adding items. Send next item description or reply '2' when ready to enter prices.");
       }
@@ -620,6 +635,7 @@ Type 'menu' to return here anytime.`);
         idx += 1;
         biz.sessionData.priceIndex = idx;
         biz.sessionData.items = items;
+        biz.markModified('sessionData');
         await biz.save();
       } else {
         // parse price
@@ -629,6 +645,7 @@ Type 'menu' to return here anytime.`);
         idx += 1;
         biz.sessionData.priceIndex = idx;
         biz.sessionData.items = items;
+        biz.markModified('sessionData');
         await biz.save();
       }
 
@@ -646,6 +663,7 @@ Type 'menu' to return here anytime.`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
+      biz.markModified('sessionData');
       await biz.save();
       return sendTwimlText(res, summary);
     }

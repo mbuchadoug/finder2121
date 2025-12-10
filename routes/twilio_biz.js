@@ -23,6 +23,19 @@ try {
   PDFDocument = null;
 }
 
+// optional: try to use puppeteer-core if present (or puppeteer)
+let puppeteer = null;
+try {
+  // prefer puppeteer-core/pupeteer if installed
+  puppeteer = await (async () => {
+    try { return (await import("puppeteer")).default || (await import("puppeteer")); } catch (e) {}
+    try { return (await import("puppeteer-core")).default || (await import("puppeteer-core")); } catch (e) {}
+    return null;
+  })();
+} catch (e) {
+  puppeteer = null;
+}
+
 const router = Router();
 router.use(express.urlencoded({ extended: true }));
 
@@ -73,7 +86,7 @@ async function saveBiz(biz) {
   }
 }
 
-/* verification: prefer TWILIO_BIZ_AUTH_TOKEN, fallback to TWILIO_AUTH_TOKEN */
+/* ---------- Twilio request verification (unchanged) ---------- */
 function verifyTwilioRequest(req) {
   if (process.env.DEBUG_TWILIO_BIZ_SKIP_VERIFY === "1" || process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY (biz): DEBUG skip enabled");
@@ -120,7 +133,7 @@ async function loadCounters() {
 async function saveCounters(obj) { await ensureDataDir(); await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8"); }
 async function incrementCounter(type) { const counters = await loadCounters(); if (!counters[type]) counters[type] = 0; counters[type] = Number(counters[type]) + 1; await saveCounters(counters); return counters[type]; }
 
-/* ---------- PDF helpers (keeps your pdfkit generate) ---------- */
+/* ---------- PDF helpers (attempt puppeteer HTML render, fallback to pdfkit) ---------- */
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
@@ -130,7 +143,48 @@ async function ensurePublicSubdirs() {
   return base;
 }
 
-function drawTable(doc, items, startX, startY, columnWidths) {
+/**
+ * Renders given HTML to a PDF file path using Puppeteer (preferred).
+ * Throws if puppeteer is not available or fails to launch.
+ */
+async function renderHtmlToPdf(html, filepath) {
+  if (!puppeteer) throw new Error("Puppeteer not available");
+  // launch options: prefer environment executable path if provided
+  const launchOptions = {
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+  };
+  // If user set an explicit executable path (for system Chrome/Chromium)
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  // Allow custom options via env (stringified JSON)
+  if (process.env.PUPPETEER_LAUNCH_OPTS) {
+    try {
+      const extra = JSON.parse(process.env.PUPPETEER_LAUNCH_OPTS);
+      Object.assign(launchOptions, extra);
+    } catch (e) {
+      console.warn("Invalid PUPPETEER_LAUNCH_OPTS JSON, ignoring");
+    }
+  }
+
+  // Try to launch
+  const browser = await puppeteer.launch(launchOptions);
+  try {
+    const page = await browser.newPage();
+    // allow remote content (bootstrap), set timeout
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+    await page.emulateMediaType("screen");
+    await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "20mm", bottom: "20mm", left: "12mm", right: "12mm" } });
+  } finally {
+    try { await browser.close(); } catch (e) {}
+  }
+}
+
+/**
+ * Fallback pdfkit generator (keeps the earlier simple layout)
+ * used if Puppeteer isn't available or fails.
+ */
+function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
   let y = startY;
   doc.fontSize(10).fillColor("black");
@@ -151,225 +205,212 @@ function drawTable(doc, items, startX, startY, columnWidths) {
   return y;
 }
 
-/* ---------- Existing pdfkit-based generator (keeps original look/logic) ---------- */
-async function generatePDF_pdfkit({ type, number, date, dueDate, billingTo, email, items = [], notes = "" }) {
-  if (!PDFDocument) throw new Error("pdfkit not available. Install with: npm install pdfkit");
+async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", bizMeta = {} }) {
+  // try HTML -> PDF via Puppeteer first (preferred)
   const baseDir = await ensurePublicSubdirs();
   const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
+
+  // Build HTML from template (bootstrap 3.3.7 + your layout)
+  function buildHtml() {
+    const typeLabel = type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT";
+    const companyName = bizMeta.name || "";
+    const logoUrl = bizMeta.logoUrl || "";
+    const companyAddress = bizMeta.address || "";
+    const itemsRowsHtml = items.map(it => {
+      const line = `
+        <tr>
+          <td style="text-align:center; width:8%">${it.qty || it.quantity || 1}</td>
+          <td style="text-align:center; width:18%">${escapeHtml(it.item || it.description || "")}</td>
+          <td style="text-align:left; width:34%">${escapeHtml(it.description || "")}</td>
+          <td style="text-align:center; width:12%">${formatMoney(it.unit||it.rate||0)}</td>
+          <td style="text-align:center; width:8%">${it.discount ? escapeHtml(String(it.discount)): "0"}</td>
+          <td style="text-align:center; width:20%">${formatMoney((Number(it.qty||it.quantity||0)) * (Number(it.unit||it.rate||0)))}</td>
+        </tr>
+      `;
+      return line;
+    }).join("\n");
+
+    const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
+    const taxRate = bizMeta.taxRate || 0;
+    const tax = +(subtotal * (taxRate/100));
+    const total = subtotal + tax;
+
+    // Basic escape helper
+    return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>${escapeHtml(typeLabel)} ${escapeHtml(number)}</title>
+  <!-- Bootstrap 3.3.7 -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <style>
+    @page{ margin:0; }
+    body{ font-family: Arial, Helvetica, sans-serif; padding:18px; color:#222; }
+    .top{ display:flex; align-items:center; justify-content:space-between; }
+    .brand{ display:flex; align-items:center; gap:12px; }
+    .brand img{ max-height:90px; max-width:200px; object-fit:contain; }
+    .company-name{ font-size:20px; font-weight:700; }
+    .meta{text-align:right;}
+    .meta h2{ margin:0; font-size:18px; color:#333; }
+    table.items{ width:100%; border-collapse:collapse; margin-top:18px; }
+    table.items th, table.items td{ border:1px solid #222; padding:8px; font-size:12px; }
+    table.items th{ background:#f2f2f2; font-weight:700; text-align:center; }
+    .totals{ width:320px; float:right; margin-top:12px; border:1px solid #222; border-collapse:collapse; }
+    .totals td{ padding:8px; border-bottom:1px solid #222; }
+    .totals tr:last-child td{ font-weight:800; font-size:14px; }
+    .logo-text{ font-size:18px; font-weight:700; }
+    .watermark{ position: fixed; left:0; top:140px; right:0; opacity:0.06; text-align:center; font-size:72px; transform: rotate(-20deg); pointer-events:none; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">
+      ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="logo" />` : `<div class="logo-text">${escapeHtml(companyName)}</div>`}
+      <div>
+        <div class="company-name">${escapeHtml(companyName)}</div>
+        <div style="font-size:12px; color:#555;">${escapeHtml(companyAddress)}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div style="font-weight:700; font-size:16px">${escapeHtml(typeLabel)}</div>
+      <div style="margin-top:6px">No: <strong>${escapeHtml(number)}</strong></div>
+      <div style="margin-top:6px">Date: ${escapeHtml(date.toISOString().slice(0,10))}</div>
+      ${ dueDate ? `<div>Due: ${escapeHtml(dueDate.toISOString().slice(0,10))}</div>` : ""}
+    </div>
+  </div>
+
+  <div style="margin-top:18px; display:flex; justify-content:space-between;">
+    <div>
+      <div style="font-size:12px; color:#666;">Bill To</div>
+      <div style="font-weight:700; margin-top:6px;">${escapeHtml(billingTo || "")}</div>
+      ${ email ? `<div style="font-size:12px; color:#666;">${escapeHtml(email)}</div>` : "" }
+    </div>
+
+    <div style="text-align:right; font-size:12px; color:#666;">
+      Document #: <strong>${escapeHtml(number)}</strong>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:6%;">Qty</th>
+        <th style="width:18%;">Item</th>
+        <th style="width:34%;">Description</th>
+        <th style="width:12%;">Rate ($)</th>
+        <th style="width:8%;">Discount (%)</th>
+        <th style="width:20%;">Amount ($)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsRowsHtml}
+    </tbody>
+  </table>
+
+  <table class="totals" cellpadding="0" cellspacing="0">
+    <tr><td style="width:60%;">Subtotal</td><td style="text-align:right;">${formatMoney(subtotal)}</td></tr>
+    <tr><td>Tax (${taxRate}%)</td><td style="text-align:right;">${formatMoney(tax)}</td></tr>
+    <tr><td>Total</td><td style="text-align:right;">${formatMoney(total)}</td></tr>
+  </table>
+
+  ${ notes ? `<div style="clear:both; margin-top:16px; border-left:4px solid #1f6feb; background:#fbfdff; padding:10px; border-radius:4px;">${escapeHtml(notes)}</div>` : "" }
+
+  <div style="clear:both; margin-top:36px; font-size:11px; color:#666;">
+    <div>Bank details: Account 0150011578801 • InnBucks • Borrowdale</div>
+    <div>Tax Number: 2001220346</div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  // small helper: escape HTML
+  function escapeHtml(s) {
+    if (s === undefined || s === null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // Try puppeteer first
+  try {
+    const html = buildHtml();
+    if (puppeteer) {
+      try {
+        await renderHtmlToPdf(html, filepath);
+        return { filepath, filename, method: "puppeteer" };
+      } catch (e) {
+        // If puppeteer fails, log and fall back
+        console.error("generatePDF: Puppeteer render failed:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
+        // continue to pdfkit fallback
+      }
+    } else {
+      console.info("generatePDF: puppeteer not installed; falling back to pdfkit");
+    }
+  } catch (errHtml) {
+    console.warn("generatePDF: building HTML failed, falling back to pdfkit", errHtml && errHtml.message);
+  }
+
+  // Fallback: pdfkit (keeps original behavior)
+  if (!PDFDocument) throw new Error("pdfkit not available. Install with: npm install pdfkit");
+
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: "A4", margin: 50 });
       const stream = fs.createWriteStream(filepath);
       doc.pipe(stream);
-      const logoPath = path.join(process.cwd(), "public", "docs", "logo.png");
-      if (fs.existsSync(logoPath)) { try { doc.image(logoPath, 50, 45, { width: 90 }); } catch (e) {} }
+
+      // header (logo or company name)
+      if (bizMeta.logoUrl && bizMeta.logoUrl.startsWith("http")) {
+        // attempt to download inline image for pdfkit - skipping network in this simple fallback
+        try {
+          // if local logo exists in public/docs/logos we can embed
+          const localLogo = path.join(process.cwd(), "public", "docs", "logos", `logo-${bizMeta._id || "biz"}.png`);
+          if (fs.existsSync(localLogo)) doc.image(localLogo, 50, 45, { width: 90 });
+        } catch (e) {}
+      } else if (bizMeta.name) {
+        doc.fontSize(18).text(bizMeta.name, 50, 50);
+      }
+
       doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
       doc.fontSize(10).fillColor("#333").text(`No: ${number}`, 400, 75, { align: "right" });
       doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
       if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, 400, 105, { align: "right" });
+
       doc.moveDown(2);
       doc.fontSize(12).fillColor("#000").text("Bill To:", 50, 140);
       doc.fontSize(11).fillColor("#111").text(billingTo || "-", 50, 155);
       if (email) doc.fontSize(10).fillColor("#666").text(email, 50, 170);
+
       const startY = 210;
       const columnWidths = [260, 60, 80, 80];
-      const afterTableY = drawTable(doc, items, 50, startY, columnWidths);
+      const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths);
       let subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
       const tax = 0;
       const total = subtotal + tax;
-      // add boxed totals
-      const totalsX = 400;
-      let ty = afterTableY + 10;
-      doc.rect(totalsX - 10, ty - 6, 170, 70).strokeOpacity(0.06).stroke();
-      doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal)}`, totalsX, ty, { align: "right" });
-      if (tax) doc.text(`Tax: ${formatMoney(tax)}`, totalsX, ty + 15, { align: "right" });
-      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, totalsX, ty + 35, { align: "right" });
+      // Draw totals with a simple border
+      const tx = 400, ty = afterTableY + 10;
+      doc.rect(tx - 10, ty - 6, 180, 60).strokeOpacity(0.08).stroke();
+      doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal)}`, tx, ty, { align: "right" });
+      if (tax) doc.text(`Tax: ${formatMoney(tax)}`, tx, ty + 15, { align: "right" });
+      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 30, { align: "right" });
+
       if (notes) { doc.moveDown(2); doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80); doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 }); }
+
       doc.fontSize(9).fillColor("gray").text("-----------", 50, 760, { align: "center", width: 500 });
+
       doc.end();
-      stream.on("finish", () => resolve({ filepath, filename }));
+      stream.on("finish", () => resolve({ filepath, filename, method: "pdfkit" }));
       stream.on("error", (err) => reject(err));
     } catch (err) { reject(err); }
   });
-}
 
-/* ---------- Puppeteer HTML builder + PDF renderer ---------- */
-
-function buildHtmlForDoc({ type, number, date, dueDate, billingTo, email, items = [], notes = "", company = {} }) {
-  // basic HTML that follows your requested design. You can expand or replace this with handlebars/template.
-  const logo = company.logoUrl || "";
-  const companyName = company.name || "";
-  const companyAddress = company.address || "";
-  const tax = 0;
-  const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-  const total = subtotal + tax;
-
-  // escape helper
-  const esc = (s) => (s === undefined || s === null) ? "" : String(s);
-
-  const rows = items.map(it => `
-    <tr>
-      <td style="padding:8px;border:1px solid #ddd">${esc(it.description)}</td>
-      <td style="padding:8px;border:1px solid #ddd;text-align:right;width:80px">${esc(it.qty)}</td>
-      <td style="padding:8px;border:1px solid #ddd;text-align:right;width:120px">${formatMoney(it.unit||0)}</td>
-      <td style="padding:8px;border:1px solid #ddd;text-align:right;width:120px">${formatMoney((it.qty||0)*(it.unit||0))}</td>
-    </tr>
-  `).join("\n");
-
-  return `<!doctype html>
-  <html>
-  <head>
-    <meta charset="utf-8"/>
-    <title>${esc(type)} ${esc(number)}</title>
-    <style>
-      body{font-family:Arial, Helvetica, sans-serif;color:#222;margin:0;padding:24px}
-      .wrap{max-width:900px;margin:0 auto;background:#fff;padding:20px}
-      .header{display:flex;justify-content:space-between;align-items:center}
-      .brand{display:flex;align-items:center;gap:12px}
-      .brand img{height:70px}
-      .meta{text-align:right;color:#666}
-      table{width:100%;border-collapse:collapse;margin-top:18px}
-      table th{background:#f4f6f8;padding:10px;border:1px solid #ddd;text-align:left}
-      table td{padding:8px;border:1px solid #ddd}
-      .totals{width:320px;margin-left:auto;margin-top:14px;border:1px solid #ddd;border-collapse:collapse}
-      .totals td{padding:8px}
-      .totals .label{background:#fafafa}
-      .company{font-weight:700}
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="header">
-        <div class="brand">
-          ${logo ? `<img src="${logo}" alt="logo" />` : `<div style="width:90px;height:70px;display:flex;align-items:center;justify-content:center;border:1px solid #ddd">${companyName}</div>`}
-          <div>
-            <div class="company">${esc(companyName)}</div>
-            <div style="color:#666">${esc(companyAddress)}</div>
-          </div>
-        </div>
-        <div class="meta">
-          <div style="font-weight:700">${esc(type).toUpperCase()}</div>
-          <div>No: <strong>${esc(number)}</strong></div>
-          <div style="color:#666">Date: ${esc(new Date(date).toISOString().slice(0,10))}</div>
-          ${dueDate ? `<div style="color:#666">Due: ${esc(new Date(dueDate).toISOString().slice(0,10))}</div>` : ""}
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;margin-top:18px">
-        <div>
-          <div style="color:#666">Bill To</div>
-          <div style="font-weight:600">${esc(billingTo)}</div>
-          <div style="color:#666">${esc(email)}</div>
-        </div>
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th style="width:55%">Description</th>
-            <th style="width:10%">Qty</th>
-            <th style="width:15%">Unit</th>
-            <th style="width:20%">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-
-      <table class="totals">
-        <tr>
-          <td class="label">Subtotal</td>
-          <td style="text-align:right">${formatMoney(subtotal)}</td>
-        </tr>
-        <tr>
-          <td class="label">Tax (${tax}%)</td>
-          <td style="text-align:right">${formatMoney(0)}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:700">Total</td>
-          <td style="text-align:right;font-weight:700">${formatMoney(total)}</td>
-        </tr>
-      </table>
-
-      ${notes ? `<div style="margin-top:18px;padding:10px;background:#fbfdff;border-left:4px solid #1f6feb">${esc(notes)}</div>` : ""}
-    </div>
-  </body>
-  </html>`;
-}
-
-async function tryImportPuppeteer() {
-  if (process.env.FORCE_PDFKIT === "1") return null;
-  try {
-    let pp;
-    try { pp = await import("puppeteer"); } catch (e) { pp = null; }
-    if (!pp) {
-      try { pp = require("puppeteer"); } catch (e) { pp = null; }
-    }
-    return pp;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function generatePDF_puppeteer({ type, number, date, dueDate, billingTo, email, items = [], notes = "" }, biz) {
-  const baseDir = await ensurePublicSubdirs();
-  const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
-  const filename = `${type}-${number}-${Date.now()}.pdf`;
-  const filepath = path.join(folder, filename);
-
-  const puppeteer = await tryImportPuppeteer();
-  if (!puppeteer) throw new Error("puppeteer not installed");
-
-  // build HTML
-  const company = { name: biz?.name || "", address: (biz?.address || ""), logoUrl: biz?.logoUrl || "" };
-  const html = buildHtmlForDoc({ type, number, date, dueDate, billingTo, email, items, notes, company });
-
-  // write temporary html file (not strictly necessary but handy for debugging)
-  const tmpHtmlPath = path.join(folder, `${type}-${number}-${Date.now()}.html`);
-  try { await fs.promises.writeFile(tmpHtmlPath, html, "utf8"); } catch (e) { /* ignore write errors */ }
-
-  // launch browser and render PDF
-  const puppeteerModule = puppeteer.default || puppeteer;
-  const browser = await puppeteerModule.launch({ args: ["--no-sandbox", "--disable-setuid-sandbox"] });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
-    await page.close();
-  } finally {
-    await browser.close();
-  }
-  // remove tmpHtml if exists (best-effort)
-  try { await fs.promises.unlink(tmpHtmlPath); } catch (e) {}
-
-  return { filepath, filename };
-}
-
-/* ---------- Unified generatePDF: try puppeteer then pdfkit ---------- */
-async function generatePDF(opts) {
-  // opts: { type, number, date, dueDate, billingTo, email, items, notes }
-  // try puppeteer first (if installed and server supports it), fall back to pdfkit
-  const bizCandidate = opts._biz || null; // optional: pass biz object for logo/company details if available
-  try {
-    const puppeteer = await tryImportPuppeteer();
-    if (puppeteer) {
-      try {
-        return await generatePDF_puppeteer(opts, bizCandidate);
-      } catch (err) {
-        console.warn("generatePDF: puppeteer failed, falling back to pdfkit:", err && (err.message || err));
-      }
-    } else {
-      console.warn("generatePDF: puppeteer not available, using pdfkit fallback");
-    }
-  } catch (e) {
-    console.warn("generatePDF: puppeteer import attempt failed:", e && e.message);
-  }
-
-  // fallback to pdfkit implementation
-  return generatePDF_pdfkit(opts);
 }
 
 /* ---------- Logo saving helpers ---------- */
@@ -401,7 +442,7 @@ function sendMenu(res) {
   return sendTwimlText(res, msg);
 }
 
-/* ---------- Main webhook (numbers-only commands) ---------- */
+/* ---------- Main webhook (keeps your flow intact) ---------- */
 router.post("/webhook", async (req, res) => {
   console.log("TWILIO (biz): webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
   try { console.log("TWILIO (biz): body (raw):", JSON.stringify(req.body)); } catch (e) { console.log("TWILIO (biz): body keys:", Object.keys(req.body || {})); }
@@ -420,7 +461,6 @@ router.post("/webhook", async (req, res) => {
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
-    // find or create business (one number => one business)
     let biz = await Business.findOne({ provider: "whatsapp", providerId });
     if (!biz) {
       biz = await Business.create({
@@ -447,30 +487,23 @@ router.post("/webhook", async (req, res) => {
     const text = bodyRaw || "";
     const trimmed = text.trim();
 
-    // Always allow 'menu' or '0' to show main menu and reset session
     if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
       await resetSession(biz);
       return sendMenu(res);
     }
 
-    // If biz not named and no session, start onboarding prompt
     if (!biz.name && !biz.sessionState) {
       biz.sessionState = "awaiting_first_choice";
       await saveBiz(biz);
       return sendTwimlText(res, `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo\n3) Help\nReply with a number.`);
     }
 
-    // TOP-LEVEL: Strictly accept only numeric single-digit commands for main menu
     const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
-
-    // DEBUG LOG
-    console.log("TWILIO (biz): incoming trimmed:", JSON.stringify(trimmed), "sessionState:", state, "isSingleNumber:", isSingleNumber);
 
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
       const num = trimmed;
-      // 1 - Create business
       if (num === "1") {
         if (biz.name) return sendTwimlText(res, `You already have a business: "${biz.name}". Reply 5 for settings.`);
         biz.sessionState = "awaiting_business_name";
@@ -479,7 +512,7 @@ router.post("/webhook", async (req, res) => {
         return sendTwimlText(res, "Great — what's your business name? (e.g. 'ABC Traders')");
       }
 
-      // 2 - New invoice / 7 - New quotation / 8 - New receipt (reuse invoice flow but set docType)
+      // 2 invoice, 7 quote, 8 receipt
       if (num === "2" || num === "7" || num === "8") {
         if (!biz.name) {
           biz.sessionState = "awaiting_first_choice"; await saveBiz(biz);
@@ -497,7 +530,6 @@ router.post("/webhook", async (req, res) => {
         return sendTwimlText(res, `Create ${label} — pick option:\n1) Use saved client\n2) New client\n3) Cancel`);
       }
 
-      // 3 - Add client
       if (num === "3") {
         if (!biz.name) { biz.sessionState = "awaiting_first_choice"; await saveBiz(biz); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
         biz.sessionState = "adding_client_name";
@@ -505,14 +537,12 @@ router.post("/webhook", async (req, res) => {
         await saveBiz(biz);
         return sendTwimlText(res, "Adding client — what's the client name?");
       }
-      // 4 - Upload logo
       if (num === "4") {
         biz.sessionState = "awaiting_logo_upload";
         biz.sessionData = {};
         await saveBiz(biz);
         return sendTwimlText(res, "Please send your business logo (as an image). Reply 1 to skip.");
       }
-      // 5 - Settings
       if (num === "5") {
         biz.sessionState = "settings_menu";
         await saveBiz(biz);
@@ -528,7 +558,6 @@ router.post("/webhook", async (req, res) => {
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
       }
-      // 6 - Help
       if (num === "6") {
         return sendTwimlText(res, `Help — reply with numbers only:
 1) Create business account
@@ -541,8 +570,6 @@ Reply with number to edit.`;
 8) New receipt
 Type 'menu' to return here anytime.`);
       }
-
-      // unknown number
       return sendMenu(res);
     }
 
@@ -748,59 +775,49 @@ Type 'menu' to return here anytime.`);
     if (state === "creating_invoice_add_items") {
       const lowered = trimmed.toLowerCase();
 
-      // commands recognized when not in the middle of typing qty:
       const isCancel = trimmed === "3" || /(^|\s)(cancel|abort|stop)(\s|$)/.test(lowered);
       const wantsEnterPrices = trimmed === "2" || /(^|\s)(prices|enter prices|enter price|enterprices)(\s|$)/.test(lowered);
-      const wantsAddAnother = trimmed === "1"; // only used when not entering qty
+      const wantsAddAnother = trimmed === "1";
 
-      // IMPORTANT: if we're currently awaiting a qty for a just-sent description,
-      // treat a numeric reply as the qty (priority over '1' means qty '1' is accepted).
+      // expecting qty if awaitingItemDesc
       if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && (!biz.sessionData.lastItem.qty)) {
-        // expecting qty
         const qty = Number(trimmed);
         if (isNaN(qty) || qty <= 0) {
-          // allow user to cancel while waiting for qty
           if (trimmed === "3") { await resetSession(biz); return sendTwimlText(res, "Cancelled. Reply 'menu' to start again."); }
           return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
         }
-        // save item (unit null for now)
         biz.sessionData.lastItem.qty = qty;
         biz.sessionData.items = biz.sessionData.items || [];
-        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null });
+        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null, item: biz.sessionData.lastItem.description });
         biz.sessionData.lastItem = null;
         biz.sessionData.awaitingItemDesc = false;
         await saveBiz(biz);
         return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items\n3) Cancel`);
       }
 
-      // If the user asked to cancel
       if (isCancel) {
         await resetSession(biz);
         return sendTwimlText(res, "Invoice creation cancelled.");
       }
 
-      // If user explicitly wants to enter prices now (and we are not waiting for qty)
       if (wantsEnterPrices) {
-        const items = biz.sessionData.items || [];
-        if (!items.length) return sendTwimlText(res, "No items added yet. Send an item description first.");
+        const itemsArr = biz.sessionData.items || [];
+        if (!itemsArr.length) return sendTwimlText(res, "No items added yet. Send an item description first.");
         biz.sessionState = "creating_invoice_enter_prices";
         biz.sessionData.priceIndex = 0;
-        biz.sessionData.items = items;
+        biz.sessionData.items = itemsArr;
         await saveBiz(biz);
         const next = biz.sessionData.items[0];
         return sendTwimlText(res, `Price entry: item 1) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
       }
 
-      // If user chooses to add another item (and not in qty mode), prompt for description
       if (wantsAddAnother) {
-        // start a fresh item description flow
         biz.sessionData.awaitingItemDesc = false;
         biz.sessionData.lastItem = null;
         await saveBiz(biz);
         return sendTwimlText(res, "Send next item description:");
       }
 
-      // Otherwise treat as free text => expecting new description
       if (!biz.sessionData.awaitingItemDesc) {
         const desc = trimmed;
         if (!desc) return sendTwimlText(res, "Send an item description (or reply 2 to enter prices).");
@@ -810,12 +827,11 @@ Type 'menu' to return here anytime.`);
         return sendTwimlText(res, "Qty? (e.g. 1)");
       }
 
-      // fallback
       return sendTwimlText(res, "Send item description or reply 1/2/3.");
     }
 
     //
-    // Price-entry flow: walk through items with missing price
+    // Price-entry flow
     //
     if (state === "creating_invoice_enter_prices") {
       const items = biz.sessionData.items || [];
@@ -826,7 +842,6 @@ Type 'menu' to return here anytime.`);
       }
 
       const lowered = trimmed.toLowerCase();
-      // allow 'back' to return to adding items before finishing pricing
       if (lowered === "back") {
         biz.sessionState = "creating_invoice_add_items";
         delete biz.sessionData.priceIndex;
@@ -834,7 +849,6 @@ Type 'menu' to return here anytime.`);
         return sendTwimlText(res, "Back to adding items. Send next item description or reply '2' when ready to enter prices.");
       }
 
-      // allow 'skip' to set price 0
       if (/^skip$/i.test(trimmed)) {
         items[idx].unit = 0;
         idx += 1;
@@ -851,7 +865,6 @@ Type 'menu' to return here anytime.`);
         await saveBiz(biz);
       }
 
-      // If still have items to price
       if (idx < (biz.sessionData.items || []).length) {
         const next = biz.sessionData.items[idx];
         return sendTwimlText(res, `Price entry: item ${idx+1}) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
@@ -872,12 +885,11 @@ Type 'menu' to return here anytime.`);
     }
 
     //
-    // Confirmation: generate invoice/quote/receipt or add more items
+    // Confirmation: generate invoice/quote/receipt
     //
     if (state === "creating_invoice_confirm" && isSingleNumber) {
       const choice = trimmed;
       if (choice === "1") {
-        // back to item adding mode
         biz.sessionState = "creating_invoice_add_items";
         await saveBiz(biz);
         return sendTwimlText(res, "Send next item description:");
@@ -887,19 +899,15 @@ Type 'menu' to return here anytime.`);
         const client = biz.sessionData.client;
         const docType = (biz.sessionData.docType || "invoice"); // "invoice" | "quote" | "receipt"
 
-        // ensure counters object
         biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
-        // pick counter field name
         const counterKey = docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt";
         biz.counters[counterKey] = (biz.counters[counterKey] || 0) + 1;
 
-        // choose prefix field
         const prefix = docType === "invoice" ? (biz.invoicePrefix || "INV") : docType === "quote" ? (biz.quotePrefix || "QT") : (biz.receiptPrefix || "RCPT");
         const numberStr = `${prefix}-${String(biz.counters[counterKey]).padStart(6, "0")}`;
 
         const date = new Date();
         try {
-          // pass biz as optional _biz to give puppeteer access to logo/name
           const { filename } = await generatePDF({
             type: docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt",
             number: numberStr,
@@ -909,7 +917,7 @@ Type 'menu' to return here anytime.`);
             email: client?.email || "",
             items,
             notes: "",
-            _biz: biz
+            bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", taxRate: biz.taxRate || 0, _id: biz._id?.toString() }
           });
           // save updated counters
           await saveBiz(biz);
@@ -920,7 +928,7 @@ Type 'menu' to return here anytime.`);
           const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
           return sendTwimlWithMedia(res, `${label} ${numberStr} created. Download: ${url}`, [url]);
         } catch (e) {
-          console.error("document PDF failed", e);
+          console.error("document PDF failed", e && (e.stack || e.message) ? (e.stack || e.message) : e);
           return sendTwimlText(res, `Failed to generate ${docType} PDF; check server logs.`);
         }
       } else {
@@ -928,7 +936,7 @@ Type 'menu' to return here anytime.`);
       }
     }
 
-    // Fallback - show menu
+    // fallback
     return sendMenu(res);
 
   } catch (err) {

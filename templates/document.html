@@ -3,88 +3,238 @@
 <head>
 <meta charset="utf-8" />
 <title>{{type}} {{number}}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  :root{--accent:#1f6feb;--muted:#666;--panel:#f8f9fb}
-  body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:#222; padding:28px}
-  .wrap{max-width:800px;margin:0 auto;background:#fff;padding:28px;border-radius:8px;box-shadow:0 6px 24px rgba(12,20,40,0.06)}
-  header{display:flex;justify-content:space-between;align-items:start}
-  .brand{display:flex;gap:12px;align-items:center}
-  .brand img{height:56px}
-  h1{margin:0;font-size:18px}
-  .meta{text-align:right;color:var(--muted)}
-  table.lines{width:100%;margin-top:20px;border-collapse:collapse}
-  table.lines th, table.lines td{padding:12px;border-bottom:1px solid #eef2f6;text-align:left}
-  table.lines th{background:var(--panel);color:#333;font-weight:600}
-  .totals{margin-top:18px;display:flex;justify-content:flex-end}
-  .totals table{border-collapse:collapse}
-  .totals td{padding:6px 12px}
-  .accent{color:var(--accent);font-weight:700}
-  footer{margin-top:26px;color:var(--muted);font-size:13px}
-  .small{font-size:12px;color:var(--muted)}
+  :root{
+    --accent:#1f6feb;
+    --muted:#666;
+    --panel:#f6f8fb;
+    --line:#e6ecf5;
+    --box:#fbfdff;
+    --text:#222;
+    --mono: "Courier New", Courier, monospace;
+  }
+
+  /* page */
+  body{
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color:var(--text);
+    padding:28px;
+    background:#f3f6fb;
+  }
+  .wrap{
+    max-width:900px;
+    margin:0 auto;
+    background:#fff;
+    padding:28px;
+    border-radius:10px;
+    box-shadow:0 8px 30px rgba(12,20,40,0.06);
+    border:1px solid #f0f3f8;
+  }
+
+  /* header */
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .brand{display:flex;gap:14px;align-items:center}
+  .logo {
+    width:84px;height:84px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    background:var(--panel);overflow:hidden;border:1px solid var(--line);
+    font-weight:700;color:var(--accent);font-size:18px;
+  }
+  .logo img{width:100%;height:100%;object-fit:contain;display:block}
+  .company {
+    line-height:1.05;
+  }
+  .company h1{margin:0;font-size:20px}
+  .company .addr{margin-top:6px;font-size:13px;color:var(--muted)}
+
+  .meta{text-align:right;color:var(--muted);min-width:220px}
+  .meta .type{font-size:13px;color:#fff;background:var(--accent);display:inline-block;padding:6px 10px;border-radius:6px;font-weight:700}
+  .meta .no{font-weight:700;margin-top:8px;display:block;font-size:15px;color:var(--text)}
+  .meta .small{font-size:13px;color:var(--muted);margin-top:6px}
+
+  /* bill to / from */
+  .party {
+    display:flex;justify-content:space-between;gap:20px;margin-top:18px;
+    align-items:flex-start;
+  }
+  .party .left, .party .right { width:48% }
+  .label { font-size:13px;color:var(--muted); margin-bottom:6px }
+  .val { font-weight:600; margin-bottom:4px }
+
+  /* lines table */
+  table.lines{width:100%;margin-top:18px;border-collapse:collapse;font-size:14px}
+  table.lines thead th{
+    text-align:left;padding:10px 12px;background:var(--panel);color:#222;font-weight:700;border-bottom:2px solid var(--line);
+  }
+  table.lines tbody td{
+    padding:12px;border-bottom:1px solid var(--line);vertical-align:middle;
+  }
+
+  /* numeric columns */
+  .tx-right { text-align:right; font-variant-numeric: tabular-nums; font-family: var(--mono), monospace; }
+  .muted { color:var(--muted); font-size:13px }
+
+  /* discount small */
+  .small-muted{font-size:12px;color:var(--muted)}
+
+  /* totals box */
+  .totals-wrap{display:flex;justify-content:flex-end;margin-top:18px}
+  .totals{
+    width:360px;border:1px solid var(--line);background:linear-gradient(180deg,#fff,#fbfdff);padding:12px;border-radius:6px;
+  }
+  .totals table{width:100%;border-collapse:collapse;font-size:14px}
+  .totals td{padding:8px 6px}
+  .totals .label{color:var(--muted);font-size:13px}
+  .totals .amount { text-align:right; font-variant-numeric:tabular-nums; font-family: var(--mono), monospace; }
+  .totals .total-row{border-top:2px solid var(--line);padding-top:10px;margin-top:10px;font-weight:800;font-size:16px}
+  .totals .box{border:1px dashed var(--line);padding:8px;border-radius:6px;background:#fcfeff;margin-top:8px}
+
+  /* footer & notes */
   .note{background:#fbfdff;border-left:4px solid var(--accent);padding:10px;margin-top:12px;border-radius:4px}
+  footer{margin-top:24px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .small{font-size:12px;color:var(--muted)}
+
+  /* responsive */
+  @media (max-width:720px){
+    .meta{text-align:left}
+    .party{flex-direction:column}
+    .party .left, .party .right { width:100% }
+    .totals-wrap{justify-content:flex-start}
+  }
 </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="brand">
-        <img src="{{logoUrl}}" alt="logo" />
-        <div>
+        <!-- logo OR fallback to company name text -->
+        <div class="logo" aria-hidden="true">
+          {{#if logoUrl}}
+            <img src="{{logoUrl}}" alt="{{companyName}} logo" />
+          {{else}}
+            <!-- show initials or company name if no logo -->
+            <div style="padding:6px;text-align:center;">
+              {{#if companyInitials}}
+                {{companyInitials}}
+              {{else}}
+                {{companyName}}
+              {{/if}}
+            </div>
+          {{/if}}
+        </div>
+
+        <div class="company">
           <h1>{{companyName}}</h1>
-          <div class="small">{{companyAddress}}</div>
+          <div class="addr">{{companyAddress}}</div>
+          {{#if companyPhone}}<div class="small muted">{{companyPhone}}</div>{{/if}}
+          {{#if companyEmail}}<div class="small muted">{{companyEmail}}</div>{{/if}}
         </div>
       </div>
+
       <div class="meta">
-        <div><strong class="accent">{{typeLabel}}</strong></div>
-        <div><strong>{{number}}</strong></div>
-        <div class="small">Date: {{date}}</div>
-        {{#if dueDate}}<div class="small">Due: {{dueDate}}</div>{{/if}}
+        <div class="type">{{typeLabel}}</div>
+        <div class="no">{{number}}</div>
+        <div class="small">Date: <strong>{{date}}</strong></div>
+        {{#if dueDate}}<div class="small">Due: <strong>{{dueDate}}</strong></div>{{/if}}
       </div>
     </header>
 
-    <section style="display:flex;justify-content:space-between;margin-top:18px">
-      <div>
-        <div class="small">Bill To</div>
-        <div style="font-weight:600">{{customerName}}</div>
-        <div class="small">{{customerEmail}}</div>
+    <section class="party">
+      <div class="left">
+        <div class="label">Bill To</div>
+        <div class="val">{{customerName}}</div>
+        {{#if customerCompany}}<div class="small-muted">{{customerCompany}}</div>{{/if}}
+        {{#if customerAddress}}<div class="small-muted">{{customerAddress}}</div>{{/if}}
+        {{#if customerEmail}}<div class="small-muted">{{customerEmail}}</div>{{/if}}
+        {{#if customerPhone}}<div class="small-muted">{{customerPhone}}</div>{{/if}}
       </div>
-      <div class="small">
-        <div>Document #: <strong>{{number}}</strong></div>
+
+      <div class="right">
+        <div class="label">Document details</div>
+        <div class="small-muted">Document #: <strong>{{number}}</strong></div>
+        {{#if reference}}<div class="small-muted">Ref: <strong>{{reference}}</strong></div>{{/if}}
       </div>
     </section>
 
-    <table class="lines">
+    <table class="lines" role="table" aria-label="Line items">
       <thead>
-        <tr><th style="width:60%">Description</th><th style="width:10%">Qty</th><th style="width:15%">Unit</th><th style="width:15%">Amount</th></tr>
+        <tr>
+          <th style="width:8%">#</th>
+          <th style="width:36%">Description</th>
+          <th style="width:10%">Qty</th>
+          <th style="width:14%">Unit price</th>
+          <th style="width:10%">Discount</th>
+          <th style="width:8%">Tax %</th>
+          <th style="width:14%">Line total</th>
+        </tr>
       </thead>
       <tbody>
         {{#each items}}
         <tr>
-          <td>{{description}}</td>
-          <td>{{qty}}</td>
-          <td>{{unitPrice}}</td>
-          <td>{{lineTotal}}</td>
+          <td class="muted">{{@indexPlusOne}}</td>
+          <td>
+            <div style="font-weight:600">{{description}}</div>
+            {{#if notes}}<div class="small-muted">{{notes}}</div>{{/if}}
+          </td>
+          <td class="tx-right">{{qty}}</td>
+          <td class="tx-right">{{unitPrice}}</td>
+          <td class="tx-right">{{discount}}</td>
+          <td class="tx-right">{{taxPercent}}</td>
+          <td class="tx-right">{{lineTotal}}</td>
         </tr>
         {{/each}}
       </tbody>
     </table>
 
-    <div class="totals">
-      <table>
-        <tr><td class="small">Subtotal</td><td style="text-align:right">{{subtotal}}</td></tr>
-        <tr><td class="small">Tax ({{taxRate}}%)</td><td style="text-align:right">{{tax}}</td></tr>
-        <tr><td style="font-weight:700">Total</td><td style="text-align:right;font-weight:700">{{total}}</td></tr>
-      </table>
+    <div class="totals-wrap" aria-hidden="true">
+      <div class="totals" role="region" aria-label="Totals">
+        <table>
+          <tr>
+            <td class="label">Subtotal</td>
+            <td class="amount">{{subtotal}}</td>
+          </tr>
+          <tr>
+            <td class="label">Discounts</td>
+            <td class="amount">-{{totalDiscount}}</td>
+          </tr>
+          <tr>
+            <td class="label">Tax</td>
+            <td class="amount">{{totalTax}}</td>
+          </tr>
+          <tr class="total-row">
+            <td class="label">Total ({{currency}})</td>
+            <td class="amount">{{total}}</td>
+          </tr>
+        </table>
+
+        <!-- boxed summary (small accounting style) -->
+        <div class="box">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="small-muted">Amount payable</div>
+            <div style="font-weight:700;font-family:var(--mono)">{{total}}</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     {{#if notes}}
-    <div class="note">{{notes}}</div>
+    <div class="note" role="note">{{notes}}</div>
     {{/if}}
 
     <footer>
-      <div class="small">Bank details: Account 0150011578801 • InnBucks • Borrowdale</div>
-      <div class="small">Tax Number: 2001220346</div>
+      <div class="small">
+        {{#if bankDetails}}
+          Bank: {{bankDetails}}
+        {{else}}
+          Bank details not provided.
+        {{/if}}
+      </div>
+      <div class="small">
+        {{#if taxNumber}}Tax Number: {{taxNumber}}{{/if}}
+      </div>
     </footer>
   </div>
+
+  <!-- Handlebars helpers suggestion (not required here): @indexPlusOne helper to show 1-based index -->
 </body>
 </html>

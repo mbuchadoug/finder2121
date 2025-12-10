@@ -65,12 +65,18 @@ function normalizePhone(p) {
 
 /* Persist helper: reliably save sessionData & state and return fresh biz doc */
 async function persistBiz(biz) {
-  // only update the session parts and counters (avoid overwriting unrelated fields)
+  if (!biz || !biz._id) return biz;
   const update = {
+    name: biz.name || null,
     sessionState: biz.sessionState || null,
     sessionData: biz.sessionData || {},
+    counters: biz.counters || { invoice: 0, quote: 0, receipt: 0 },
+    currency: biz.currency || "ZWL",
+    invoicePrefix: biz.invoicePrefix || "INV",
+    quotePrefix: biz.quotePrefix || "QT",
+    paymentTermsDays: biz.paymentTermsDays || 30,
+    logoUrl: biz.logoUrl || null
   };
-  if (biz.counters) update.counters = biz.counters;
   const updated = await Business.findByIdAndUpdate(biz._id, { $set: update }, { new: true });
   return updated || biz;
 }
@@ -122,7 +128,7 @@ async function loadCounters() {
 async function saveCounters(obj) { await ensureDataDir(); await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8"); }
 async function incrementCounter(type) { const counters = await loadCounters(); if (!counters[type]) counters[type] = 0; counters[type] = Number(counters[type]) + 1; await saveCounters(counters); return counters[type]; }
 
-/* ---------- PDF helpers (keeps your generatePDF) ---------- */
+/* ---------- PDF helpers ---------- */
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
@@ -206,7 +212,7 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   return { filepath, filename, publicUrl };
 }
 
-async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; await persistBiz(biz); return biz; }
+async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return persistBiz(biz); }
 
 function sendMenu(res) {
   const msg = `ZimQuote — reply with a number:
@@ -253,11 +259,22 @@ router.post("/webhook", async (req, res) => {
         quotePrefix: "QT",
         paymentTermsDays: 30
       });
+      // ensure biz is fresh from DB
+      biz = await Business.findById(biz._id).lean ? await Business.findById(biz._id) : biz;
       console.log("TWILIO (biz): created business record", biz._id?.toString());
     }
 
+    // If Twilio profileName provided and biz has no name -> persist and mark ready
     if (profileName && !biz.name) {
-      biz.name = biz.name || profileName;
+      biz.name = profileName;
+      biz.sessionState = biz.sessionState || "ready";
+      biz.sessionData = biz.sessionData || {};
+      biz = await persistBiz(biz);
+    }
+
+    // If biz exists but sessionState missing, normalize to 'ready' so menus work
+    if (!biz.sessionState) {
+      biz.sessionState = "ready";
       biz = await persistBiz(biz);
     }
 
@@ -273,7 +290,7 @@ router.post("/webhook", async (req, res) => {
     // If biz not named and no session, start onboarding prompt
     if (!biz.name && !biz.sessionState) {
       biz.sessionState = "awaiting_first_choice";
-      biz = await persistBiz(biz);
+      await persistBiz(biz);
       return sendTwimlText(res, `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo\n3) Help\nReply with a number.`);
     }
 
@@ -281,7 +298,7 @@ router.post("/webhook", async (req, res) => {
     const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
-    // DEBUG LOG: shows incoming trimmed text and state (remove later if desired)
+    // DEBUG LOG
     console.log("TWILIO (biz): incoming trimmed:", JSON.stringify(trimmed), "sessionState:", state, "isSingleNumber:", isSingleNumber);
 
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
@@ -292,39 +309,39 @@ router.post("/webhook", async (req, res) => {
         if (biz.name) return sendTwimlText(res, `You already have a business: "${biz.name}". Reply 5 for settings.`);
         biz.sessionState = "awaiting_business_name";
         biz.sessionData = {};
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Great — what's your business name? (e.g. 'ABC Traders')");
       }
       // 2 - New invoice
       if (num === "2") {
         if (!biz.name) {
-          biz.sessionState = "awaiting_first_choice"; biz = await persistBiz(biz);
+          biz.sessionState = "awaiting_first_choice"; await persistBiz(biz);
           return sendTwimlText(res, "You need to create a business first. Reply 1 to create.");
         }
         biz.sessionState = "creating_invoice_choose_client";
         biz.sessionData = { items: [] };
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Create Invoice — pick option:\n1) Use saved client\n2) New client\n3) Cancel");
       }
       // 3 - Add client
       if (num === "3") {
-        if (!biz.name) { biz.sessionState = "awaiting_first_choice"; biz = await persistBiz(biz); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
+        if (!biz.name) { biz.sessionState = "awaiting_first_choice"; await persistBiz(biz); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
         biz.sessionState = "adding_client_name";
         biz.sessionData = {};
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Adding client — what's the client name?");
       }
       // 4 - Upload logo
       if (num === "4") {
         biz.sessionState = "awaiting_logo_upload";
         biz.sessionData = {};
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Please send your business logo (as an image). Reply 1 to skip.");
       }
       // 5 - Settings
       if (num === "5") {
         biz.sessionState = "settings_menu";
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         const sMsg = `Settings for ${biz.name || "(unnamed)"}:
 1) Currency (current: ${biz.currency || "ZWL"})
 2) Payment terms days (current: ${biz.paymentTermsDays || 30})
@@ -358,20 +375,20 @@ Type 'menu' to return here anytime.`);
       if (!name) return sendTwimlText(res, "Please send a business name (e.g. 'ABC Traders').");
       biz.name = name;
       biz.sessionState = "awaiting_logo_choice";
-      biz = await persistBiz(biz);
+      await persistBiz(biz);
       return sendTwimlText(res, `Thanks — "${name}".\nSend your logo image now, or reply 1 to skip, 2 to add later.`);
     }
 
     if (state === "awaiting_logo_choice") {
-      if (trimmed === "1") { biz.sessionState = "awaiting_currency"; biz = await persistBiz(biz); return sendTwimlText(res, `Logo skipped. What currency do you want? (ZWL, USD, ZAR)`); }
-      if (trimmed === "2") { biz.sessionState = "ready"; biz.sessionData = {}; biz = await persistBiz(biz); return sendTwimlText(res, `Setup finished. Reply menu to see commands.`); }
+      if (trimmed === "1") { biz.sessionState = "awaiting_currency"; await persistBiz(biz); return sendTwimlText(res, `Logo skipped. What currency do you want? (ZWL, USD, ZAR)`); }
+      if (trimmed === "2") { biz.sessionState = "ready"; biz.sessionData = {}; await persistBiz(biz); return sendTwimlText(res, `Setup finished. Reply menu to see commands.`); }
       return sendTwimlText(res, `Send an image file for your logo, or reply 1 to skip, 2 to add later.`);
     }
 
     if (state === "awaiting_currency") {
       const cur = trimmed.toUpperCase();
-      if (!["ZWL","USD","ZAR"].includes(cur)) { biz.sessionState = "awaiting_currency"; biz = await persistBiz(biz); return sendTwimlText(res, "Invalid currency. Reply ZWL, USD or ZAR."); }
-      biz.currency = cur; biz.sessionState = "ready"; biz = await persistBiz(biz);
+      if (!["ZWL","USD","ZAR"].includes(cur)) { biz.sessionState = "awaiting_currency"; await persistBiz(biz); return sendTwimlText(res, "Invalid currency. Reply ZWL, USD or ZAR."); }
+      biz.currency = cur; biz.sessionState = "ready"; await persistBiz(biz);
       return sendTwimlText(res, `All set! Business "${biz.name}" created with currency ${cur}. Reply 'menu' or 2 for New invoice.`);
     }
 
@@ -384,7 +401,7 @@ Type 'menu' to return here anytime.`);
         biz.logoUrl = saved.publicUrl;
         biz.sessionState = "awaiting_currency";
         biz.sessionData = {};
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, `Logo received. Now reply with currency: ZWL / USD / ZAR`);
       } catch (e) {
         console.error("logo save failed", e);
@@ -396,17 +413,17 @@ Type 'menu' to return here anytime.`);
     if (state === "settings_menu" && isSingleNumber) {
       const choice = trimmed;
       if (choice === "0") { await resetSession(biz); return sendMenu(res); }
-      if (choice === "1") { biz.sessionState = "settings_currency"; biz = await persistBiz(biz); return sendTwimlText(res, `Current currency: ${biz.currency || "ZWL"}. Reply with new currency (ZWL, USD, ZAR).`); }
-      if (choice === "2") { biz.sessionState = "settings_terms"; biz = await persistBiz(biz); return sendTwimlText(res, `Current payment terms: ${biz.paymentTermsDays || 30} days. Reply with new number.`); }
-      if (choice === "3") { biz.sessionState = "settings_inv_prefix"; biz = await persistBiz(biz); return sendTwimlText(res, `Current invoice prefix: ${biz.invoicePrefix || "INV"}. Reply with new prefix.`); }
-      if (choice === "4") { biz.sessionState = "settings_qt_prefix"; biz = await persistBiz(biz); return sendTwimlText(res, `Current quote prefix: ${biz.quotePrefix || "QT"}. Reply with new prefix.`); }
-      if (choice === "5") { biz.sessionState = "awaiting_logo_upload"; biz = await persistBiz(biz); return sendTwimlText(res, "Send new logo image now (or reply 1 to cancel)."); }
+      if (choice === "1") { biz.sessionState = "settings_currency"; await persistBiz(biz); return sendTwimlText(res, `Current currency: ${biz.currency || "ZWL"}. Reply with new currency (ZWL, USD, ZAR).`); }
+      if (choice === "2") { biz.sessionState = "settings_terms"; await persistBiz(biz); return sendTwimlText(res, `Current payment terms: ${biz.paymentTermsDays || 30} days. Reply with new number.`); }
+      if (choice === "3") { biz.sessionState = "settings_inv_prefix"; await persistBiz(biz); return sendTwimlText(res, `Current invoice prefix: ${biz.invoicePrefix || "INV"}. Reply with new prefix.`); }
+      if (choice === "4") { biz.sessionState = "settings_qt_prefix"; await persistBiz(biz); return sendTwimlText(res, `Current quote prefix: ${biz.quotePrefix || "QT"}. Reply with new prefix.`); }
+      if (choice === "5") { biz.sessionState = "awaiting_logo_upload"; await persistBiz(biz); return sendTwimlText(res, "Send new logo image now (or reply 1 to cancel)."); }
       if (choice === "6") {
         const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(50).lean();
-        if (!clients.length) { biz.sessionState = "settings_menu"; biz = await persistBiz(biz); return sendTwimlText(res, "No clients saved yet."); }
+        if (!clients.length) { biz.sessionState = "settings_menu"; await persistBiz(biz); return sendTwimlText(res, "No clients saved yet."); }
         let lines = ["Clients:"];
         clients.forEach((c,i)=> lines.push(`${i+1}) ${c.name} — ${c.phone || "no phone"}`));
-        biz.sessionState = "settings_menu"; biz = await persistBiz(biz);
+        biz.sessionState = "settings_menu"; await persistBiz(biz);
         return sendTwimlText(res, lines.join("\n"));
       }
       return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
@@ -415,23 +432,23 @@ Type 'menu' to return here anytime.`);
     if (state === "settings_currency") {
       const cur = trimmed.toUpperCase();
       if (!["ZWL","USD","ZAR"].includes(cur)) return sendTwimlText(res, "Invalid currency. Reply with ZWL, USD or ZAR.");
-      biz.currency = cur; biz.sessionState = "settings_menu"; biz = await persistBiz(biz);
+      biz.currency = cur; biz.sessionState = "settings_menu"; await persistBiz(biz);
       return sendTwimlText(res, `Currency updated to ${cur}. Back to settings.`);
     }
     if (state === "settings_terms") {
       const days = Number(trimmed);
       if (isNaN(days) || days < 0) return sendTwimlText(res, "Invalid number. Reply with e.g. 30.");
-      biz.paymentTermsDays = days; biz.sessionState = "settings_menu"; biz = await persistBiz(biz);
+      biz.paymentTermsDays = days; biz.sessionState = "settings_menu"; await persistBiz(biz);
       return sendTwimlText(res, `Payment terms updated to ${days} days. Back to settings.`);
     }
     if (state === "settings_inv_prefix") {
       if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
-      biz.invoicePrefix = trimmed; biz.sessionState = "settings_menu"; biz = await persistBiz(biz);
+      biz.invoicePrefix = trimmed; biz.sessionState = "settings_menu"; await persistBiz(biz);
       return sendTwimlText(res, `Invoice prefix set to ${trimmed}. Back to settings.`);
     }
     if (state === "settings_qt_prefix") {
       if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
-      biz.quotePrefix = trimmed; biz.sessionState = "settings_menu"; biz = await persistBiz(biz);
+      biz.quotePrefix = trimmed; biz.sessionState = "settings_menu"; await persistBiz(biz);
       return sendTwimlText(res, `Quote prefix set to ${trimmed}. Back to settings.`);
     }
 
@@ -441,11 +458,11 @@ Type 'menu' to return here anytime.`);
       if (!cname) return sendTwimlText(res, "Please send a client name.");
       biz.sessionData.clientName = cname;
       biz.sessionState = "adding_client_phone";
-      biz = await persistBiz(biz);
+      await persistBiz(biz);
       return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 1 to cancel.");
     }
     if (state === "adding_client_phone") {
-      if (trimmed === "1") { biz.sessionState = "ready"; biz.sessionData = {}; biz = await persistBiz(biz); return sendTwimlText(res, "Cancelled. Reply menu to continue."); }
+      if (trimmed === "1") { biz.sessionState = "ready"; biz.sessionData = {}; await persistBiz(biz); return sendTwimlText(res, "Cancelled. Reply menu to continue."); }
       const phoneRaw = trimmed;
       const phone = phoneRaw.toLowerCase() === "same" ? providerId : phoneRaw;
       const client = await Client.findOneAndUpdate(
@@ -453,7 +470,7 @@ Type 'menu' to return here anytime.`);
         { $set: { name: biz.sessionData.clientName, phone } },
         { new: true, upsert: true }
       );
-      biz.sessionData = {}; biz.sessionState = "ready"; biz = await persistBiz(biz);
+      biz.sessionData = {}; biz.sessionState = "ready"; await persistBiz(biz);
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Reply menu to continue.`);
     }
 
@@ -463,20 +480,21 @@ Type 'menu' to return here anytime.`);
       if (choice === "1") {
         const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(10).lean();
 
-        // No clients -> new
+        // No saved -> create new client flow
         if (!clients.length) {
           biz.sessionState = "creating_invoice_new_client";
-          biz = await persistBiz(biz);
+          biz.sessionData = {};
+          await persistBiz(biz);
           return sendTwimlText(res, "No saved clients. Please enter client name:");
         }
 
-        // If only one client, auto-select
+        // Auto-select when only one client exists
         if (clients.length === 1) {
           const client = clients[0];
           biz.sessionData.client = client;
+          biz.sessionData.items = []; // ensure items array exists
           biz.sessionState = "creating_invoice_add_items";
-          biz.sessionData.items = biz.sessionData.items || [];
-          biz = await persistBiz(biz);
+          await persistBiz(biz);
           return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
         }
 
@@ -486,11 +504,11 @@ Type 'menu' to return here anytime.`);
         lines.push(`${clients.length+1}) New client`);
         biz.sessionState = "creating_invoice_choose_client_index";
         biz.sessionData.recentClients = clients;
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, lines.join("\n"));
       }
       if (choice === "2") {
-        biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; biz = await persistBiz(biz);
+        biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await persistBiz(biz);
         return sendTwimlText(res, "Client name?");
       }
       if (choice === "3") { await resetSession(biz); return sendTwimlText(res, "Cancelled. Reply menu to start again."); }
@@ -501,26 +519,24 @@ Type 'menu' to return here anytime.`);
       const idx = Number(trimmed);
       const clients = biz.sessionData.recentClients || [];
       if (!idx || idx < 1 || idx > clients.length + 1) return sendTwimlText(res, "Invalid selection. Reply the client number or choose New client.");
-      if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; biz = await persistBiz(biz); return sendTwimlText(res, "Client name?"); }
+      if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await persistBiz(biz); return sendTwimlText(res, "Client name?"); }
       const client = clients[idx-1];
       biz.sessionData.client = client;
+      biz.sessionData.items = []; // ensure new invoice items start empty
       biz.sessionState = "creating_invoice_add_items";
-      biz.sessionData.items = biz.sessionData.items || [];
-      biz = await persistBiz(biz);
+      await persistBiz(biz);
       return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
     }
 
     if (state === "creating_invoice_new_client") {
       if (!biz.sessionData.clientName && trimmed) {
-        biz.sessionData.clientName = trimmed;
-        biz.sessionState = "creating_invoice_new_client_phone";
-        biz = await persistBiz(biz);
+        biz.sessionData.clientName = trimmed; biz.sessionState = "creating_invoice_new_client_phone"; await persistBiz(biz);
         return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 1 to cancel.");
       }
     }
 
     if (state === "creating_invoice_new_client_phone") {
-      if (trimmed === "1") { biz.sessionState = "ready"; biz.sessionData = {}; biz = await persistBiz(biz); return sendTwimlText(res, "Cancelled client creation."); }
+      if (trimmed === "1") { biz.sessionState = "ready"; biz.sessionData = {}; await persistBiz(biz); return sendTwimlText(res, "Cancelled client creation."); }
       const phoneRaw = trimmed;
       const phone = phoneRaw.toLowerCase() === "same" ? providerId : phoneRaw;
       const client = await Client.findOneAndUpdate(
@@ -528,29 +544,33 @@ Type 'menu' to return here anytime.`);
         { $set: { name: biz.sessionData.clientName, phone } },
         { new: true, upsert: true }
       );
-      biz.sessionData.client = client; biz.sessionData.items = []; biz.sessionState = "creating_invoice_add_items";
-      biz = await persistBiz(biz);
+      biz.sessionData.client = client;
+      biz.sessionData.items = []; // ensure items array created
+      biz.sessionState = "creating_invoice_add_items";
+      await persistBiz(biz);
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
     }
 
-    // Items loop: two-phase flow
+    /* ---------- Items loop: two-phase (descriptions+qty) then prices ---------- */
     if (state === "creating_invoice_add_items") {
       const lowered = trimmed.toLowerCase();
 
       // short commands
       const isAddAnother = trimmed === "1";
-      const isEnterPrices = trimmed === "2" || /(^|\s)(prices|enter prices|prices now|enterprice|enter price)(\s|$)/.test(lowered);
-      const isDone = /(^|\s)(done|finish|generate|send)(\s|$)/.test(lowered);
+      const isEnterPrices = trimmed === "2" || /(^|\s)(prices|enter prices|prices now|enterprice|enter price|price)(\s|$)/.test(lowered);
+      const isDone = /(^|\s)(done|finish|generate|send|summary|next)(\s|$)/.test(lowered);
       const isCancel = trimmed === "3" || /(^|\s)(cancel|abort|stop)(\s|$)/.test(lowered);
+      const isSkip = /^\s*skip\s*$/i.test(trimmed);
+      const isBack = /^back$/i.test(trimmed);
 
       // If user explicitly chooses to enter prices for items collected so far
       if (isEnterPrices) {
         const items = biz.sessionData.items || [];
         if (!items.length) return sendTwimlText(res, "No items added yet. Send an item description first.");
-        // prepare price-entry index if needed
         biz.sessionState = "creating_invoice_enter_prices";
         biz.sessionData.priceIndex = 0;
-        biz = await persistBiz(biz);
+        biz.sessionData.items = items;
+        await persistBiz(biz);
         const next = biz.sessionData.items[0];
         return sendTwimlText(res, `Price entry: item 1) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
       }
@@ -561,65 +581,52 @@ Type 'menu' to return here anytime.`);
       }
 
       if (isAddAnother) {
-        // If there is an unfinished item (e.g. description provided but qty not yet), remind user
+        // If there's an unfinished item (we expect qty), remind user to finish
         if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && (!biz.sessionData.lastItem.qty)) {
           return sendTwimlText(res, "You're in the middle of adding an item — finish qty now, or reply '3' to cancel.");
         }
+        // otherwise prompt for next description
         return sendTwimlText(res, "Send next item description:");
       }
 
-      // If user wrote 'done' but last item incomplete
       if (isDone) {
-        // If lastItem exists and missing price, instruct
-        if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
-          return sendTwimlText(res, "You have a partially-entered item missing unit price. Reply with the price, 'skip' to set it to 0, or 'back' to add more items.");
+        // If there is a partially-entered item missing qty/price, instruct
+        if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && !biz.sessionData.lastItem.qty) {
+          return sendTwimlText(res, "You started adding an item but didn't finish qty. Enter qty now or reply '3' to cancel.");
         }
         const items = biz.sessionData.items || [];
         if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
         // show summary / confirm
-        const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+        const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0 || 0)), 0);
         let summary = `Invoice summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
         items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
         summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
         biz.sessionState = "creating_invoice_confirm";
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, summary);
       }
 
-      // Otherwise treat as free text flow: description -> qty -> (item saved without price)
+      // free-text flow: description -> qty
       if (!biz.sessionData.awaitingItemDesc) {
-        // expecting description
         const desc = trimmed;
-        if (!desc) return sendTwimlText(res, "Send an item description (or reply 2 to enter prices).");
+        if (!desc) return sendTwimlText(res, "Send an item description (or reply '2' to enter prices).");
         biz.sessionData.awaitingItemDesc = true;
         biz.sessionData.lastItem = { description: desc };
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Qty? (e.g. 1)");
-      } else if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && !biz.sessionData.lastItem.qty) {
+      } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
         // expecting qty
         const qty = Number(trimmed);
         if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
-
-        // set qty on lastItem and push into items array (unit null for now)
-        biz.sessionData.lastItem.qty = qty;
-
+        // push item with unit = null (price to be filled later)
         biz.sessionData.items = biz.sessionData.items || [];
-        biz.sessionData.items.push({
-          description: biz.sessionData.lastItem.description,
-          qty: qty,
-          unit: null
-        });
-
-        // CLEAR THE ITEM ENTRY STATE so the flow moves on correctly
+        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null });
+        // clear lastItem and awaiting flags
         biz.sessionData.lastItem = null;
         biz.sessionData.awaitingItemDesc = false;
-
-        // persist and reload biz
-        biz = await persistBiz(biz);
-
+        await persistBiz(biz);
         return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items\n3) Cancel`);
       } else {
-        // fallback
         return sendTwimlText(res, "Send item description or reply 1/2/3.");
       }
     }
@@ -629,37 +636,40 @@ Type 'menu' to return here anytime.`);
       const items = biz.sessionData.items || [];
       let idx = Number(biz.sessionData.priceIndex || 0);
       if (!Array.isArray(items) || items.length === 0) {
-        biz.sessionState = "creating_invoice_add_items"; biz.sessionData.priceIndex = 0; biz = await persistBiz(biz);
+        biz.sessionState = "creating_invoice_add_items";
+        biz.sessionData.priceIndex = 0;
+        await persistBiz(biz);
         return sendTwimlText(res, "No items to price. Send item description to add items.");
       }
 
-      // Allow user to go back to adding items
-      if (trimmed.toLowerCase() === "back") {
+      // back -> go back to adding items
+      if (/^back$/i.test(trimmed)) {
         biz.sessionState = "creating_invoice_add_items";
         delete biz.sessionData.priceIndex;
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Back to adding items. Send next item description or reply '2' when ready to enter prices.");
       }
 
-      // skip sets price to 0 for current item
+      // skip -> set price 0 for current index
       if (/^skip$/i.test(trimmed)) {
         items[idx].unit = 0;
         idx += 1;
         biz.sessionData.priceIndex = idx;
         biz.sessionData.items = items;
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
       } else {
-        // parse price
         const unit = Number(trimmed);
-        if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a numeric unit price (e.g. 450), 'skip' to set 0, or 'back' to add more items.");
+        if (isNaN(unit)) {
+          return sendTwimlText(res, "Invalid price. Enter a numeric unit price (e.g. 450), 'skip' to set 0, or 'back' to add more items.");
+        }
         items[idx].unit = unit;
         idx += 1;
         biz.sessionData.priceIndex = idx;
         biz.sessionData.items = items;
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
       }
 
-      // If still have items to price
+      // if more items to price
       if (idx < (biz.sessionData.items || []).length) {
         const next = biz.sessionData.items[idx];
         return sendTwimlText(res, `Price entry: item ${idx+1}) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
@@ -673,7 +683,7 @@ Type 'menu' to return here anytime.`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
-      biz = await persistBiz(biz);
+      await persistBiz(biz);
       return sendTwimlText(res, summary);
     }
 
@@ -682,19 +692,20 @@ Type 'menu' to return here anytime.`);
       const choice = trimmed;
       if (choice === "1") {
         biz.sessionState = "creating_invoice_add_items";
-        biz = await persistBiz(biz);
+        await persistBiz(biz);
         return sendTwimlText(res, "Send next item description:");
       }
       if (choice === "2") {
         const items = biz.sessionData.items || [];
         const client = biz.sessionData.client;
+        if (!client) return sendTwimlText(res, "Client not set. Cancel and try again.");
         biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
         biz.counters.invoice = (biz.counters.invoice || 0) + 1;
-        biz = await persistBiz(biz);
         const numberStr = `${biz.invoicePrefix || "INV"}-${String(biz.counters.invoice).padStart(6, "0")}`;
         const date = new Date();
         try {
           const { filename } = await generatePDF({ type: "invoice", number: numberStr, date, dueDate: null, billingTo: client.name || client.phone, email: client.email || "", items, notes: "" });
+          await persistBiz(biz);
           const site = (process.env.SITE_URL || "").replace(/\/$/, "");
           const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
           const url = `${baseForMedia}/docs/generated/invoices/${filename}`;

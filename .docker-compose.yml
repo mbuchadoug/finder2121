@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    image: zimquote-app:latest
+    container_name: zimquote-app
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      # Set these in a .env file or override here
+      - NODE_ENV=production
+      - SITE_URL=${SITE_URL:-http://localhost:9000}
+      - MONGO_URI=${MONGO_URI}
+      - TWILIO_BIZ_AUTH_TOKEN=${TWILIO_BIZ_AUTH_TOKEN}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    env_file:
+      - .env
+    volumes:
+      - ./public/docs:/usr/src/app/public/docs
+      - ./data:/usr/src/app/data
+      # optional: mount code for fast iteration in dev (comment for production)
+      # - ./:/usr/src/app
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

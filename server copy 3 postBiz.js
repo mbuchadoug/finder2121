@@ -14,8 +14,6 @@ import MongoStore from "connect-mongo";
 import session from "express-session";
 import registerRoutes from "./routes/register.js";
 import twilioWebhookRoutes from "./routes/twilio_webhook.js";
-// NEW: import the new twilio biz route
-import twilioBizRoutes from "./routes/twilio_biz.js";
 
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
@@ -351,10 +349,6 @@ app.use("/register", registerRoutes);
 // so the final endpoint will be /twilio/webhook
 
 app.use("/twilio", twilioWebhookRoutes);
-
-// NEW: mount the new Twilio biz routes (keeps both Twilio handlers on the server)
-app.use("/twilio_biz", twilioBizRoutes);
-
 /* Protected recommend page */
 app.get("/recommend", ensureAuth, (req, res) => {
   res.render("recommend", {

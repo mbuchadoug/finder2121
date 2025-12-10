@@ -269,7 +269,12 @@ router.post("/webhook", async (req, res) => {
     const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
-    if ((state === "idle" || state === "awaiting_first_choice") && isSingleNumber) {
+    // DEBUG LOG: shows incoming trimmed text and state (remove later if desired)
+    console.log("TWILIO (biz): incoming trimmed:", JSON.stringify(trimmed), "sessionState:", state, "isSingleNumber:", isSingleNumber);
+
+    // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
+    // 'ready' means the business exists and has completed setup — users expect numbers to still work.
+    if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
       const num = trimmed;
       // 1 - Create business
       if (num === "1") {

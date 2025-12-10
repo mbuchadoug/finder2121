@@ -10,18 +10,7 @@ import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import Business from "../models/business.js";
 import Client from "../models/client.js";
 
-let PDFDocument;
-try {
-  PDFDocument = await (async () => {
-    try {
-      return (await import("pdfkit")).default || (await import("pdfkit"));
-    } catch (e) {
-      try { return require("pdfkit"); } catch (er) { return null; }
-    }
-  })();
-} catch (e) {
-  PDFDocument = null;
-}
+let PDFDocument = null; // no longer used for generation, but left in case other code expects it
 
 const router = Router();
 router.use(express.urlencoded({ extended: true }));
@@ -66,11 +55,9 @@ function normalizePhone(p) {
 /* ---------- small save helper to mark sessionData modified ---------- */
 async function saveBiz(biz) {
   try {
-    // ensure nested sessionData changes are persisted
     if (biz && typeof biz.markModified === "function") biz.markModified("sessionData");
     return biz.save();
   } catch (e) {
-    // fallback - attempt plain save
     return biz.save();
   }
 }
@@ -122,7 +109,7 @@ async function loadCounters() {
 async function saveCounters(obj) { await ensureDataDir(); await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8"); }
 async function incrementCounter(type) { const counters = await loadCounters(); if (!counters[type]) counters[type] = 0; counters[type] = Number(counters[type]) + 1; await saveCounters(counters); return counters[type]; }
 
-/* ---------- PDF helpers (new layout) ---------- */
+/* ---------- PDF helpers (HTML -> PDF via Puppeteer) ---------- */
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
@@ -133,235 +120,251 @@ async function ensurePublicSubdirs() {
 }
 
 /**
- * drawTable:
- * - columns: code, description, qty, unitPrice, discount, tax, lineTotal
- * - returns y position after table
+ * Build HTML using the exact CSS/structure you provided, with Bootstrap 3.3.7,
+ * and the table structure you asked for. We generate rows from `items`.
  */
-function drawTable(doc, items, startX, startY, columnWidths, opts = {}) {
-  const lineHeight = 18;
-  let y = startY;
+function buildHtml({ typeLabel, number, dateStr, dueDateStr, companyName, companyAddress, companyPhone, logoUrl, customerName, refNumber, status, items = [], totals = {}, notes = "" }) {
+  // ensure items is an array and totals fields exist
+  const subtotal = formatMoney(totals.subtotal || 0);
+  const payments = formatMoney(totals.payments || 0);
+  const balance = formatMoney(totals.balance || 0);
+  // create rows HTML
+  let rowsHtml = "";
+  // The user template uses some nesting; we'll produce simple rows mapping each item
+  items.forEach((it) => {
+    // it expected fields: quantity, item, description, amount, discount
+    rowsHtml += `
+      <tr>
+        <td style="text-align:center">${it.quantity || ""}</td>
+        <td style="text-align:center; word-wrap: break-word">${escapeHtml(it.item || "")}</td>
+        <td style="text-align:center; word-wrap: break-word">${escapeHtml(it.description || "")}</td>
+        <td style="text-align:center">${formatMoney(it.rate || it.amount || 0)}</td>
+        <td style="text-align:center">${it.discount != null ? escapeHtml(String(it.discount)) : ""}</td>
+        <td style="text-align:center">${formatMoney(it.amount || (Number(it.quantity||0) * Number(it.rate || 0) - Number(it.discount || 0)))}</td>
+      </tr>
+    `;
+  });
 
-  // header row
-  doc.fontSize(10).fillColor("#111").font("Helvetica-Bold");
-  doc.text("Item", startX, y, { width: columnWidths[0] });
-  doc.text("Description", startX + columnWidths[0] + 8, y, { width: columnWidths[1] });
-  doc.text("Qty", startX + columnWidths[0] + 8 + columnWidths[1] + 8, y, { width: columnWidths[2], align: "right" });
-  doc.text("Unit", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8, y, { width: columnWidths[3], align: "right" });
-  doc.text("Discount", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8 + columnWidths[3] + 8, y, { width: columnWidths[4], align: "right" });
-  doc.text("Tax", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8, y, { width: columnWidths[5], align: "right" });
-  doc.text("Line Total", startX + columnWidths[0] + 8 + columnWidths[1] + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8 + columnWidths[5] + 8, y, { width: columnWidths[6], align: "right" });
+  // if no logo, we will display companyName in the left pane
+  const logoImgTag = logoUrl ? `<img src="${escapeAttr(logoUrl)}" alt="logo" style="width:200px;height:250px;display:inline-block;">` : "";
 
-  y += lineHeight;
-  // thin divider
-  try { doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b)=>a+b,0) + (8*6) + 40, y - 6).strokeOpacity(0.08).stroke(); } catch(e){}
+  // Inline CSS from your design + bootstrap 3.3.7
+  const html = `
+  <!doctype html>
+  <html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(typeLabel)} ${escapeHtml(number)}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <style>
+      @page {
+        margin: 0!important;
+        margin-top: 0cm!important;
+        margin-bottom: 0cm!important;
+        margin-left: 0cm!important;
+        margin-right: 0cm!important;
+        break-inside: avoid;
+      }
+      * { box-sizing: border-box; }
+      table { width: 100%; min-width: max-content; table-layout:fixed; }
+      .row { margin-left:-5px; margin-right:-5px; }
+      .column { float: left; width: 50%; padding: 5px; }
+      .row::after { content: ""; clear: both; display: table; }
+      .column-bordered-table thead td { border-left: 1px solid #000000; border-right: 1px solid #000000; }
+      .column-bordered-table td { border-left: 1px solid #000000; border-right: 1px solid #000000; }
+      .column-bordered-table tfoot tr { border-top: 1px solid #000000; border-bottom: 1px solid #000000; }
+      .header img { float: left; width: 200px; height: 100px; background: #555; }
+      .header h1 .text-center p h2 { position: relative; top: 18px; left: 10px; }
+      .content-container{ padding: 30px; position: relative; }
+      .content-container:before{
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        background-image: url("");
+        background-size: 500px;
+        background-position: center;
+        background-repeat: no-repeat;
+        width: 100%;
+        height: 100%;
+        opacity: .05;
+        margin-top: 100px;
+      }
+      .content-container .contents{ position: relative; z-index: 5; }
+      .toppane { width: 100%; height: 100px; background-color: #4da6ff; }
+      body { margin: 0!important; font-family: Arial, sans-serif; color: #222; }
+      .d-flex { display:flex; }
+      .leftpane { width: 25%; }
+      .middlepane { width: 50%; }
+      .rightpane { width: 25%; text-align: right; }
+      .column-bordered-table th, .column-bordered-table td { padding: 8px; border-collapse: collapse; }
+      .column-bordered-table thead th { background: #f3f3f3; }
+      .totals-table { width: 27%; margin-left: auto; border: 1px solid black; border-collapse: collapse; }
+      .totals-table td { padding: 8px; border-bottom: 1px solid black; }
+      .note { margin-top: 16px; padding: 10px; border-left: 4px solid #4da6ff; background: #fbfdff; }
+      .clearfix::after { content: ""; clear: both; display: table; }
+    </style>
+  </head>
+  <body>
+    <div class="content-container" style="page-break-before: always">
+      <div class="contents">
+        <div class="container" style="break-inside: avoid">
+          <div class="d-flex clearfix">
+            <div class="leftpane">
+              ${logoImgTag || `<div style="font-weight:700;font-size:20px;padding:10px;">${escapeHtml(companyName || "")}</div>`}
+            </div>
+            <div class="middlepane">
+              <h1 style="text-align: center;font-family: Georgia, serif; font-size:25px;"><b>${escapeHtml(companyName || "")}</b></h1>
+              <p style="text-align: center;">${escapeHtml(companyAddress || "")}</p>
+              <p style="text-align: center;">${escapeHtml(companyPhone || "")}</p>
+            </div>
+            <div class="rightpane">
+              <h1 style="margin:0">${escapeHtml(typeLabel)}</h1>
+            </div>
+          </div>
+        </div>
 
-  doc.font("Helvetica").fontSize(10).fillColor("#111");
+        <div class="row" style="margin-top:12px;">
+          <div class="column">
+            <table border="1">
+              <tr><td colspan="2" style="height:30px;text-align:center">Invoice To</td></tr>
+              <tr><td colspan="2" style="height:50px;text-align:center">${escapeHtml(customerName || "")}</td></tr>
+            </table>
+          </div>
 
-  for (const it of items) {
-    // wrap description if long
-    const descX = startX + columnWidths[0] + 8;
-    const descWidth = columnWidths[1];
-    const description = String(it.description || "");
-    // description may be multi-line: measure via doc.heightOfString
-    const descHeight = doc.heightOfString(description, { width: descWidth, align: "left", font: "Helvetica", size: 10 });
+          <div class="column">
+            <table border="1">
+              <tr><td style="text-align:center">Date</td><td style="text-align:center">${escapeHtml(dateStr || "")}</td></tr>
+              <tr><td style="text-align:center">Invoice No</td><td style="text-align:center">${escapeHtml(refNumber || number)}</td></tr>
+              <tr><td style="text-align:center">Invoice Status</td><td style="text-align:center">${escapeHtml(status || "")}</td></tr>
+            </table>
+          </div>
+        </div>
 
-    // compute needed row height
-    const rowHeight = Math.max(lineHeight, descHeight + 4);
+        <div style="margin-top:12px;">
+          <table border="1" class="column-bordered-table thead" style="break-inside: avoid;border-bottom:1px solid black;">
+            <thead>
+              <tr>
+                <th style="text-align:center;width:10%;">Qty</th>
+                <th style="text-align:center;width:30%;">Item</th>
+                <th style="text-align:center;width:30%;">Description</th>
+                <th style="text-align:center">Rate ($)</th>
+                <th style="text-align:center">Discount (%)</th>
+                <th style="text-align:center">Amount ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || `<tr><td colspan="6" style="text-align:center;padding:20px">No items</td></tr>`}
+              <!-- spacer rows can keep layout consistent for printing -->
+              <tr style="height: 80px;"><td colspan="6"></td></tr>
+            </tbody>
+          </table>
+        </div>
 
-    // Draw row text
-    doc.text(it.code || "", startX, y, { width: columnWidths[0] });
-    doc.text(description, descX, y, { width: descWidth });
-    doc.text(String(it.qty || ""), descX + descWidth + 8, y, { width: columnWidths[2], align: "right" });
-    doc.text(formatMoney(it.unit || it.unitPrice || 0), descX + descWidth + 8 + columnWidths[2] + 8, y, { width: columnWidths[3], align: "right" });
-    doc.text(formatMoney(it.discount || 0), descX + descWidth + 8 + columnWidths[2] + 8 + columnWidths[3] + 8, y, { width: columnWidths[4], align: "right" });
-    doc.text(formatMoney(it.tax || 0), descX + descWidth + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8, y, { width: columnWidths[5], align: "right" });
-    doc.font("Helvetica-Bold");
-    doc.text(formatMoney(((Number(it.qty||0) * Number(it.unit || it.unitPrice || 0)) - (Number(it.discount||0))) + Number(it.tax||0)), descX + descWidth + 8 + columnWidths[2] + 8 + columnWidths[3] + 8 + columnWidths[4] + 8 + columnWidths[5] + 8, y, { width: columnWidths[6], align: "right" });
-    doc.font("Helvetica");
+        <div style="margin-top:12px;">
+          <table class="totals-table" style="margin-top:12px;">
+            <tr><td>Total Amount</td><td style="text-align:end">$${subtotal}</td></tr>
+            <tr><td>Payments</td><td style="text-align:end">$${payments}</td></tr>
+            <tr><td><b>Balance Due</b></td><td style="text-align:end">$${balance}</td></tr>
+          </table>
+        </div>
 
-    // move y
-    y += rowHeight;
+        ${notes ? `<div class="note">${escapeHtml(notes)}</div>` : ""}
 
-    // small divider after each row
-    try { doc.moveTo(startX, y - 4).lineTo(startX + columnWidths.reduce((a,b)=>a+b,0) + (8*6) + 40, y - 4).strokeOpacity(0.04).stroke(); } catch(e) {}
-  }
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+  return html;
+}
 
-  return y;
+// small helper to escape HTML in interpolation
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+function escapeAttr(str) {
+  if (str == null) return "";
+  return String(str).replace(/"/g, "%22");
 }
 
 /**
- * generatePDF - updated to use new layout, show logo or company name fallback
- * Accepts extra fields: companyName, companyAddress, companyPhone, logoUrl
+ * generatePDF: uses puppeteer to render HTML (bootstrap + provided CSS) and save PDF.
+ * Accepts same semantic fields as before plus companyName/companyAddress/companyPhone/logoUrl
  */
 async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", companyName = "", companyAddress = "", companyPhone = "", logoUrl = "" }) {
-  if (!PDFDocument) throw new Error("pdfkit not available. Install with: npm install pdfkit");
+  // ensure pdf directories
+  if (!type) type = "invoice";
   const baseDir = await ensurePublicSubdirs();
   const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
 
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ size: "A4", margin: 48 });
-      const stream = fs.createWriteStream(filepath);
-      doc.pipe(stream);
+  // prepare totals
+  const subtotal = items.reduce((s, it) => s + (Number(it.amount || (Number(it.quantity||0) * Number(it.rate || 0))) || 0), 0);
+  const payments = 0;
+  const balance = subtotal - payments;
 
-      // header: logo (or fallback companyName) + company meta (left), document meta (right)
-      const leftX = 48;
-      const rightX = 420;
-      const headerY = 40;
-      // draw logo if exists (logoUrl could be a public absolute path or relative)
-      try {
-        if (logoUrl) {
-          // if logoUrl is remote (http) try to load the local cached file path in public/docs/logos if it exists
-          let logoLocal = null;
-          if (logoUrl.startsWith("/docs/logos/") || logoUrl.includes("/docs/logos/")) {
-            // local relative path
-            const tryPath = path.join(process.cwd(), "public", logoUrl.replace(/^\//, ""));
-            if (fs.existsSync(tryPath)) logoLocal = tryPath;
-          } else {
-            // try common fallback logo.png in public/docs
-            const tryPath = path.join(process.cwd(), "public", "docs", "logos", path.basename(logoUrl));
-            if (fs.existsSync(tryPath)) logoLocal = tryPath;
-          }
-          if (!logoLocal) {
-            // fallback to generic logo path (keeps previous behavior)
-            const generic = path.join(process.cwd(), "public", "docs", "logo.png");
-            if (fs.existsSync(generic)) logoLocal = generic;
-          }
-          if (logoLocal && fs.existsSync(logoLocal)) {
-            doc.image(logoLocal, leftX, headerY, { width: 84, height: 84, fit: [84,84], align: "left" });
-          } else {
-            // fallback will occur below (company name)
-          }
-        } else {
-          const generic = path.join(process.cwd(), "public", "docs", "logo.png");
-          if (fs.existsSync(generic)) doc.image(generic, leftX, headerY, { width: 84, height: 84, fit: [84,84], align: "left" });
-        }
-      } catch (e) {
-        // swallow image errors
-      }
-
-      // Company name fallback if no logo drawn
-      // We'll check if there's an image already placed by checking file existence above. If none, draw companyName text in place.
-      let usedLogo = false;
-      try {
-        // quick heuristic: if public/docs/logo.png exists or logoLocal existed, we consider logo drawn.
-        const generic = path.join(process.cwd(), "public", "docs", "logo.png");
-        if (logoUrl) {
-          const tryPath = path.join(process.cwd(), "public", "docs", "logos", path.basename(logoUrl || ""));
-          if (fs.existsSync(tryPath)) usedLogo = true;
-        }
-        if (fs.existsSync(path.join(process.cwd(), "public", "docs", "logo.png"))) usedLogo = true;
-      } catch (e) {}
-      if (!usedLogo) {
-        // draw company name inside the logo box area
-        doc.fontSize(16).fillColor("#1f6feb").font("Helvetica-Bold").text(companyName || " ", leftX, headerY + 18, { width: 200 });
-      }
-
-      // Company meta (to the right of logo area)
-      doc.font("Helvetica-Bold").fontSize(14).fillColor("#111").text(companyName || "", leftX + 100, headerY);
-      doc.font("Helvetica").fontSize(9).fillColor("#444");
-      if (companyAddress) doc.text(companyAddress, leftX + 100, headerY + 20, { width: 240 });
-      if (companyPhone) doc.text(`Phone: ${companyPhone}`, leftX + 100, headerY + 44);
-
-      // Document meta on right
-      doc.fontSize(20).fillColor("#111").font("Helvetica-Bold");
-      const label = type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT";
-      doc.text(label, rightX, headerY, { align: "right" });
-      doc.fontSize(10).fillColor("#333").font("Helvetica");
-      doc.text(`No: ${number}`, rightX, headerY + 28, { align: "right" });
-      doc.text(`Date: ${date.toISOString().slice(0,10)}`, rightX, headerY + 44, { align: "right" });
-      if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, rightX, headerY + 58, { align: "right" });
-
-      // Bill to block
-      const billY = headerY + 110;
-      doc.fontSize(11).fillColor("#111").font("Helvetica-Bold").text("Bill To:", leftX, billY);
-      doc.fontSize(10).fillColor("#111").font("Helvetica");
-      doc.text(billingTo || "-", leftX, billY + 16);
-      if (email) doc.fontSize(9).fillColor("#666").text(email, leftX, billY + 36);
-
-      // Table start
-      const startY = billY + 70;
-      const startXTable = 48;
-      // column widths (tuned for A4)
-      const columnWidths = [
-        48,   // item code
-        250,  // description
-        48,   // qty
-        70,   // unit price
-        60,   // discount
-        48,   // tax
-        76    // line total
-      ];
-
-      // Draw table rows
-      const afterTableY = drawTable(doc, items, startXTable, startY, columnWidths);
-
-      // Totals calculations
-      const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit || it.unitPrice || 0)), 0);
-      const discountTotal = items.reduce((s,it) => s + Number(it.discount||0), 0);
-      const taxTotal = items.reduce((s,it) => s + Number(it.tax||0), 0);
-      const shipping = 0;
-      const total = subtotal - discountTotal + taxTotal + (Number(shipping||0));
-
-      // Draw totals box on the right of table
-      const totalsBoxWidth = 260;
-      const totalsBoxX = 48 + columnWidths.reduce((a,b) => a + b, 0) + 20;
-      const totalsBoxY = afterTableY + 10;
-      const totalsBoxHeight = 110;
-      // background rect + border
-      doc.save();
-      doc.roundedRect(totalsBoxX, totalsBoxY, totalsBoxWidth, totalsBoxHeight, 6).lineWidth(0.6).strokeOpacity(0.12).stroke("#cfdff7");
-      // fill too-light background
-      doc.fillOpacity(0.02).rect(totalsBoxX, totalsBoxY, totalsBoxWidth, totalsBoxHeight).fill("#1f6feb");
-      doc.fillOpacity(1);
-      // content inside
-      const tx = totalsBoxX + 12;
-      let ty = totalsBoxY + 12;
-      doc.fontSize(10).fillColor("#666").font("Helvetica").text("Subtotal", tx, ty);
-      doc.font("Helvetica").text(formatMoney(subtotal), tx + 140, ty, { width: 90, align: "right" });
-      ty += 18;
-      doc.font("Helvetica").fontSize(10).fillColor("#666").text("Discounts", tx, ty);
-      doc.text(formatMoney(discountTotal), tx + 140, ty, { width: 90, align: "right" });
-      ty += 18;
-      doc.font("Helvetica").fontSize(10).fillColor("#666").text(`Tax`, tx, ty);
-      doc.text(formatMoney(taxTotal), tx + 140, ty, { width: 90, align: "right" });
-      if (shipping) {
-        ty += 18;
-        doc.font("Helvetica").fontSize(10).fillColor("#666").text("Shipping", tx, ty);
-        doc.text(formatMoney(shipping), tx + 140, ty, { width: 90, align: "right" });
-      }
-      // total row
-      ty += 18;
-      // heavier separator for total
-      doc.moveTo(tx, ty).lineTo(tx + totalsBoxWidth - 24, ty).strokeOpacity(0.08).lineWidth(1).stroke();
-      ty += 8;
-      doc.font("Helvetica-Bold").fontSize(12).fillColor("#111").text("Total", tx, ty);
-      doc.text(formatMoney(total), tx + 140, ty, { width: 90, align: "right" });
-
-      doc.restore();
-
-      // Notes area
-      const notesY = totalsBoxY + totalsBoxHeight + 18;
-      if (notes) {
-        doc.fontSize(10).fillColor("#111").font("Helvetica-Bold").text("Notes:", 48, notesY);
-        doc.fontSize(9).fillColor("#444").font("Helvetica").text(notes, 48, notesY + 16, { width: 480 });
-      }
-
-      // footer line and bank details
-      doc.fontSize(9).fillColor("#777").text("-----------", 48, 760, { align: "center", width: 500 });
-      doc.fontSize(9).fillColor("#666").text("Bank details: Account 0150011578801 • InnBucks • Borrowdale", 48, 780, { width: 500 });
-      doc.fontSize(9).fillColor("#666").text("Tax Number: 2001220346", 48, 795, { width: 500 });
-
-      doc.end();
-
-      stream.on("finish", () => resolve({ filepath, filename }));
-      stream.on("error", (err) => reject(err));
-    } catch (err) {
-      reject(err);
-    }
+  // Build the HTML page using the design you pasted
+  const html = buildHtml({
+    typeLabel: type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT",
+    number,
+    dateStr: (date && date.toISOString && date.toISOString().slice(0,10)) || String(date || ""),
+    dueDateStr: (dueDate && dueDate.toISOString && dueDate.toISOString().slice(0,10)) || (dueDate || ""),
+    companyName: companyName || "",
+    companyAddress: companyAddress || "",
+    companyPhone: companyPhone || "",
+    logoUrl: logoUrl || "",
+    customerName: billingTo || "",
+    refNumber: number,
+    status: "",
+    items,
+    totals: { subtotal, payments, balance },
+    notes
   });
+
+  // dynamic import puppeteer so file doesn't crash if not installed
+  let puppeteer;
+  try {
+    puppeteer = await import("puppeteer");
+  } catch (e) {
+    // try require fallback
+    try { puppeteer = require("puppeteer"); } catch (e2) { throw new Error("puppeteer not installed. Install with: npm install puppeteer"); }
+  }
+
+  // ensure folder exists
+  await fs.promises.mkdir(folder, { recursive: true });
+
+  // Launch headless browser and render PDF
+  const launchOpts = {
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  };
+  const browser = await puppeteer.launch(launchOpts);
+  try {
+    const page = await browser.newPage();
+    // set content and wait until network idle to ensure bootstrap CSS loads
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    // set PDF options to A4
+    await page.pdf({
+      path: filepath,
+      format: "A4",
+      printBackground: true,
+      margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" }
+    });
+    await page.close();
+    await browser.close();
+    return { filepath, filename };
+  } catch (err) {
+    try { await browser.close(); } catch (e) {}
+    throw err;
+  }
 }
 
 /* ---------- Logo saving helpers ---------- */
@@ -837,6 +840,9 @@ Type 'menu' to return here anytime.`);
         const unit = Number(trimmed);
         if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a numeric unit price (e.g. 450), 'skip' to set 0, or 'back' to add more items.");
         items[idx].unit = unit;
+        // compute line amount and store fields we will use for HTML table
+        items[idx].rate = unit;
+        items[idx].amount = (Number(items[idx].qty || 0) * Number(unit)) - Number(items[idx].discount || 0);
         idx += 1;
         biz.sessionData.priceIndex = idx;
         biz.sessionData.items = items;
@@ -851,11 +857,11 @@ Type 'menu' to return here anytime.`);
 
       // All prices done -> summarize and confirm
       const finalItems = biz.sessionData.items || [];
-      const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+      const subtotal = finalItems.reduce((s, it) => s + (Number(it.amount||0)), 0);
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
       let summary = `${label} summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
-      finalItems.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+      finalItems.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.rate||0)} = ${formatMoney(it.amount||0)}\n`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
@@ -891,7 +897,7 @@ Type 'menu' to return here anytime.`);
 
         const date = new Date();
         try {
-          // CALL generatePDF with companyName and logoUrl so the header shows
+          // call new generatePDF (HTML -> PDF)
           const { filename } = await generatePDF({
             type: docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt",
             number: numberStr,

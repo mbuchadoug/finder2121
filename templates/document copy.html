@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>{{type}} {{number}}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{
+    --accent:#1f6feb;
+    --muted:#6b7280;
+    --panel:#f3f4f6;
+    --border:#e6edf8;
+    --surface:#ffffff;
+    --text:#111827;
+  }
+
+  /* base */
+  html,body{height:100%;background:#f6f8fb;margin:0}
+  body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:var(--text); padding:28px; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px;margin:0 auto;background:var(--surface);padding:28px;border-radius:8px;box-shadow:0 8px 28px rgba(12,20,40,0.06); border:1px solid #eef3f9;}
+
+  /* header */
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+  .brand{display:flex;gap:14px;align-items:center}
+  .logo{width:84px;height:84px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel);overflow:hidden;border:1px solid var(--border)}
+  .logo img{width:100%;height:100%;object-fit:contain;display:block}
+  .logo-fallback{padding:8px 10px;font-weight:700;color:var(--accent);text-align:center}
+  .company-meta h2{margin:0;font-size:18px}
+  .company-meta .small{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.3}
+
+  .meta{text-align:right;color:var(--muted);min-width:200px}
+  .meta .type{font-size:13px;color:var(--accent);font-weight:700}
+  .meta .number{font-weight:700;margin-top:6px}
+  .meta .small{font-size:12px;color:var(--muted);margin-top:6px}
+
+  /* bill to / info */
+  .info-row{display:flex;justify-content:space-between;margin-top:18px;gap:18px}
+  .bill-to{min-width:40%}
+  .bill-to .small{font-size:12px;color:var(--muted)}
+  .bill-to .name{font-weight:600;margin-top:6px}
+
+  /* table */
+  table.lines{width:100%;margin-top:20px;border-collapse:collapse;font-size:13px}
+  table.lines thead th{background:var(--panel);color:#111827;font-weight:700;padding:12px;border-bottom:1px solid var(--border);text-align:left}
+  table.lines tbody td{padding:12px;border-bottom:1px solid #eef2f6;vertical-align:top}
+  table.lines tbody tr:last-child td{border-bottom:0}
+  table.lines th.num, table.lines td.num{text-align:right}
+  table.lines th.smallcol, table.lines td.smallcol{width:80px}
+
+  /* totals box: accounting style */
+  .totals-wrap{display:flex;justify-content:flex-end;margin-top:20px}
+  .totals-box{min-width:320px;border:1px solid #e3eaf6;border-radius:6px;background:#fbfdff;padding:10px 14px}
+  .totals-row{display:flex;justify-content:space-between;padding:8px 0;border-top:1px dashed rgba(20,40,80,0.04);font-size:13px}
+  .totals-row:first-child{border-top:0;padding-top:0}
+  .totals-row strong{font-weight:700}
+  .totals-row.total{font-size:15px;padding-top:12px;border-top:2px solid rgba(20,40,80,0.06);background:linear-gradient(90deg, rgba(31,111,235,0.02), transparent);}
+
+  /* notes and footer */
+  .note{background:#fff;border-left:4px solid var(--accent);padding:12px;margin-top:18px;border-radius:4px;color:var(--muted)}
+  footer{margin-top:22px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+
+  /* responsive */
+  @media (max-width:720px){
+    .info-row{flex-direction:column}
+    .meta{text-align:left}
+    .totals-wrap{justify-content:flex-start}
+    .totals-box{width:100%}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          {{#if logoUrl}}
+            <img src="{{logoUrl}}" alt="{{companyName}} logo" />
+          {{else}}
+            <div class="logo-fallback">{{companyName}}</div>
+          {{/if}}
+        </div>
+        <div class="company-meta">
+          <h2>{{companyName}}</h2>
+          <div class="small">{{companyAddress}}</div>
+          {{#if companyPhone}}<div class="small">Phone: {{companyPhone}}</div>{{/if}}
+          {{#if companyEmail}}<div class="small">Email: {{companyEmail}}</div>{{/if}}
+        </div>
+      </div>
+
+      <div class="meta" role="note">
+        <div class="type">{{typeLabel}}</div>
+        <div class="number">{{number}}</div>
+        <div class="small">Date: {{date}}</div>
+        {{#if dueDate}}<div class="small">Due: {{dueDate}}</div>{{/if}}
+      </div>
+    </header>
+
+    <section class="info-row">
+      <div class="bill-to">
+        <div class="small">Bill To</div>
+        <div class="name">{{customerName}}</div>
+        {{#if customerAddress}}<div class="small">{{customerAddress}}</div>{{/if}}
+        {{#if customerEmail}}<div class="small">{{customerEmail}}</div>{{/if}}
+      </div>
+
+      <div class="small">
+        <div>Document #: <strong>{{number}}</strong></div>
+        {{#if reference}}<div>Ref: {{reference}}</div>{{/if}}
+        {{#if salesperson}}<div>Sales: {{salesperson}}</div>{{/if}}
+      </div>
+    </section>
+
+    <table class="lines" role="table" aria-label="Invoice lines">
+      <thead>
+        <tr>
+          <th style="width:10%">Item</th>
+          <th style="width:40%">Description</th>
+          <th class="smallcol">Qty</th>
+          <th class="smallcol">Unit</th>
+          <th class="smallcol">Discount</th>
+          <th class="smallcol">Tax</th>
+          <th style="width:15%" class="num">Line Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each items}}
+        <tr>
+          <td class="smallcol">{{this.code}}</td>
+          <td>{{this.description}}{{#if this.notes}}<div class="small" style="margin-top:6px;color:var(--muted)">{{this.notes}}</div>{{/if}}</td>
+          <td class="num">{{this.qty}}</td>
+          <td class="num">{{this.unitPrice}}</td>
+          <td class="num">{{this.discount}}</td>
+          <td class="num">{{this.tax}}</td>
+          <td class="num"><strong>{{this.lineTotal}}</strong></td>
+        </tr>
+        {{/each}}
+
+        {{!-- show a blank row if no items (helps with rendering) --}}
+        {{#unless items.length}}
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">No items added.</td></tr>
+        {{/unless}}
+      </tbody>
+    </table>
+
+    <div class="totals-wrap">
+      <div class="totals-box" role="region" aria-label="Totals">
+        <div class="totals-row">
+          <div class="small">Subtotal</div>
+          <div class="num">{{subtotal}}</div>
+        </div>
+        <div class="totals-row">
+          <div class="small">Discounts</div>
+          <div class="num">{{discountTotal}}</div>
+        </div>
+        <div class="totals-row">
+          <div class="small">Tax ({{taxRate}}%)</div>
+          <div class="num">{{taxTotal}}</div>
+        </div>
+        {{#if shipping}}
+        <div class="totals-row">
+          <div class="small">Shipping</div>
+          <div class="num">{{shipping}}</div>
+        </div>
+        {{/if}}
+
+        <div class="totals-row total">
+          <div><strong>Total</strong></div>
+          <div class="num"><strong>{{total}}</strong></div>
+        </div>
+      </div>
+    </div>
+
+    {{#if notes}}
+    <div class="note">{{notes}}</div>
+    {{/if}}
+
+    <footer>
+      <div class="small">Bank details: {{bankDetails}}</div>
+      <div class="small">Tax Number: {{taxNumber}}</div>
+    </footer>
+  </div>
+</body>
+</html>

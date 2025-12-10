@@ -205,6 +205,7 @@ function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
   return y;
 }
 
+/* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
 async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", bizMeta = {} }) {
   // try HTML -> PDF via Puppeteer first (preferred)
   const baseDir = await ensurePublicSubdirs();
@@ -263,6 +264,24 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     .totals tr:last-child td{ font-weight:800; font-size:14px; }
     .logo-text{ font-size:18px; font-weight:700; }
     .watermark{ position: fixed; left:0; top:140px; right:0; opacity:0.06; text-align:center; font-size:72px; transform: rotate(-20deg); pointer-events:none; }
+    /* your custom invoice CSS (copied from user design) */
+    table { width: 100%; min-width: max-content; table-layout:fixed; }
+    .row { margin-left:-5px; margin-right:-5px; }
+    .column { float: left; width: 50%; padding: 5px; }
+    .row::after { content: ""; clear: both; display: table; }
+    .column-bordered-table thead td { border-left: 1px solid #000000; border-right: 1px solid #000000; }
+    .column-bordered-table td { border-left: 1px solid #000000; border-right: 1px solid #000000; }
+    .column-bordered-table tfoot tr { border-top: 1px solid #000000; border-bottom: 1px solid #000000; }
+    .header img { float: left; width: 200px; height: 100px; background: #555; }
+    .content-container{ padding: 30px; position: relative; }
+    .content-container:before{ content: ""; position: absolute; top: 0; left: 0; background-image: url("https://lh3.googleusercontent.com/p/AF1QipM4QsTyJAvH2mqbi7nscU_rI0itolqM4uAEL9G2=s680-w680-h510"); background-size: 500px; background-position: center; background-repeat: no-repeat; width: 100%; height: 100%; opacity: .1; margin-top: 100px; }
+    .content-container .contents{ position: relative; z-index: 5; }
+    .toppane { width: 100%; height: 100px; background-color: #4da6ff; }
+    .leftpane { width: 25%; height: 45vh; }
+    .middlepane { width: 50%; height: 40vh; }
+    .rightpane { width: 20%; height: 35vh; }
+    body { margin: 0!important; }
+    .d-flex { display: flex; }
   </style>
 </head>
 <body>
@@ -346,7 +365,6 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
         await renderHtmlToPdf(html, filepath);
         return { filepath, filename, method: "puppeteer" };
       } catch (e) {
-        // If puppeteer fails, log and fall back
         console.error("generatePDF: Puppeteer render failed:", e && (e.stack || e.message) ? (e.stack || e.message) : e);
         // continue to pdfkit fallback
       }
@@ -391,13 +409,13 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       const startY = 210;
       const columnWidths = [260, 60, 80, 80];
       const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths);
-      let subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+      let subtotal2 = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
       const tax = 0;
-      const total = subtotal + tax;
+      const total = subtotal2 + tax;
       // Draw totals with a simple border
       const tx = 400, ty = afterTableY + 10;
       doc.rect(tx - 10, ty - 6, 180, 60).strokeOpacity(0.08).stroke();
-      doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal)}`, tx, ty, { align: "right" });
+      doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal2)}`, tx, ty, { align: "right" });
       if (tax) doc.text(`Tax: ${formatMoney(tax)}`, tx, ty + 15, { align: "right" });
       doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 30, { align: "right" });
 
@@ -917,7 +935,7 @@ Type 'menu' to return here anytime.`);
             email: client?.email || "",
             items,
             notes: "",
-            bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", taxRate: biz.taxRate || 0, _id: biz._id?.toString() }
+            bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", taxRate: biz.taxRate || 0, _id: biz._id?.toString(), originalAmount: biz.sessionData.originalAmount || undefined, amountPaid: biz.sessionData.amountPaid || undefined, currentBalance: biz.sessionData.currentBalance || undefined, status: biz.status || undefined }
           });
           // save updated counters
           await saveBiz(biz);

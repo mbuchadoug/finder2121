@@ -134,7 +134,7 @@ function drawTable(doc, items, startX, startY, columnWidths) {
     doc.fontSize(10).fillColor("black");
     doc.text(it.description, startX, y, { width: columnWidths[0] });
     doc.text(String(it.qty), startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
-    doc.text(formatMoney(it.unit || 0), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
+    doc.text(formatMoney(it.unit), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
     doc.text(formatMoney((it.qty||0) * (it.unit||0)), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
     y += lineHeight;
   }
@@ -273,6 +273,7 @@ router.post("/webhook", async (req, res) => {
     console.log("TWILIO (biz): incoming trimmed:", JSON.stringify(trimmed), "sessionState:", state, "isSingleNumber:", isSingleNumber);
 
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
+    // 'ready' means the business exists and has completed setup — users expect numbers to still work.
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
       const num = trimmed;
       // 1 - Create business
@@ -340,7 +341,8 @@ Type 'menu' to return here anytime.`);
       return sendMenu(res);
     }
 
-    // Onboarding and simple states
+    // If we're in a session/state, many of the flows still expect numbers (e.g. choose client), or free text (e.g. business name).
+    // Handle onboarding:
     if (state === "awaiting_business_name") {
       const name = trimmed;
       if (!name) return sendTwimlText(res, "Please send a business name (e.g. 'ABC Traders').");
@@ -490,7 +492,7 @@ Type 'menu' to return here anytime.`);
       if (!idx || idx < 1 || idx > clients.length + 1) return sendTwimlText(res, "Invalid selection. Reply the client number or choose New client.");
       if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await biz.save(); return sendTwimlText(res, "Client name?"); }
       const client = clients[idx-1];
-      biz.sessionData.client = client; biz.sessionState = "creating_invoice_add_items"; biz.sessionData.items = []; await biz.save();
+      biz.sessionData.client = client; biz.sessionState = "creating_invoice_add_items"; await biz.save();
       return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
     }
 
@@ -514,146 +516,94 @@ Type 'menu' to return here anytime.`);
       return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
     }
 
-    // Items loop: two-phase flow
+    // Items loop: improved handling of 'done'/'finish' and missing unit price (skip option)
     if (state === "creating_invoice_add_items") {
       const lowered = trimmed.toLowerCase();
 
-      // short commands
-      const isAddAnother = trimmed === "1";
-      const isEnterPrices = trimmed === "2" || /(^|\s)(prices|enter prices|prices now|enterprice|enter price)(\s|$)/.test(lowered);
-      const isDone = /(^|\s)(done|finish|generate|send)(\s|$)/.test(lowered);
-      const isCancel = trimmed === "3" || /(^|\s)(cancel|abort|stop)(\s|$)/.test(lowered);
+      // Recognize 'done' / 'finish' / 'generate' / numeric '2'
+      const isFinish = /^\s*2\s*$/.test(trimmed) || /(^|\s)(done|finish|generate|send)(\s|$)/.test(lowered);
+      const isCancel = /^\s*3\s*$/.test(trimmed) || /(^|\s)(cancel|abort|stop)(\s|$)/.test(lowered);
       const isSkip = /^\s*skip\s*$/i.test(trimmed);
 
-      // If user explicitly chooses to enter prices for items collected so far
-      if (isEnterPrices) {
-        const items = biz.sessionData.items || [];
-        if (!items.length) return sendTwimlText(res, "No items added yet. Send an item description first.");
-        // prepare price-entry index if needed
-        biz.sessionState = "creating_invoice_enter_prices";
-        biz.sessionData.priceIndex = 0;
-        biz.sessionData.items = items;
-        await biz.save();
-        const next = biz.sessionData.items[0];
-        return sendTwimlText(res, `Price entry: item 1) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
+      // If user explicitly typed '1' to add another item
+      if (trimmed === "1") {
+        // If there is an unfinished lastItem (missing qty/unit), remind user
+        if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && (!biz.sessionData.lastItem.qty || !biz.sessionData.lastItem.unit)) {
+          return sendTwimlText(res, "You're in the middle of adding an item — finish qty and price first, or type 'skip' to set price 0.");
+        }
+        return sendTwimlText(res, "Send next item description:");
       }
 
+      // Cancel shortcut
       if (isCancel) {
         await resetSession(biz);
         return sendTwimlText(res, "Invoice creation cancelled.");
       }
 
-      if (isAddAnother) {
-        // If there is an unfinished item (e.g. description provided but qty not yet), remind user
-        if (biz.sessionData.awaitingItemDesc && biz.sessionData.lastItem && (!biz.sessionData.lastItem.qty)) {
-          return sendTwimlText(res, "You're in the middle of adding an item — finish qty now, or reply '3' to cancel.");
-        }
-        return sendTwimlText(res, "Send next item description:");
+      // If user types 'skip' while waiting for unit price: set unit price = 0 and add item
+      if (isSkip && biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
+        biz.sessionData.lastItem.unit = 0;
+        biz.sessionData.items = biz.sessionData.items || [];
+        biz.sessionData.items.push(biz.sessionData.lastItem);
+        biz.sessionData.lastItem = null;
+        biz.sessionData.awaitingItemDesc = false;
+        await biz.save();
+        return sendTwimlText(res, `Item added with unit price 0. Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Done (generate invoice) or type 'done'/'finish'\n3) Cancel`);
       }
 
-      // If user wrote 'done' but last item incomplete
-      if (isDone) {
-        // If lastItem exists and missing price, instruct
-        if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
-          return sendTwimlText(res, "You have a partially-entered item missing unit price. Reply with the price, 'skip' to set it to 0, or 'back' to add more items.");
-        }
+      // If user typed finish/done/generate
+      if (isFinish) {
         const items = biz.sessionData.items || [];
-        if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
-        // show summary / confirm
+        // If there is an incomplete lastItem (has desc and qty but missing price)
+        if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
+          return sendTwimlText(res, "You have a partially-entered item without a unit price. Reply with the price, reply 'skip' to set price 0, or reply '3' to cancel.");
+        }
+        if (!items.length) return sendTwimlText(res, "No items added. Add an item first (send an item description).");
         const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
         let summary = `Invoice summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
-        items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+        items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
         summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
         biz.sessionState = "creating_invoice_confirm";
         await biz.save();
         return sendTwimlText(res, summary);
       }
 
-      // Otherwise treat as free text flow: description -> qty -> (item saved without price)
+      // otherwise it's free text expected as item description or qty/price steps
       if (!biz.sessionData.awaitingItemDesc) {
-        // expecting description
         const desc = trimmed;
-        if (!desc) return sendTwimlText(res, "Send an item description (or reply 2 to enter prices).");
+        if (!desc) return sendTwimlText(res, "Send an item description (or reply 2/done to finish).");
         biz.sessionData.awaitingItemDesc = true;
         biz.sessionData.lastItem = { description: desc };
         await biz.save();
         return sendTwimlText(res, "Qty? (e.g. 1)");
       } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
-        // expecting qty
         const qty = Number(trimmed);
         if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
         biz.sessionData.lastItem.qty = qty;
-        // save item with unit=null (we'll collect prices in second phase)
-        biz.sessionData.items = biz.sessionData.items || [];
-        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null });
-        // clear lastItem but keep awaitingItemDesc false
-        biz.sessionData.lastItem = null;
-        biz.sessionData.awaitingItemDesc = false;
         await biz.save();
-        return sendTwimlText(res, `Item recorded (without price). Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Enter prices for added items\n3) Cancel`);
-      } else {
-        // fallback
-        return sendTwimlText(res, "Send item description or reply 1/2/3.");
-      }
-    }
-
-    // Price-entry flow: walk through items with missing price
-    if (state === "creating_invoice_enter_prices") {
-      const items = biz.sessionData.items || [];
-      let idx = Number(biz.sessionData.priceIndex || 0);
-      if (!Array.isArray(items) || items.length === 0) {
-        biz.sessionState = "creating_invoice_add_items"; biz.sessionData.priceIndex = 0; await biz.save();
-        return sendTwimlText(res, "No items to price. Send item description to add items.");
-      }
-
-      // Allow user to go back to adding items
-      if (trimmed.toLowerCase() === "back") {
-        biz.sessionState = "creating_invoice_add_items";
-        delete biz.sessionData.priceIndex;
-        await biz.save();
-        return sendTwimlText(res, "Back to adding items. Send next item description or reply '2' when ready to enter prices.");
-      }
-
-      // skip sets price to 0 for current item
-      if (/^skip$/i.test(trimmed)) {
-        items[idx].unit = 0;
-        idx += 1;
-        biz.sessionData.priceIndex = idx;
-        biz.sessionData.items = items;
-        await biz.save();
-      } else {
-        // parse price
+        return sendTwimlText(res, "Unit price? (e.g. 450) — or reply 'skip' to set it to 0");
+      } else if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
+        // expecting unit price
+        // If user sent a numeric price, use it now
         const unit = Number(trimmed);
-        if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a numeric unit price (e.g. 450), 'skip' to set 0, or 'back' to add more items.");
-        items[idx].unit = unit;
-        idx += 1;
-        biz.sessionData.priceIndex = idx;
-        biz.sessionData.items = items;
-        await biz.save();
+        if (!isNaN(unit)) {
+          biz.sessionData.lastItem.unit = unit;
+          biz.sessionData.items = biz.sessionData.items || [];
+          biz.sessionData.items.push(biz.sessionData.lastItem);
+          biz.sessionData.lastItem = null;
+          biz.sessionData.awaitingItemDesc = false;
+          await biz.save();
+          return sendTwimlText(res, `Item added. Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Done (generate invoice) or type 'done'/'finish'\n3) Cancel`);
+        }
+        // if text wasn't numeric and wasn't skip/finish handled above, prompt user
+        return sendTwimlText(res, "Invalid price. Enter a number like '450', or reply 'skip' to set price 0, or '3' to cancel.");
       }
-
-      // If still have items to price
-      if (idx < (biz.sessionData.items || []).length) {
-        const next = biz.sessionData.items[idx];
-        return sendTwimlText(res, `Price entry: item ${idx+1}) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
-      }
-
-      // All prices done -> summarize and confirm
-      const finalItems = biz.sessionData.items || [];
-      const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-      let summary = `Invoice summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
-      finalItems.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
-      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
-      biz.sessionState = "creating_invoice_confirm";
-      delete biz.sessionData.priceIndex;
-      await biz.save();
-      return sendTwimlText(res, summary);
     }
 
-    // Confirmation: generate invoice or save draft or add more items
     if (state === "creating_invoice_confirm" && isSingleNumber) {
       const choice = trimmed;
       if (choice === "1") {
+        // go back to adding items
         biz.sessionState = "creating_invoice_add_items";
         await biz.save();
         return sendTwimlText(res, "Send next item description:");

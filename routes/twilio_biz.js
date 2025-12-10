@@ -452,10 +452,26 @@ Type 'menu' to return here anytime.`);
       const choice = trimmed;
       if (choice === "1") {
         const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(5).lean();
+
+        // --- FIX: auto-select when there's exactly one saved client ---
         if (!clients.length) {
-          biz.sessionState = "creating_invoice_new_client"; await biz.save();
+          // no saved clients -> create new client flow
+          biz.sessionState = "creating_invoice_new_client";
+          await biz.save();
           return sendTwimlText(res, "No saved clients. Please enter client name:");
         }
+
+        if (clients.length === 1) {
+          // auto-select the single client and proceed to items stage
+          const client = clients[0];
+          biz.sessionData.client = client;
+          biz.sessionState = "creating_invoice_add_items";
+          biz.sessionData.items = [];
+          await biz.save();
+          return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
+        }
+
+        // multiple clients -> show list and allow selection by index
         let lines = ["Choose a client by number:"];
         clients.forEach((c, i) => lines.push(`${i+1}) ${c.name || c.phone} ${c.phone ? "- " + c.phone : ""}`));
         lines.push(`${clients.length+1}) New client`);

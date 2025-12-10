@@ -1,9 +1,14 @@
+// routes/twilio_biz.js
 import express from "express";
 import { Router } from "express";
 import twilio from "twilio";
 import fs from "fs";
 import path from "path";
+import axios from "axios";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
+
+import Business from "../models/business.js";
+import Client from "../models/client.js";
 
 let PDFDocument;
 try {
@@ -11,7 +16,7 @@ try {
     try {
       return (await import("pdfkit")).default || (await import("pdfkit"));
     } catch (e) {
-      try { /* fallback */ return require("pdfkit"); } catch (er) { return null; }
+      try { /* fallback for commonjs env */ return require("pdfkit"); } catch (er) { return null; }
     }
   })();
 } catch (e) {
@@ -63,14 +68,12 @@ function normalizePhone(p) {
   return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
+/* verification: prefer TWILIO_BIZ_AUTH_TOKEN, fallback to TWILIO_AUTH_TOKEN */
 function verifyTwilioRequest(req) {
-  // allow either biz-specific debug flag or global debug flag
   if (process.env.DEBUG_TWILIO_BIZ_SKIP_VERIFY === "1" || process.env.DEBUG_TWILIO_SKIP_VERIFY === "1") {
     console.log("TWILIO_VERIFY (biz): DEBUG skip enabled");
     return true;
   }
-
-  // prefer biz-specific auth token, fall back to the main one if not set
   const authToken = process.env.TWILIO_BIZ_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) {
     console.warn("TWILIO_VERIFY (biz): TWILIO_BIZ_AUTH_TOKEN and TWILIO_AUTH_TOKEN not set — skipping verification (dev)");
@@ -223,7 +226,7 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
   });
 }
 
-/* ---------- Admin command parsing ---------- */
+/* ---------- Simple command parser (kept for admin commands if needed) ---------- */
 function parseAdminCommand(bodyRaw) {
   const parts = bodyRaw.split("|").map(p => p.trim()).filter(Boolean);
   const command = parts.shift() || "";
@@ -258,9 +261,7 @@ function parseAdminCommand(bodyRaw) {
 /* Robust date parser that normalizes weird hyphens and whitespace */
 function parseDateFlexible(s) {
   if (!s) return null;
-  // convert any unicode dash to normal hyphen, remove non-printable
   const norm = String(s).replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-").replace(/[^\x20-\x7E\-:]/g, "").trim();
-  // supported formats: YYYY-MM-DD, YYYYMMDD, DD-MM-YYYY, ISO fallback
   if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
     const d = new Date(norm);
     if (!isNaN(d)) return d;
@@ -275,13 +276,49 @@ function parseDateFlexible(s) {
     const dt = new Date(`${yy}-${mm}-${dd}`);
     if (!isNaN(dt)) return dt;
   }
-  // try Date parser
   const dt = new Date(norm);
   if (!isNaN(dt)) return dt;
   return null;
 }
 
-/* ---------- Main webhook (admin-only, any phone) ---------- */
+/* ---------- Stateful onboarding + invoice flows helpers ---------- */
+
+async function ensureLogosDir() {
+  const logosDir = path.join(process.cwd(), "public", "docs", "logos");
+  try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {}
+  return logosDir;
+}
+
+async function saveLogoFromTwilio(mediaUrl, businessId) {
+  if (!mediaUrl) throw new Error("No media URL");
+  const logosDir = await ensureLogosDir();
+  const filename = `logo-${businessId}.png`;
+  const filepath = path.join(logosDir, filename);
+  const resp = await axios.get(mediaUrl, { responseType: "arraybuffer", timeout: 15000 });
+  await fs.promises.writeFile(filepath, resp.data);
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const publicUrl = site ? `${site}/docs/logos/${filename}` : `/docs/logos/${filename}`;
+  return { filepath, filename, publicUrl };
+}
+
+function resetSession(biz) {
+  biz.sessionState = null;
+  biz.sessionData = {};
+  return biz.save();
+}
+
+function sendMenu(res) {
+  const msg = `ZimQuote — reply with a number:
+1) Create business account
+2) New invoice
+3) Add client
+4) Upload logo
+5) Settings
+6) Help`;
+  return sendTwimlText(res, msg);
+}
+
+/* ---------- Main stateful webhook for biz (admin-style, any phone treated as business) ---------- */
 router.post("/webhook", async (req, res) => {
   console.log("TWILIO (biz): webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
   console.log("TWILIO (biz): debug env:", {
@@ -302,111 +339,300 @@ router.post("/webhook", async (req, res) => {
 
   try {
     const params = req.body || {};
-    const rawFrom = String(params.From || params.from || "");
+    const rawFrom = String(params.From || params.from || "").trim();
     const bodyRaw = String(params.Body || params.body || "").trim();
     const profileName = String(params.ProfileName || params.profileName || "");
-    console.log("TWILIO (biz): parsed", { rawFrom, bodyRaw, profileName });
-
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
 
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
-    const providerIdNormalized = normalizePhone(providerId);
 
-    // NOTE: per request - allow any phone number to access admin webhook
-    console.log("TWILIO (biz): treating", providerId, "as admin (open admin access)");
-
-    // Admin block (same logic as before)
-    const trimmed = (bodyRaw || "").trim();
-    const lctext = trimmed.toLowerCase();
-    if (!lctext || ["hi","hello","hey"].includes(lctext)) {
-      const help = `Admin commands:
-invoice create|customer:Name|email:em@ill|item:Desc,qty,unit|item:Desc,qty,unit|due:YYYY-MM-DD|notes:...
-quote create|customer:Name|email:em@ill|item:Desc,qty,unit|...
-receipt create|amount:100|description:Payment|customer:Name|email:...`;
-      return sendTwimlText(res, help);
+    // find or create business record by phone
+    let biz = await Business.findOne({ provider: "whatsapp", providerId });
+    if (!biz) {
+      biz = await Business.create({ provider: "whatsapp", providerId, name: null, sessionState: null, sessionData: {}, counters: { invoice: 0, quote: 0, receipt: 0 } });
+      console.log("TWILIO (biz): created business record", biz._id?.toString());
     }
 
-    const parsed = parseAdminCommand(bodyRaw);
-    try {
-      if (!parsed.action || !parsed.verb) {
-        return sendTwimlText(res, "Invalid admin command. Send 'hi' for usage.");
+    if (profileName && !biz.name) {
+      biz.name = biz.name || profileName;
+      await biz.save().catch(() => {});
+    }
+
+    const text = bodyRaw || "";
+    const lctext = (text || "").toLowerCase();
+
+    // always allow 'menu' or '0' to reset and show menu
+    if (["menu", "0"].includes(lctext)) {
+      await resetSession(biz);
+      return sendMenu(res);
+    }
+
+    // if business not yet set up (no name) and no session, start onboarding
+    if (!biz.name && !biz.sessionState) {
+      const welcome = `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo (create sample invoice)\n3) Help\n\nReply with the number to proceed.`;
+      biz.sessionState = "awaiting_first_choice";
+      await biz.save();
+      return sendTwimlText(res, welcome);
+    }
+
+    // handle session-based flows
+    const state = biz.sessionState || "idle";
+
+    // handle main menu numeric choices when idle/awaiting_first_choice
+    if (!state || state === "idle" || state === "awaiting_first_choice") {
+      const num = (text || "").trim();
+      if (num === "1") {
+        biz.sessionState = "awaiting_business_name";
+        biz.sessionData = {};
+        await biz.save();
+        return sendTwimlText(res, "Great — what's your business name? (e.g. 'ABC Traders')");
       }
-
-      if (["invoice","quote","receipt"].includes(parsed.action) && parsed.verb === "create") {
-        if (!PDFDocument) {
-          console.error("TWILIO (biz): pdfkit not installed; cannot create PDF");
-          return sendTwimlText(res, "PDF generation is not available: please `npm install pdfkit` on the server.");
-        }
-
-        if (parsed.action === "receipt") {
-          const amount = Number(parsed.fields.amount || parsed.fields.total || 0);
-          if (isNaN(amount) || amount <= 0) {
-            return sendTwimlText(res, "Receipt creation failed: invalid or missing amount. Use amount:100");
-          }
-          const num = await incrementCounter("receipt");
-          const numberStr = `R-${String(num).padStart(6, "0")}`;
-          const date = new Date();
-          const billingTo = parsed.fields.customer || parsed.fields.name || "";
-          const email = parsed.fields.email || "";
-          const items = [{ description: parsed.fields.description || "Payment", qty: 1, unit: amount }];
-
-          try {
-            const { filename } = await generatePDF({ type: "receipt", number: numberStr, date, dueDate: null, billingTo, email, items, notes: parsed.fields.notes || "" });
-            const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-            const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-            const url = `${baseForMedia}/docs/generated/receipts/${filename}`;
-            return sendTwimlWithMedia(res, `Receipt ${numberStr} created. Download: ${url}`, [url]);
-          } catch (err) {
-            console.error("TWILIO (biz): receipt pdf generation failed:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
-            return sendTwimlText(res, "Failed to generate receipt PDF; check server logs.");
-          }
-        }
-
-        // invoice / quote
-        const type = parsed.action === "invoice" ? "invoice" : "quote";
-        const numValue = await incrementCounter(type);
-        const numberStr = (type === "invoice" ? `INV-${String(numValue).padStart(6,"0")}` : `QT-${String(numValue).padStart(6,"0")}`);
+      if (num === "2") {
+        // demo invoice
+        const demoClient = { name: "Demo Client", phone: providerId };
+        const items = [{ description: "Demo service", qty: 1, unit: 100 }];
+        // increment biz counter
+        biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
+        biz.counters.invoice = (biz.counters.invoice || 0) + 1;
+        const numberStr = `${biz.invoicePrefix || "INV"}-${String(biz.counters.invoice).padStart(6,"0")}`;
         const date = new Date();
-
-        let dueDate = null;
-        if (parsed.fields.due) {
-          const maybe = parseDateFlexible(parsed.fields.due);
-          if (maybe) dueDate = maybe;
-          else {
-            console.warn("TWILIO (biz): invalid due date provided:", parsed.fields.due);
-          }
-        }
-
-        const billingTo = parsed.fields.customer || parsed.fields.name || "";
-        const email = parsed.fields.email || "";
-        const items = Array.isArray(parsed.fields.items) ? parsed.fields.items : [];
-
-        if (parsed.action === "invoice" && items.length === 0) {
-          return sendTwimlText(res, "Invoice creation failed: no items provided. Use item:desc,qty,unit");
-        }
-
         try {
-          const notes = parsed.fields.notes || (parsed.fields._text ? (Array.isArray(parsed.fields._text) ? parsed.fields._text.join(" | ") : parsed.fields._text) : "");
-          const fullNotes = (dueDate ? notes : `${notes}${notes ? " | " : ""}NOTE: due date invalid or missing, please check.`);
-          const { filename } = await generatePDF({ type, number: numberStr, date, dueDate, billingTo, email, items, notes: fullNotes });
+          const { filename } = await generatePDF({ type: "invoice", number: numberStr, date, dueDate: null, billingTo: demoClient.name, email: "", items, notes: "Demo invoice" });
+          await biz.save();
           const site = (process.env.SITE_URL || "").replace(/\/$/, "");
           const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-          const url = `${baseForMedia}/docs/generated/${type === "invoice" ? "invoices" : "quotes"}/${filename}`;
-          return sendTwimlWithMedia(res, `${type[0].toUpperCase() + type.slice(1)} ${numberStr} created. Download: ${url}`, [url]);
+          const url = `${baseForMedia}/docs/generated/invoices/${filename}`;
+          return sendTwimlWithMedia(res, `Demo invoice created. Download: ${url}`, [url]);
         } catch (err) {
-          console.error("TWILIO (biz): pdf generation failed:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
-          return sendTwimlText(res, "Failed to generate PDF; check server logs.");
+          console.error("TWILIO (biz): demo invoice failed", err);
+          return sendTwimlText(res, "Demo generation failed on server; check logs.");
         }
-      } else {
-        return sendTwimlText(res, "Unknown admin command. Send 'hi' for usage.");
       }
-    } catch (err) {
-      console.error("TWILIO (biz): admin command error:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
-      return sendTwimlText(res, "Server error; try again later.");
+      if (num === "3" || lctext === "help") {
+        return sendTwimlText(res, `Help — quick commands:\n1) Create business account\n2) New invoice\n3) Add client\n4) Upload logo\nReply with the number to proceed.`);
+      }
+      if (num === "4") {
+        biz.sessionState = "awaiting_logo_upload";
+        biz.sessionData = {};
+        await biz.save();
+        return sendTwimlText(res, "Please send your business logo (as an image). Reply '1' to skip.");
+      }
+      if (num === "2" && biz.name) { /* fallback: if biz exists and user typed 2 earlier handled above */ }
+
+      return sendMenu(res);
     }
 
+    // ---------- ONBOARDING STATES ----------
+    if (state === "awaiting_business_name") {
+      const name = text.trim();
+      if (!name) return sendTwimlText(res, "Please send a business name (e.g. 'ABC Traders').");
+      biz.name = name;
+      biz.sessionState = "awaiting_logo_choice";
+      await biz.save();
+      return sendTwimlText(res, `Thanks — "${name}".\nNow send your logo image, or reply:\n1) Skip logo\n2) Add later`);
+    }
+
+    if (state === "awaiting_logo_choice") {
+      if (text.trim() === "1") {
+        biz.sessionState = "awaiting_currency";
+        await biz.save();
+        return sendTwimlText(res, `Logo skipped. What currency do you want to use? (ZWL, USD, ZAR) — reply e.g. 'ZWL'`);
+      }
+      if (text.trim() === "2") {
+        biz.sessionState = "ready";
+        biz.sessionData = {};
+        await biz.save();
+        return sendTwimlText(res, `Setup finished. Use 'menu' to see commands. Quick commands:\n1) New invoice\n2) Add client\n3) Upload logo`);
+      }
+      return sendTwimlText(res, `Send an image file for your logo, or reply:\n1) Skip logo\n2) Add later`);
+    }
+
+    if (state === "awaiting_currency") {
+      const cur = (text || "").trim().toUpperCase();
+      if (!["ZWL", "USD", "ZAR"].includes(cur)) {
+        biz.sessionState = "awaiting_currency";
+        await biz.save();
+        return sendTwimlText(res, "Invalid currency. Reply with one of: ZWL, USD, ZAR");
+      }
+      biz.currency = cur;
+      biz.sessionState = "ready";
+      await biz.save();
+      return sendTwimlText(res, `All set! Business "${biz.name}" created with currency ${cur}.\nReply 'menu' or '1' for New invoice.`);
+    }
+
+    // ---------- LOGO UPLOAD (media) ----------
+    const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
+    if ((state === "awaiting_logo_upload" || state === "awaiting_logo_choice") && mediaCount > 0) {
+      const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
+      try {
+        const saved = await saveLogoFromTwilio(mediaUrl0, biz._id.toString());
+        biz.logoUrl = saved.publicUrl;
+        biz.sessionState = "awaiting_currency";
+        biz.sessionData = {};
+        await biz.save();
+        return sendTwimlText(res, `Logo received and saved. Next: what currency do you want to use? Reply: ZWL / USD / ZAR`);
+      } catch (e) {
+        console.error("TWILIO (biz): logo save failed", e);
+        return sendTwimlText(res, "Could not save logo — please send a JPG/PNG image or reply '1' to skip.");
+      }
+    }
+
+    // ---------- ADD CLIENT / INVOICE FLOW ----------
+    if (state === "creating_invoice_choose_client") {
+      const choice = text.trim();
+      if (choice === "1") {
+        const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(5).lean();
+        if (!clients.length) {
+          biz.sessionState = "creating_invoice_new_client";
+          await biz.save();
+          return sendTwimlText(res, "No saved clients. Please enter client name:");
+        }
+        let lines = ["Choose a client by number:"];
+        clients.forEach((c, i) => lines.push(`${i+1}) ${c.name || c.phone} ${c.phone ? "- " + c.phone : ""}`));
+        lines.push(`${clients.length+1}) New client`);
+        biz.sessionState = "creating_invoice_choose_client_index";
+        biz.sessionData.recentClients = clients;
+        await biz.save();
+        return sendTwimlText(res, lines.join("\n"));
+      } else if (choice === "2") {
+        biz.sessionState = "creating_invoice_new_client";
+        biz.sessionData = {};
+        await biz.save();
+        return sendTwimlText(res, "Client name?");
+      } else {
+        await resetSession(biz);
+        return sendTwimlText(res, "Cancelled. Reply 'menu' to start again.");
+      }
+    }
+
+    if (state === "creating_invoice_choose_client_index") {
+      const idx = Number(text.trim());
+      const clients = biz.sessionData.recentClients || [];
+      if (!idx || idx < 1 || idx > clients.length + 1) {
+        return sendTwimlText(res, "Invalid selection. Reply the client number or choose 'New client'.");
+      }
+      if (idx === clients.length + 1) {
+        biz.sessionState = "creating_invoice_new_client";
+        biz.sessionData = {};
+        await biz.save();
+        return sendTwimlText(res, "Client name?");
+      }
+      const client = clients[idx-1];
+      biz.sessionData.client = client;
+      biz.sessionState = "creating_invoice_add_items";
+      await biz.save();
+      return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now add item:\nSend item description (e.g. 'Website design')`);
+    }
+
+    if (state === "creating_invoice_new_client") {
+      if (!biz.sessionData.clientName && text.trim()) {
+        const cname = text.trim();
+        biz.sessionData.clientName = cname;
+        biz.sessionState = "creating_invoice_new_client_phone";
+        await biz.save();
+        return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 'same' to use this sender");
+      }
+    }
+
+    if (state === "creating_invoice_new_client_phone") {
+      const phoneRaw = text.trim();
+      const phone = phoneRaw.toLowerCase() === "same" ? providerId : phoneRaw;
+      const client = await Client.findOneAndUpdate(
+        { businessId: biz._id, phone },
+        { $set: { name: biz.sessionData.clientName, phone } },
+        { new: true, upsert: true }
+      );
+      biz.sessionData.client = client;
+      biz.sessionData.items = [];
+      biz.sessionState = "creating_invoice_add_items";
+      await biz.save();
+      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}).\nNow send item description (e.g. 'Website design')`);
+    }
+
+    // items loop
+    if (state === "creating_invoice_add_items") {
+      // non-numeric flows: description -> qty -> unit
+      if (!biz.sessionData.awaitingItemDesc) {
+        const desc = text.trim();
+        if (!desc) return sendTwimlText(res, "Send an item description (or reply 'done' to finish).");
+        biz.sessionData.awaitingItemDesc = true;
+        biz.sessionData.lastItem = { description: desc };
+        await biz.save();
+        return sendTwimlText(res, "Qty? (e.g. 1)");
+      } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
+        const qty = Number(text.trim());
+        if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1'.");
+        biz.sessionData.lastItem.qty = qty;
+        await biz.save();
+        return sendTwimlText(res, "Unit price? (e.g. 450)");
+      } else if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
+        const unit = Number(text.trim());
+        if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a number like '450'.");
+        biz.sessionData.lastItem.unit = unit;
+        biz.sessionData.items = biz.sessionData.items || [];
+        biz.sessionData.items.push(biz.sessionData.lastItem);
+        biz.sessionData.lastItem = null;
+        biz.sessionData.awaitingItemDesc = false;
+        await biz.save();
+        return sendTwimlText(res, `Item added. Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Done (generate invoice)\n3) Cancel`);
+      }
+      // also handle numeric choices while in items state:
+      if (["1","2","3"].includes(text.trim())) {
+        const choice = text.trim();
+        if (choice === "1") return sendTwimlText(res, "Send next item description:");
+        if (choice === "2") {
+          const items = biz.sessionData.items || [];
+          if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
+          const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+          let summary = `Invoice summary for ${biz.sessionData.client.name || biz.sessionData.client.phone}:\n`;
+          items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+          summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Send & generate PDF\n2) Save as draft\n3) Cancel`;
+          biz.sessionState = "creating_invoice_confirm";
+          await biz.save();
+          return sendTwimlText(res, summary);
+        }
+        if (choice === "3") {
+          await resetSession(biz);
+          return sendTwimlText(res, "Invoice creation cancelled.");
+        }
+      }
+    }
+
+    if (state === "creating_invoice_confirm") {
+      if (text.trim() === "1") {
+        const items = biz.sessionData.items || [];
+        const client = biz.sessionData.client;
+        biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
+        biz.counters.invoice = (biz.counters.invoice || 0) + 1;
+        const numberStr = `${biz.invoicePrefix || "INV"}-${String(biz.counters.invoice).padStart(6, "0")}`;
+        const date = new Date();
+        try {
+          const { filename } = await generatePDF({ type: "invoice", number: numberStr, date, dueDate: null, billingTo: client.name || client.phone, email: client.email || "", items, notes: "" });
+          await biz.save();
+          const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+          const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
+          const url = `${baseForMedia}/docs/generated/invoices/${filename}`;
+          await resetSession(biz);
+          return sendTwimlWithMedia(res, `Invoice ${numberStr} created. Download: ${url}`, [url]);
+        } catch (e) {
+          console.error("TWILIO (biz): invoice PDF failed", e);
+          return sendTwimlText(res, "Failed to generate invoice PDF; check server logs.");
+        }
+      } else if (text.trim() === "2") {
+        biz.sessionState = "ready";
+        await biz.save();
+        return sendTwimlText(res, "Saved invoice as draft. Reply 'menu' to continue.");
+      } else {
+        await resetSession(biz);
+        return sendTwimlText(res, "Cancelled.");
+      }
+    }
+
+    // fallback
+    return sendMenu(res);
+
   } catch (err) {
-    console.error("TWILIO (biz): webhook handler error:", err && err.stack ? err.stack : err);
+    console.error("TWILIO (biz): webhook handler error:", err && (err.stack || err.message) ? (err.stack || err.message) : err);
     try { return sendTwimlText(res, "Server error; try again later."); } catch (e) { return res.status(500).end(); }
   }
 });

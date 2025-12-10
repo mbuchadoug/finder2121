@@ -16,7 +16,7 @@ try {
     try {
       return (await import("pdfkit")).default || (await import("pdfkit"));
     } catch (e) {
-      try { /* fallback for commonjs env */ return require("pdfkit"); } catch (er) { return null; }
+      try { return require("pdfkit"); } catch (er) { return null; }
     }
   })();
 } catch (e) {
@@ -56,12 +56,7 @@ function sendTwimlWithMedia(res, text, mediaUrls = []) {
   }
 }
 
-function toArraySafe(v) {
-  if (!v && v !== 0) return [];
-  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
-  if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
-  return [String(v)];
-}
+function formatMoney(n) { return Number(n || 0).toFixed(2); }
 
 function normalizePhone(p) {
   if (!p) return "";
@@ -104,38 +99,18 @@ function verifyTwilioRequest(req) {
   }
 }
 
-/* ---------- Counters (file) ---------- */
+/* ---------- File counters (fallback) ---------- */
 const DATA_DIR = path.join(process.cwd(), "data");
 const COUNTER_FILE = path.join(DATA_DIR, "admin_counters.json");
-
-async function ensureDataDir() {
-  try { await fs.promises.mkdir(DATA_DIR, { recursive: true }); } catch (e) {}
-}
-
+async function ensureDataDir() { try { await fs.promises.mkdir(DATA_DIR, { recursive: true }); } catch (e) {} }
 async function loadCounters() {
   await ensureDataDir();
-  try {
-    const raw = await fs.promises.readFile(COUNTER_FILE, "utf8");
-    return JSON.parse(raw || "{}");
-  } catch (e) {
-    return { invoice: 0, quote: 0, receipt: 0 };
-  }
+  try { const raw = await fs.promises.readFile(COUNTER_FILE, "utf8"); return JSON.parse(raw || "{}"); } catch (e) { return { invoice: 0, quote: 0, receipt: 0 }; }
 }
+async function saveCounters(obj) { await ensureDataDir(); await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8"); }
+async function incrementCounter(type) { const counters = await loadCounters(); if (!counters[type]) counters[type] = 0; counters[type] = Number(counters[type]) + 1; await saveCounters(counters); return counters[type]; }
 
-async function saveCounters(obj) {
-  await ensureDataDir();
-  await fs.promises.writeFile(COUNTER_FILE, JSON.stringify(obj, null, 2), "utf8");
-}
-
-async function incrementCounter(type) {
-  const counters = await loadCounters();
-  if (!counters[type]) counters[type] = 0;
-  counters[type] = Number(counters[type]) + 1;
-  await saveCounters(counters);
-  return counters[type];
-}
-
-/* ---------- PDF generation (pdfkit) ---------- */
+/* ---------- PDF helpers (keeps your generatePDF) ---------- */
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
@@ -144,8 +119,6 @@ async function ensurePublicSubdirs() {
   }
   return base;
 }
-
-function formatMoney(n) { return Number(n || 0).toFixed(2); }
 
 function drawTable(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
@@ -156,9 +129,7 @@ function drawTable(doc, items, startX, startY, columnWidths) {
   doc.text("Unit", startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
   doc.text("Total", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
   y += lineHeight;
-  try {
-    doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b) => a + b, 0) + 40, y - 6).strokeOpacity(0.08).stroke();
-  } catch(e) {}
+  try { doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b) => a + b, 0) + 40, y - 6).strokeOpacity(0.08).stroke(); } catch(e) {}
   for (const it of items) {
     doc.fontSize(10).fillColor("black");
     doc.text(it.description, startX, y, { width: columnWidths[0] });
@@ -172,124 +143,45 @@ function drawTable(doc, items, startX, startY, columnWidths) {
 
 async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "" }) {
   if (!PDFDocument) throw new Error("pdfkit not available. Install with: npm install pdfkit");
-
   const baseDir = await ensurePublicSubdirs();
   const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
-
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: "A4", margin: 50 });
       const stream = fs.createWriteStream(filepath);
       doc.pipe(stream);
-
-      // Use business logo if exists (we still use the global logo path by default)
       const logoPath = path.join(process.cwd(), "public", "docs", "logo.png");
-      if (fs.existsSync(logoPath)) {
-        try { doc.image(logoPath, 50, 45, { width: 90 }); } catch (e) {}
-      }
+      if (fs.existsSync(logoPath)) { try { doc.image(logoPath, 50, 45, { width: 90 }); } catch (e) {} }
       doc.fontSize(20).fillColor("#111").text(type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT", 400, 50, { align: "right" });
       doc.fontSize(10).fillColor("#333").text(`No: ${number}`, 400, 75, { align: "right" });
       doc.text(`Date: ${date.toISOString().slice(0,10)}`, 400, 90, { align: "right" });
       if (dueDate) doc.text(`Due: ${dueDate.toISOString().slice(0,10)}`, 400, 105, { align: "right" });
-
       doc.moveDown(2);
       doc.fontSize(12).fillColor("#000").text("Bill To:", 50, 140);
       doc.fontSize(11).fillColor("#111").text(billingTo || "-", 50, 155);
       if (email) doc.fontSize(10).fillColor("#666").text(email, 50, 170);
-
       const startY = 210;
       const columnWidths = [260, 60, 80, 80];
       const afterTableY = drawTable(doc, items, 50, startY, columnWidths);
-
       let subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
       const tax = 0;
       const total = subtotal + tax;
       doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal)}`, 400, afterTableY + 10, { align: "right" });
       if (tax) doc.text(`Tax: ${formatMoney(tax)}`, 400, afterTableY + 25, { align: "right" });
       doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, 400, afterTableY + 40, { align: "right" });
-
-      if (notes) {
-        doc.moveDown(2);
-        doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80);
-        doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 });
-      }
-
+      if (notes) { doc.moveDown(2); doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80); doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 }); }
       doc.fontSize(9).fillColor("gray").text("-----------", 50, 760, { align: "center", width: 500 });
-
       doc.end();
       stream.on("finish", () => resolve({ filepath, filename }));
       stream.on("error", (err) => reject(err));
-    } catch (err) {
-      reject(err);
-    }
+    } catch (err) { reject(err); }
   });
 }
 
-/* ---------- Simple command parser (kept for admin commands if needed) ---------- */
-function parseAdminCommand(bodyRaw) {
-  const parts = bodyRaw.split("|").map(p => p.trim()).filter(Boolean);
-  const command = parts.shift() || "";
-  const cmdWords = command.split(/\s+/).filter(Boolean);
-  const action = (cmdWords[0] || "").toLowerCase();
-  const verb = (cmdWords[1] || "").toLowerCase();
-  const result = { raw: bodyRaw, action, verb, fields: {} };
-
-  for (const p of parts) {
-    const idx = p.indexOf(":");
-    if (idx === -1) {
-      if (!result.fields._text) result.fields._text = [];
-      result.fields._text.push(p);
-      continue;
-    }
-    const key = p.slice(0, idx).trim().toLowerCase();
-    const val = p.slice(idx + 1).trim();
-    if (key === "item") {
-      if (!result.fields.items) result.fields.items = [];
-      const itemParts = val.split(",").map(x => x.trim());
-      const description = itemParts[0] || "";
-      const qty = Number(itemParts[1] || 1);
-      const unit = Number(itemParts[2] || 0);
-      result.fields.items.push({ description, qty, unit });
-    } else {
-      result.fields[key] = val;
-    }
-  }
-  return result;
-}
-
-/* Robust date parser that normalizes weird hyphens and whitespace */
-function parseDateFlexible(s) {
-  if (!s) return null;
-  const norm = String(s).replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-").replace(/[^\x20-\x7E\-:]/g, "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
-    const d = new Date(norm);
-    if (!isNaN(d)) return d;
-  }
-  if (/^\d{8}$/.test(norm)) {
-    const y = norm.slice(0,4), m = norm.slice(4,6), d = norm.slice(6,8);
-    const dt = new Date(`${y}-${m}-${d}`);
-    if (!isNaN(dt)) return dt;
-  }
-  if (/^\d{2}-\d{2}-\d{4}$/.test(norm)) {
-    const [dd,mm,yy] = norm.split("-");
-    const dt = new Date(`${yy}-${mm}-${dd}`);
-    if (!isNaN(dt)) return dt;
-  }
-  const dt = new Date(norm);
-  if (!isNaN(dt)) return dt;
-  return null;
-}
-
-/* ---------- Stateful onboarding + invoice flows helpers ---------- */
-
-async function ensureLogosDir() {
-  const logosDir = path.join(process.cwd(), "public", "docs", "logos");
-  try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {}
-  return logosDir;
-}
-
+/* ---------- Logo saving helpers ---------- */
+async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }
 async function saveLogoFromTwilio(mediaUrl, businessId) {
   if (!mediaUrl) throw new Error("No media URL");
   const logosDir = await ensureLogosDir();
@@ -302,36 +194,23 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   return { filepath, filename, publicUrl };
 }
 
-function resetSession(biz) {
-  biz.sessionState = null;
-  biz.sessionData = {};
-  return biz.save();
-}
+async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return biz.save(); }
 
 function sendMenu(res) {
-  const msg = `ZimQuote — reply with a number or command:
+  const msg = `ZimQuote — reply with a number:
 1) Create business account
 2) New invoice
 3) Add client
 4) Upload logo
 5) Settings
-6) Help
-Commands: 'new invoice', 'add client', 'clients', 'settings', 'menu'`;
+6) Help`;
   return sendTwimlText(res, msg);
 }
 
-/* ---------- Main stateful webhook for biz (admin-style, any phone treated as business) ---------- */
+/* ---------- Main webhook (numbers-only commands) ---------- */
 router.post("/webhook", async (req, res) => {
   console.log("TWILIO (biz): webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
-  console.log("TWILIO (biz): debug env:", {
-    SITE_URL: process.env.SITE_URL ? "[set]" : "[missing]",
-    DEBUG_TWILIO_BIZ_SKIP_VERIFY: process.env.DEBUG_TWILIO_BIZ_SKIP_VERIFY || "[not set]",
-    DEBUG_TWILIO_SKIP_VERIFY: process.env.DEBUG_TWILIO_SKIP_VERIFY || "[not set]",
-    TWILIO_BIZ_AUTH_TOKEN: process.env.TWILIO_BIZ_AUTH_TOKEN ? "[set]" : "[missing]",
-    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? "[set]" : "[missing]"
-  });
-
-  try { console.log("TWILIO (biz): body (raw):", JSON.stringify(req.body)); } catch (e) { console.log("TWILIO (biz): body (raw) - keys:", Object.keys(req.body || {})); }
+  try { console.log("TWILIO (biz): body (raw):", JSON.stringify(req.body)); } catch (e) { console.log("TWILIO (biz): body keys:", Object.keys(req.body || {})); }
 
   const ok = verifyTwilioRequest(req);
   if (!ok) {
@@ -345,105 +224,89 @@ router.post("/webhook", async (req, res) => {
     const bodyRaw = String(params.Body || params.body || "").trim();
     const profileName = String(params.ProfileName || params.profileName || "");
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
-
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
-    // find or create business record by phone (one number => one business)
+    // find or create business (one number => one business)
     let biz = await Business.findOne({ provider: "whatsapp", providerId });
     if (!biz) {
-      biz = await Business.create({ provider: "whatsapp", providerId, name: null, sessionState: null, sessionData: {}, counters: { invoice: 0, quote: 0, receipt: 0 }, currency: "ZWL", invoicePrefix: "INV", quotePrefix: "QT", paymentTermsDays: 30 });
+      biz = await Business.create({
+        provider: "whatsapp",
+        providerId,
+        name: null,
+        sessionState: null,
+        sessionData: {},
+        counters: { invoice: 0, quote: 0, receipt: 0 },
+        currency: "ZWL",
+        invoicePrefix: "INV",
+        quotePrefix: "QT",
+        paymentTermsDays: 30
+      });
       console.log("TWILIO (biz): created business record", biz._id?.toString());
     }
 
-    // Save profileName as business name if business not named yet
     if (profileName && !biz.name) {
       biz.name = biz.name || profileName;
       await biz.save().catch(() => {});
     }
 
     const text = bodyRaw || "";
-    const lctext = (text || "").toLowerCase();
+    const trimmed = text.trim();
 
-    // simple text commands mapping
-    const isNewInvoiceCmd = lctext === "2" || lctext === "new invoice" || lctext === "invoice";
-    const isAddClientCmd = lctext === "3" || lctext === "add client" || lctext === "client" || lctext === "addclient";
-    const isSettingsCmd = lctext === "5" || lctext === "settings";
-    const isListClientsCmd = lctext === "clients" || lctext === "list clients" || lctext === "4 clients";
-
-    // always allow 'menu' or '0' to reset and show menu
-    if (["menu", "0"].includes(lctext)) {
+    // Always allow 'menu' or '0' to show main menu and reset session
+    if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
       await resetSession(biz);
       return sendMenu(res);
     }
 
-    // Restrict create-business when one already exists for this number
-    if ((lctext === "1" || lctext === "create business" || lctext === "create account") && biz.name) {
-      return sendTwimlText(res, `You already have a business registered as "${biz.name}". Reply '5' for settings or 'menu' to see other commands.`);
-    }
-
-    // If business not set up (no name) and no session, start onboarding
+    // If biz not named and no session, start onboarding prompt
     if (!biz.name && !biz.sessionState) {
-      const welcome = `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo (create sample invoice)\n3) Help\n\nReply with the number to proceed.`;
       biz.sessionState = "awaiting_first_choice";
       await biz.save();
-      return sendTwimlText(res, welcome);
+      return sendTwimlText(res, `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo\n3) Help\nReply with a number.`);
     }
 
-    // handle session-based flows
+    // TOP-LEVEL: Strictly accept only numeric single-digit commands for main menu
+    const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
-    // handle main menu numeric choices when idle/awaiting_first_choice
-    if (!state || state === "idle" || state === "awaiting_first_choice") {
-      const num = (text || "").trim();
+    if ((state === "idle" || state === "awaiting_first_choice") && isSingleNumber) {
+      const num = trimmed;
+      // 1 - Create business
       if (num === "1") {
-        // Start account creation if not exists
-        if (biz.name) {
-          return sendTwimlText(res, `You already have a business registered as "${biz.name}". Reply '5' for settings.`);
-        }
+        if (biz.name) return sendTwimlText(res, `You already have a business: "${biz.name}". Reply 5 for settings.`);
         biz.sessionState = "awaiting_business_name";
         biz.sessionData = {};
         await biz.save();
         return sendTwimlText(res, "Great — what's your business name? (e.g. 'ABC Traders')");
       }
-
-      // New invoice
-      if (isNewInvoiceCmd) {
+      // 2 - New invoice
+      if (num === "2") {
         if (!biz.name) {
-          // prompt to set up
-          biz.sessionState = "awaiting_first_choice";
-          await biz.save();
-          return sendTwimlText(res, "You need to create a business account first. Reply '1' to create one.");
+          biz.sessionState = "awaiting_first_choice"; await biz.save();
+          return sendTwimlText(res, "You need to create a business first. Reply 1 to create.");
         }
-        // start invoice flow
         biz.sessionState = "creating_invoice_choose_client";
         biz.sessionData = { items: [] };
         await biz.save();
         return sendTwimlText(res, "Create Invoice — pick option:\n1) Use saved client\n2) New client\n3) Cancel");
       }
-
-      // Add client
-      if (isAddClientCmd) {
-        if (!biz.name) {
-          biz.sessionState = "awaiting_first_choice";
-          await biz.save();
-          return sendTwimlText(res, "You need to create a business account first. Reply '1' to create one.");
-        }
+      // 3 - Add client
+      if (num === "3") {
+        if (!biz.name) { biz.sessionState = "awaiting_first_choice"; await biz.save(); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
         biz.sessionState = "adding_client_name";
         biz.sessionData = {};
         await biz.save();
         return sendTwimlText(res, "Adding client — what's the client name?");
       }
-
-      // Upload logo
-      if (num === "4" || lctext === "upload logo") {
+      // 4 - Upload logo
+      if (num === "4") {
         biz.sessionState = "awaiting_logo_upload";
         biz.sessionData = {};
         await biz.save();
-        return sendTwimlText(res, "Please send your business logo (as an image). Reply '1' to skip.");
+        return sendTwimlText(res, "Please send your business logo (as an image). Reply 1 to skip.");
       }
-
-      // Settings
-      if (isSettingsCmd) {
+      // 5 - Settings
+      if (num === "5") {
         biz.sessionState = "settings_menu";
         await biz.save();
         const sMsg = `Settings for ${biz.name || "(unnamed)"}:
@@ -457,69 +320,47 @@ router.post("/webhook", async (req, res) => {
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
       }
-
-      // list clients quickly
-      if (isListClientsCmd) {
-        const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(50).lean();
-        if (!clients.length) return sendTwimlText(res, "No clients saved yet. Use '3' or 'add client' to add one.");
-        const lines = ["Saved clients:"];
-        clients.forEach((c, i) => lines.push(`${i+1}) ${c.name || c.phone} — ${c.phone || "no phone"}`));
-        return sendTwimlText(res, lines.join("\n"));
-      }
-
-      if (num === "6" || lctext === "help") {
-        return sendTwimlText(res, `Help — quick commands:
+      // 6 - Help
+      if (num === "6") {
+        return sendTwimlText(res, `Help — reply with numbers only:
 1) Create business account
 2) New invoice
 3) Add client
 4) Upload logo
 5) Settings
-Commands: 'new invoice', 'add client', 'clients', 'settings', 'menu'`);
+6) Help
+Type 'menu' to return here anytime.`);
       }
 
-      // fallback show menu
+      // unknown number
       return sendMenu(res);
     }
 
-    // ---------- ONBOARDING STATES ----------
+    // If we're in a session/state, many of the flows still expect numbers (e.g. choose client), or free text (e.g. business name).
+    // Handle onboarding:
     if (state === "awaiting_business_name") {
-      const name = text.trim();
+      const name = trimmed;
       if (!name) return sendTwimlText(res, "Please send a business name (e.g. 'ABC Traders').");
       biz.name = name;
       biz.sessionState = "awaiting_logo_choice";
       await biz.save();
-      return sendTwimlText(res, `Thanks — "${name}".\nNow send your logo image, or reply:\n1) Skip logo\n2) Add later`);
+      return sendTwimlText(res, `Thanks — "${name}".\nSend your logo image now, or reply 1 to skip, 2 to add later.`);
     }
 
     if (state === "awaiting_logo_choice") {
-      if (text.trim() === "1") {
-        biz.sessionState = "awaiting_currency";
-        await biz.save();
-        return sendTwimlText(res, `Logo skipped. What currency do you want to use? (ZWL, USD, ZAR) — reply e.g. 'ZWL'`);
-      }
-      if (text.trim() === "2") {
-        biz.sessionState = "ready";
-        biz.sessionData = {};
-        await biz.save();
-        return sendTwimlText(res, `Setup finished. Use 'menu' to see commands. Quick commands:\n1) New invoice\n2) Add client\n3) Upload logo`);
-      }
-      return sendTwimlText(res, `Send an image file for your logo, or reply:\n1) Skip logo\n2) Add later`);
+      if (trimmed === "1") { biz.sessionState = "awaiting_currency"; await biz.save(); return sendTwimlText(res, `Logo skipped. What currency do you want? (ZWL, USD, ZAR)`); }
+      if (trimmed === "2") { biz.sessionState = "ready"; biz.sessionData = {}; await biz.save(); return sendTwimlText(res, `Setup finished. Reply menu to see commands.`); }
+      return sendTwimlText(res, `Send an image file for your logo, or reply 1 to skip, 2 to add later.`);
     }
 
     if (state === "awaiting_currency") {
-      const cur = (text || "").trim().toUpperCase();
-      if (!["ZWL", "USD", "ZAR"].includes(cur)) {
-        biz.sessionState = "awaiting_currency";
-        await biz.save();
-        return sendTwimlText(res, "Invalid currency. Reply with one of: ZWL, USD, ZAR");
-      }
-      biz.currency = cur;
-      biz.sessionState = "ready";
-      await biz.save();
-      return sendTwimlText(res, `All set! Business "${biz.name}" created with currency ${cur}.\nReply 'menu' or '2' for New invoice.`);
+      const cur = trimmed.toUpperCase();
+      if (!["ZWL","USD","ZAR"].includes(cur)) { biz.sessionState = "awaiting_currency"; await biz.save(); return sendTwimlText(res, "Invalid currency. Reply ZWL, USD or ZAR."); }
+      biz.currency = cur; biz.sessionState = "ready"; await biz.save();
+      return sendTwimlText(res, `All set! Business "${biz.name}" created with currency ${cur}. Reply 'menu' or 2 for New invoice.`);
     }
 
-    // ---------- LOGO UPLOAD (media) ----------
+    // Logo upload (media)
     const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
     if ((state === "awaiting_logo_upload" || state === "awaiting_logo_choice") && mediaCount > 0) {
       const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
@@ -529,104 +370,85 @@ Commands: 'new invoice', 'add client', 'clients', 'settings', 'menu'`);
         biz.sessionState = "awaiting_currency";
         biz.sessionData = {};
         await biz.save();
-        return sendTwimlText(res, `Logo received and saved. Next: what currency do you want to use? Reply: ZWL / USD / ZAR`);
+        return sendTwimlText(res, `Logo received. Now reply with currency: ZWL / USD / ZAR`);
       } catch (e) {
-        console.error("TWILIO (biz): logo save failed", e);
-        return sendTwimlText(res, "Could not save logo — please send a JPG/PNG image or reply '1' to skip.");
+        console.error("logo save failed", e);
+        return sendTwimlText(res, "Could not save logo — please send JPG/PNG or reply 1 to skip.");
       }
     }
 
-    // ---------- ADD CLIENT (menu 3) ----------
+    // Settings menu blocks:
+    if (state === "settings_menu" && isSingleNumber) {
+      const choice = trimmed;
+      if (choice === "0") { await resetSession(biz); return sendMenu(res); }
+      if (choice === "1") { biz.sessionState = "settings_currency"; await biz.save(); return sendTwimlText(res, `Current currency: ${biz.currency || "ZWL"}. Reply with new currency (ZWL, USD, ZAR).`); }
+      if (choice === "2") { biz.sessionState = "settings_terms"; await biz.save(); return sendTwimlText(res, `Current payment terms: ${biz.paymentTermsDays || 30} days. Reply with new number.`); }
+      if (choice === "3") { biz.sessionState = "settings_inv_prefix"; await biz.save(); return sendTwimlText(res, `Current invoice prefix: ${biz.invoicePrefix || "INV"}. Reply with new prefix.`); }
+      if (choice === "4") { biz.sessionState = "settings_qt_prefix"; await biz.save(); return sendTwimlText(res, `Current quote prefix: ${biz.quotePrefix || "QT"}. Reply with new prefix.`); }
+      if (choice === "5") { biz.sessionState = "awaiting_logo_upload"; await biz.save(); return sendTwimlText(res, "Send new logo image now (or reply 1 to cancel)."); }
+      if (choice === "6") {
+        const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(50).lean();
+        if (!clients.length) { biz.sessionState = "settings_menu"; await biz.save(); return sendTwimlText(res, "No clients saved yet."); }
+        let lines = ["Clients:"];
+        clients.forEach((c,i)=> lines.push(`${i+1}) ${c.name} — ${c.phone || "no phone"}`));
+        biz.sessionState = "settings_menu"; await biz.save();
+        return sendTwimlText(res, lines.join("\n"));
+      }
+      return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
+    }
+
+    if (state === "settings_currency") {
+      const cur = trimmed.toUpperCase();
+      if (!["ZWL","USD","ZAR"].includes(cur)) return sendTwimlText(res, "Invalid currency. Reply with ZWL, USD or ZAR.");
+      biz.currency = cur; biz.sessionState = "settings_menu"; await biz.save();
+      return sendTwimlText(res, `Currency updated to ${cur}. Back to settings.`);
+    }
+    if (state === "settings_terms") {
+      const days = Number(trimmed);
+      if (isNaN(days) || days < 0) return sendTwimlText(res, "Invalid number. Reply with e.g. 30.");
+      biz.paymentTermsDays = days; biz.sessionState = "settings_menu"; await biz.save();
+      return sendTwimlText(res, `Payment terms updated to ${days} days. Back to settings.`);
+    }
+    if (state === "settings_inv_prefix") {
+      if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
+      biz.invoicePrefix = trimmed; biz.sessionState = "settings_menu"; await biz.save();
+      return sendTwimlText(res, `Invoice prefix set to ${trimmed}. Back to settings.`);
+    }
+    if (state === "settings_qt_prefix") {
+      if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
+      biz.quotePrefix = trimmed; biz.sessionState = "settings_menu"; await biz.save();
+      return sendTwimlText(res, `Quote prefix set to ${trimmed}. Back to settings.`);
+    }
+
+    // Add client flows
     if (state === "adding_client_name") {
-      const cname = text.trim();
+      const cname = trimmed;
       if (!cname) return sendTwimlText(res, "Please send a client name.");
       biz.sessionData.clientName = cname;
       biz.sessionState = "adding_client_phone";
       await biz.save();
-      return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 'same' to use this sender");
+      return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 1 to cancel.");
     }
-
     if (state === "adding_client_phone") {
-      const phoneRaw = text.trim();
+      if (trimmed === "1") { biz.sessionState = "ready"; biz.sessionData = {}; await biz.save(); return sendTwimlText(res, "Cancelled. Reply menu to continue."); }
+      const phoneRaw = trimmed;
       const phone = phoneRaw.toLowerCase() === "same" ? providerId : phoneRaw;
       const client = await Client.findOneAndUpdate(
         { businessId: biz._id, phone },
         { $set: { name: biz.sessionData.clientName, phone } },
         { new: true, upsert: true }
       );
-      biz.sessionData = {};
-      biz.sessionState = "ready";
-      await biz.save();
-      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Reply 'menu' to continue.`);
+      biz.sessionData = {}; biz.sessionState = "ready"; await biz.save();
+      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Reply menu to continue.`);
     }
 
-    // ---------- SETTINGS MENU ----------
-    if (state === "settings_menu") {
-      const choice = text.trim();
-      if (choice === "0") { await resetSession(biz); return sendMenu(res); }
-      if (choice === "1") { biz.sessionState = "settings_currency"; await biz.save(); return sendTwimlText(res, `Current currency: ${biz.currency || "ZWL"}. Reply with new currency (ZWL, USD, ZAR).`); }
-      if (choice === "2") { biz.sessionState = "settings_terms"; await biz.save(); return sendTwimlText(res, `Current payment terms: ${biz.paymentTermsDays || 30} days. Reply with new number of days (e.g. 30).`); }
-      if (choice === "3") { biz.sessionState = "settings_inv_prefix"; await biz.save(); return sendTwimlText(res, `Current invoice prefix: ${biz.invoicePrefix || "INV"}. Reply with new prefix (e.g. INV or ZIMINV).`); }
-      if (choice === "4") { biz.sessionState = "settings_qt_prefix"; await biz.save(); return sendTwimlText(res, `Current quote prefix: ${biz.quotePrefix || "QT"}. Reply with new prefix (e.g. QT or ZIMQT).`); }
-      if (choice === "5") { biz.sessionState = "awaiting_logo_upload"; await biz.save(); return sendTwimlText(res, "Send new logo image now (or reply '1' to cancel)."); }
-      if (choice === "6") {
-        const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(50).lean();
-        if (!clients.length) { biz.sessionState = "settings_menu"; await biz.save(); return sendTwimlText(res, "No clients saved yet."); }
-        let lines = ["Clients:"];
-        clients.forEach((c,i)=> lines.push(`${i+1}) ${c.name} — ${c.phone || "no phone"}`));
-        biz.sessionState = "settings_menu";
-        await biz.save();
-        return sendTwimlText(res, lines.join("\n"));
-      }
-      return sendTwimlText(res, "Invalid selection. Reply with setting number or '0' to go back.");
-    }
-
-    if (state === "settings_currency") {
-      const cur = (text || "").trim().toUpperCase();
-      if (!["ZWL", "USD", "ZAR"].includes(cur)) {
-        return sendTwimlText(res, "Invalid currency. Reply with ZWL, USD or ZAR.");
-      }
-      biz.currency = cur;
-      biz.sessionState = "settings_menu";
-      await biz.save();
-      return sendTwimlText(res, `Currency updated to ${cur}. Back to settings.\nReply '5' to return to menu or choose another setting.`);
-    }
-
-    if (state === "settings_terms") {
-      const days = Number((text || "").trim());
-      if (isNaN(days) || days < 0) return sendTwimlText(res, "Invalid number of days. Reply with e.g. 30.");
-      biz.paymentTermsDays = days;
-      biz.sessionState = "settings_menu";
-      await biz.save();
-      return sendTwimlText(res, `Payment terms updated to ${days} days. Back to settings.`);
-    }
-
-    if (state === "settings_inv_prefix") {
-      const p = (text || "").trim();
-      if (!p) return sendTwimlText(res, "Enter a valid prefix like 'INV' or 'ZIMINV'.");
-      biz.invoicePrefix = p;
-      biz.sessionState = "settings_menu";
-      await biz.save();
-      return sendTwimlText(res, `Invoice prefix set to "${p}". Back to settings.`);
-    }
-
-    if (state === "settings_qt_prefix") {
-      const p = (text || "").trim();
-      if (!p) return sendTwimlText(res, "Enter a valid prefix like 'QT' or 'ZIMQT'.");
-      biz.quotePrefix = p;
-      biz.sessionState = "settings_menu";
-      await biz.save();
-      return sendTwimlText(res, `Quote prefix set to "${p}". Back to settings.`);
-    }
-
-    // ---------- ADD CLIENT / INVOICE FLOW ----------
-    if (state === "creating_invoice_choose_client") {
-      const choice = text.trim();
+    // Invoice flows (select client)
+    if (state === "creating_invoice_choose_client" && isSingleNumber) {
+      const choice = trimmed;
       if (choice === "1") {
         const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(5).lean();
         if (!clients.length) {
-          biz.sessionState = "creating_invoice_new_client";
-          await biz.save();
+          biz.sessionState = "creating_invoice_new_client"; await biz.save();
           return sendTwimlText(res, "No saved clients. Please enter client name:");
         }
         let lines = ["Choose a client by number:"];
@@ -636,79 +458,74 @@ Commands: 'new invoice', 'add client', 'clients', 'settings', 'menu'`);
         biz.sessionData.recentClients = clients;
         await biz.save();
         return sendTwimlText(res, lines.join("\n"));
-      } else if (choice === "2") {
-        biz.sessionState = "creating_invoice_new_client";
-        biz.sessionData = {};
-        await biz.save();
-        return sendTwimlText(res, "Client name?");
-      } else {
-        await resetSession(biz);
-        return sendTwimlText(res, "Cancelled. Reply 'menu' to start again.");
       }
+      if (choice === "2") {
+        biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await biz.save();
+        return sendTwimlText(res, "Client name?");
+      }
+      if (choice === "3") { await resetSession(biz); return sendTwimlText(res, "Cancelled. Reply menu to start again."); }
+      return sendTwimlText(res, "Invalid selection. Reply with a number.");
     }
 
-    if (state === "creating_invoice_choose_client_index") {
-      const idx = Number(text.trim());
+    if (state === "creating_invoice_choose_client_index" && isSingleNumber) {
+      const idx = Number(trimmed);
       const clients = biz.sessionData.recentClients || [];
-      if (!idx || idx < 1 || idx > clients.length + 1) {
-        return sendTwimlText(res, "Invalid selection. Reply the client number or choose 'New client'.");
-      }
-      if (idx === clients.length + 1) {
-        biz.sessionState = "creating_invoice_new_client";
-        biz.sessionData = {};
-        await biz.save();
-        return sendTwimlText(res, "Client name?");
-      }
+      if (!idx || idx < 1 || idx > clients.length + 1) return sendTwimlText(res, "Invalid selection. Reply the client number or choose New client.");
+      if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await biz.save(); return sendTwimlText(res, "Client name?"); }
       const client = clients[idx-1];
-      biz.sessionData.client = client;
-      biz.sessionState = "creating_invoice_add_items";
-      await biz.save();
-      return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now add item:\nSend item description (e.g. 'Website design')`);
+      biz.sessionData.client = client; biz.sessionState = "creating_invoice_add_items"; await biz.save();
+      return sendTwimlText(res, `Client set to ${client.name || client.phone}. Now send item description (e.g. 'Website design')`);
     }
 
     if (state === "creating_invoice_new_client") {
-      if (!biz.sessionData.clientName && text.trim()) {
-        const cname = text.trim();
-        biz.sessionData.clientName = cname;
-        biz.sessionState = "creating_invoice_new_client_phone";
-        await biz.save();
-        return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 'same' to use this sender");
+      if (!biz.sessionData.clientName && trimmed) {
+        biz.sessionData.clientName = trimmed; biz.sessionState = "creating_invoice_new_client_phone"; await biz.save();
+        return sendTwimlText(res, "Client phone? (e.g. +263772123456) or reply 1 to cancel.");
       }
     }
 
     if (state === "creating_invoice_new_client_phone") {
-      const phoneRaw = text.trim();
+      if (trimmed === "1") { biz.sessionState = "ready"; biz.sessionData = {}; await biz.save(); return sendTwimlText(res, "Cancelled client creation."); }
+      const phoneRaw = trimmed;
       const phone = phoneRaw.toLowerCase() === "same" ? providerId : phoneRaw;
       const client = await Client.findOneAndUpdate(
         { businessId: biz._id, phone },
         { $set: { name: biz.sessionData.clientName, phone } },
         { new: true, upsert: true }
       );
-      biz.sessionData.client = client;
-      biz.sessionData.items = [];
-      biz.sessionState = "creating_invoice_add_items";
-      await biz.save();
-      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}).\nNow send item description (e.g. 'Website design')`);
+      biz.sessionData.client = client; biz.sessionData.items = []; biz.sessionState = "creating_invoice_add_items"; await biz.save();
+      return sendTwimlText(res, `Client saved: ${client.name} (${client.phone}). Now send item description.`);
     }
 
-    // items loop
+    // Items loop: this expects free text for description and numeric replies for choices inside the flow
     if (state === "creating_invoice_add_items") {
-      // non-numeric flows: description -> qty -> unit
+      // if incoming is numeric choice 1/2/3 (after item added)
+      if (trimmed === "1") { return sendTwimlText(res, "Send next item description:"); }
+      if (trimmed === "2") {
+        const items = biz.sessionData.items || [];
+        if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
+        const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+        let summary = `Invoice summary for ${biz.sessionData.client.name || biz.sessionData.client.phone}:\n`;
+        items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+        summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Send & generate PDF\n2) Save as draft\n3) Cancel`;
+        biz.sessionState = "creating_invoice_confirm"; await biz.save();
+        return sendTwimlText(res, summary);
+      }
+      if (trimmed === "3") { await resetSession(biz); return sendTwimlText(res, "Invoice creation cancelled."); }
+
+      // otherwise it's free text expected as item description or qty/price steps
       if (!biz.sessionData.awaitingItemDesc) {
-        const desc = text.trim();
-        if (!desc) return sendTwimlText(res, "Send an item description (or reply 'done' to finish).");
-        biz.sessionData.awaitingItemDesc = true;
-        biz.sessionData.lastItem = { description: desc };
-        await biz.save();
+        const desc = trimmed;
+        if (!desc) return sendTwimlText(res, "Send an item description (or reply 2 to finish).");
+        biz.sessionData.awaitingItemDesc = true; biz.sessionData.lastItem = { description: desc }; await biz.save();
         return sendTwimlText(res, "Qty? (e.g. 1)");
       } else if (biz.sessionData.awaitingItemDesc && !biz.sessionData.lastItem.qty) {
-        const qty = Number(text.trim());
+        const qty = Number(trimmed);
         if (isNaN(qty) || qty <= 0) return sendTwimlText(res, "Invalid qty. Enter a number like '1'.");
-        biz.sessionData.lastItem.qty = qty;
-        await biz.save();
+        biz.sessionData.lastItem.qty = qty; await biz.save();
         return sendTwimlText(res, "Unit price? (e.g. 450)");
       } else if (biz.sessionData.lastItem && biz.sessionData.lastItem.qty && !biz.sessionData.lastItem.unit) {
-        const unit = Number(text.trim());
+        const unit = Number(trimmed);
         if (isNaN(unit)) return sendTwimlText(res, "Invalid price. Enter a number like '450'.");
         biz.sessionData.lastItem.unit = unit;
         biz.sessionData.items = biz.sessionData.items || [];
@@ -718,30 +535,11 @@ Commands: 'new invoice', 'add client', 'clients', 'settings', 'menu'`);
         await biz.save();
         return sendTwimlText(res, `Item added. Total items: ${biz.sessionData.items.length}\nReply:\n1) Add another item\n2) Done (generate invoice)\n3) Cancel`);
       }
-      // also handle numeric choices while in items state:
-      if (["1","2","3"].includes(text.trim())) {
-        const choice = text.trim();
-        if (choice === "1") return sendTwimlText(res, "Send next item description:");
-        if (choice === "2") {
-          const items = biz.sessionData.items || [];
-          if (!items.length) return sendTwimlText(res, "No items added. Add an item first.");
-          const subtotal = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-          let summary = `Invoice summary for ${biz.sessionData.client.name || biz.sessionData.client.phone}:\n`;
-          items.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
-          summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Send & generate PDF\n2) Save as draft\n3) Cancel`;
-          biz.sessionState = "creating_invoice_confirm";
-          await biz.save();
-          return sendTwimlText(res, summary);
-        }
-        if (choice === "3") {
-          await resetSession(biz);
-          return sendTwimlText(res, "Invoice creation cancelled.");
-        }
-      }
     }
 
-    if (state === "creating_invoice_confirm") {
-      if (text.trim() === "1") {
+    if (state === "creating_invoice_confirm" && isSingleNumber) {
+      const choice = trimmed;
+      if (choice === "1") {
         const items = biz.sessionData.items || [];
         const client = biz.sessionData.client;
         biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
@@ -755,23 +553,20 @@ Commands: 'new invoice', 'add client', 'clients', 'settings', 'menu'`);
           const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
           const url = `${baseForMedia}/docs/generated/invoices/${filename}`;
           await resetSession(biz);
-          // Optionally: forward to client's phone here using Twilio REST API if you want
           return sendTwimlWithMedia(res, `Invoice ${numberStr} created. Download: ${url}`, [url]);
         } catch (e) {
-          console.error("TWILIO (biz): invoice PDF failed", e);
+          console.error("invoice PDF failed", e);
           return sendTwimlText(res, "Failed to generate invoice PDF; check server logs.");
         }
-      } else if (text.trim() === "2") {
-        biz.sessionState = "ready";
-        await biz.save();
-        return sendTwimlText(res, "Saved invoice as draft. Reply 'menu' to continue.");
+      } else if (choice === "2") {
+        biz.sessionState = "ready"; await biz.save();
+        return sendTwimlText(res, "Saved invoice as draft. Reply menu to continue.");
       } else {
-        await resetSession(biz);
-        return sendTwimlText(res, "Cancelled.");
+        await resetSession(biz); return sendTwimlText(res, "Cancelled.");
       }
     }
 
-    // If nothing matched - default to menu
+    // Fallback - show menu
     return sendMenu(res);
 
   } catch (err) {

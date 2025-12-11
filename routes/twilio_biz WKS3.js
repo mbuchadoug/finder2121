@@ -287,12 +287,12 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 <body>
   <div class="top">
     <div class="brand">
-    ${logoUrl
-      ? `<div style="display:flex; align-items:center; gap:12px;"><img src="${escapeHtml(logoUrl)}" alt="logo" /><div><div class="company-name">${escapeHtml(companyName)}</div><div style="font-size:12px; color:#555;">${escapeHtml(companyAddress)}</div></div></div>`
-      : `<div><div class="company-name">${escapeHtml(companyName)}</div><div style="font-size:12px; color:#555;">${escapeHtml(companyAddress)}</div></div>`
-    }
-  </div>
-
+      ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="logo" />` : `<div class="logo-text">${escapeHtml(companyName)}</div>`}
+      <div>
+        <div class="company-name">${escapeHtml(companyName)}</div>
+        <div style="font-size:12px; color:#555;">${escapeHtml(companyAddress)}</div>
+      </div>
+    </div>
     <div class="meta">
       <div style="font-weight:700; font-size:16px">${escapeHtml(typeLabel)}</div>
       <div style="margin-top:6px">No: <strong>${escapeHtml(number)}</strong></div>

@@ -337,7 +337,10 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
   ${ notes ? `<div style="clear:both; margin-top:16px; border-left:4px solid #1f6feb; background:#fbfdff; padding:10px; border-radius:4px;">${escapeHtml(notes)}</div>` : "" }
 
-
+  <div style="clear:both; margin-top:36px; font-size:11px; color:#666;">
+    <div>Bank details: Account 0150011578801 • InnBucks • Borrowdale</div>
+    <div>Tax Number: 2001220346</div>
+  </div>
 </body>
 </html>
     `;
@@ -445,7 +448,7 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
 async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return saveBiz(biz); }
 
 function sendMenu(res) {
-  const msg = `ZimQuote | reply with a number:
+  const msg = `ZimQuote — reply with a number:
 1) Create business account
 2) New invoice
 3) Add client
@@ -524,7 +527,7 @@ router.post("/webhook", async (req, res) => {
         biz.sessionState = "awaiting_business_name";
         biz.sessionData = {};
         await saveBiz(biz);
-        return sendTwimlText(res, "Great | what's your business name? (e.g. 'ABC Traders')");
+        return sendTwimlText(res, "Great — what's your business name? (e.g. 'ABC Traders')");
       }
 
       // 2 invoice, 7 quote, 8 receipt
@@ -542,7 +545,7 @@ router.post("/webhook", async (req, res) => {
         await saveBiz(biz);
 
         const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
-        return sendTwimlText(res, `Create ${label} | pick option:\n1) Use saved client\n2) New client\n3) Cancel`);
+        return sendTwimlText(res, `Create ${label} — pick option:\n1) Use saved client\n2) New client\n3) Cancel`);
       }
 
       if (num === "3") {
@@ -550,7 +553,7 @@ router.post("/webhook", async (req, res) => {
         biz.sessionState = "adding_client_name";
         biz.sessionData = {};
         await saveBiz(biz);
-        return sendTwimlText(res, "Adding client | what's the client name?");
+        return sendTwimlText(res, "Adding client — what's the client name?");
       }
       if (num === "4") {
         biz.sessionState = "awaiting_logo_upload";
@@ -574,7 +577,7 @@ Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
       }
       if (num === "6") {
-        return sendTwimlText(res, `Help | reply with numbers only:
+        return sendTwimlText(res, `Help — reply with numbers only:
 1) Create business account
 2) New invoice
 3) Add client
@@ -595,7 +598,7 @@ Type 'menu' to return here anytime.`);
       biz.name = name;
       biz.sessionState = "awaiting_logo_choice";
       await saveBiz(biz);
-      return sendTwimlText(res, `Thanks | "${name}".\nSend your logo image now, or reply 1 to skip, 2 to add later.`);
+      return sendTwimlText(res, `Thanks — "${name}".\nSend your logo image now, or reply 1 to skip, 2 to add later.`);
     }
 
     if (state === "awaiting_logo_choice") {
@@ -624,7 +627,7 @@ Type 'menu' to return here anytime.`);
         return sendTwimlText(res, `Logo received. Now reply with currency: ZWL / USD / ZAR`);
       } catch (e) {
         console.error("logo save failed", e);
-        return sendTwimlText(res, "Could not save logo | please send JPG/PNG or reply 1 to skip.");
+        return sendTwimlText(res, "Could not save logo — please send JPG/PNG or reply 1 to skip.");
       }
     }
 
@@ -641,7 +644,7 @@ Type 'menu' to return here anytime.`);
         const clients = await Client.find({ businessId: biz._id }).sort({ updatedAt: -1 }).limit(50).lean();
         if (!clients.length) { biz.sessionState = "settings_menu"; await saveBiz(biz); return sendTwimlText(res, "No clients saved yet."); }
         let lines = ["Clients:"];
-        clients.forEach((c,i)=> lines.push(`${i+1}) ${c.name} | ${c.phone || "no phone"}`));
+        clients.forEach((c,i)=> lines.push(`${i+1}) ${c.name} — ${c.phone || "no phone"}`));
         biz.sessionState = "settings_menu"; await saveBiz(biz);
         return sendTwimlText(res, lines.join("\n"));
       }

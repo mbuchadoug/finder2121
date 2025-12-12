@@ -183,7 +183,7 @@ async function renderHtmlToPdf(html, filepath) {
  * Fallback pdfkit generator (keeps the earlier simple layout)
  * used if Puppeteer isn't available or fails.
  *
- * NOTE: Updated to remove "Description" column (prints item name instead).
+ * NOTE: Updated to remove "Description" column (prints item name instead) and include discount/tax.
  */
 function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
@@ -237,10 +237,16 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     }).join("\n");
 
     const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
+
+    // use discountPercent from bizMeta (document-level), default 0
+    const discountPercent = Number(bizMeta.discountPercent || 0);
+    const discountAmount = +(subtotal * (discountPercent / 100));
+    const taxableBase = subtotal - discountAmount;
+
     // apply tax only if applyTax not explicitly false
     const taxRate = (bizMeta.applyTax === false) ? 0 : (bizMeta.taxRate || 0);
-    const tax = +(subtotal * (taxRate/100));
-    const total = subtotal + tax;
+    const tax = +(taxableBase * (taxRate/100));
+    const total = taxableBase + tax;
 
     // Basic escape helper
     return `
@@ -334,7 +340,8 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
   <table class="totals" cellpadding="0" cellspacing="0">
     <tr><td style="width:60%;">Subtotal</td><td style="text-align:right;">${formatMoney(subtotal)}</td></tr>
-    <tr><td>Tax (${taxRate}%)</td><td style="text-align:right;">${formatMoney(tax)}</td></tr>
+    <tr><td>Discount (${formatMoney(discountPercent)}%)</td><td style="text-align:right;">${formatMoney(discountAmount)}</td></tr>
+    <tr><td>Tax (${formatMoney(taxRate)}%)</td><td style="text-align:right;">${formatMoney(tax)}</td></tr>
     <tr><td>Total</td><td style="text-align:right;">${formatMoney(total)}</td></tr>
   </table>
 
@@ -412,17 +419,23 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths);
       let subtotal2 = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
 
+      // apply document discount first (bizMeta.discountPercent)
+      const discountPercentUsed = Number(bizMeta.discountPercent || 0);
+      const discountAmount = +(subtotal2 * (discountPercentUsed / 100));
+      const taxableBase = subtotal2 - discountAmount;
+
       // apply tax only if bizMeta.applyTax !== false
       const taxRateUsed = (bizMeta.applyTax === false) ? 0 : (bizMeta.taxRate || 0);
-      const tax = +(subtotal2 * (taxRateUsed / 100));
-      const total = subtotal2 + tax;
+      const tax = +(taxableBase * (taxRateUsed / 100));
+      const total = taxableBase + tax;
 
       // Draw totals with a simple border
       const tx = 400, ty = afterTableY + 10;
-      doc.rect(tx - 10, ty - 6, 180, 80).strokeOpacity(0.08).stroke();
+      doc.rect(tx - 10, ty - 6, 180, 110).strokeOpacity(0.08).stroke();
       doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal2)}`, tx, ty, { align: "right" });
-      doc.fontSize(10).fillColor("#111").text(`Tax (${formatMoney(taxRateUsed)}%): ${formatMoney(tax)}`, tx, ty + 15, { align: "right" });
-      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 35, { align: "right" });
+      doc.fontSize(10).fillColor("#111").text(`Discount (${formatMoney(discountPercentUsed)}%): ${formatMoney(discountAmount)}`, tx, ty + 15, { align: "right" });
+      doc.fontSize(10).fillColor("#111").text(`Tax (${formatMoney(taxRateUsed)}%): ${formatMoney(tax)}`, tx, ty + 30, { align: "right" });
+      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 50, { align: "right" });
 
       if (notes) { doc.moveDown(2); doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80); doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 }); }
 
@@ -544,7 +557,7 @@ router.post("/webhook", async (req, res) => {
         if (num === "3") docType = "receipt";
 
         biz.sessionState = "creating_invoice_choose_client";
-        biz.sessionData = { items: [], docType };
+        biz.sessionData = { items: [], docType, discountPercent: 0 };
         await saveBiz(biz);
 
         const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -585,7 +598,7 @@ router.post("/webhook", async (req, res) => {
 5) Change logo
 6) View clients
 7) Receipt prefix (current: ${biz.receiptPrefix || "RCPT"})
-8) Tax settings (current: ${biz.applyTax ? "VAT ON, " + (biz.taxRate||0) + "%" : "VAT OFF"})
+8) Tax settings (current: ${ (biz.applyTax === true || String(biz.applyTax).toLowerCase() === "true") ? ("VAT ON, " + Number(biz.taxRate || 0) + "%") : "VAT OFF" })
 0) Back to menu
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
@@ -669,7 +682,7 @@ Type 'menu' to return here anytime.`);
         biz.sessionState = "settings_tax_menu";
         await saveBiz(biz);
         return sendTwimlText(res, `Tax settings:
-1) Set tax rate (current: ${biz.taxRate || 0}%)
+1) Set tax rate (current: ${Number(biz.taxRate || 0)}%)
 2) Toggle VAT (current: ${biz.applyTax ? "ON" : "OFF"})
 0) Back to settings`);
       }
@@ -680,9 +693,11 @@ Type 'menu' to return here anytime.`);
     if (state === "settings_tax_menu" && isSingleNumber) {
       const choice = trimmed;
       if (choice === "0") { biz.sessionState = "settings_menu"; await saveBiz(biz); return sendTwimlText(res, "Back to Settings."); }
-      if (choice === "1") { biz.sessionState = "settings_tax_rate"; await saveBiz(biz); return sendTwimlText(res, `Current tax rate: ${biz.taxRate || 0}%. Reply with new tax rate number (e.g. 15).`); }
+      if (choice === "1") { biz.sessionState = "settings_tax_rate"; await saveBiz(biz); return sendTwimlText(res, `Current tax rate: ${Number(biz.taxRate || 0)}%. Reply with new tax rate number (e.g. 15).`); }
       if (choice === "2") {
-        biz.applyTax = !biz.applyTax;
+        // normalize current value to boolean then flip
+        const current = (biz.applyTax === true || String(biz.applyTax).toLowerCase() === "true");
+        biz.applyTax = !current;
         biz.sessionState = "settings_menu";
         await saveBiz(biz);
         return sendTwimlText(res, `VAT is now ${biz.applyTax ? "ENABLED" : "DISABLED"}. Back to Settings.`);
@@ -691,12 +706,15 @@ Type 'menu' to return here anytime.`);
     }
 
     if (state === "settings_tax_rate") {
-      const val = Number(trimmed);
-      if (isNaN(val) || val < 0) return sendTwimlText(res, "Invalid tax rate. Enter a number like 15.");
-      biz.taxRate = val;
+      // allow inputs like "15", "15%", " 15.0 %"
+      const cleaned = String(trimmed || "").replace(/[^0-9.\-]+/g, "").trim();
+      const val = parseFloat(cleaned);
+      if (isNaN(val) || val < 0) return sendTwimlText(res, "Invalid tax rate. Enter a number like 15 or 15%.");
+      // ensure numeric type saved
+      biz.taxRate = Number(Math.round(val * 100) / 100); // keep up to 2 decimals
       biz.sessionState = "settings_menu";
       await saveBiz(biz);
-      return sendTwimlText(res, `Tax rate set to ${val}%. Back to Settings.`);
+      return sendTwimlText(res, `Tax rate set to ${biz.taxRate}%. Back to Settings.`);
     }
 
     if (state === "settings_currency") {
@@ -769,6 +787,7 @@ Type 'menu' to return here anytime.`);
           biz.sessionData.items = biz.sessionData.items || [];
           biz.sessionData.awaitingItemDesc = false;
           biz.sessionData.lastItem = null;
+          biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
           await saveBiz(biz);
           const docType = biz.sessionData.docType || "invoice";
           const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -803,6 +822,7 @@ Type 'menu' to return here anytime.`);
       biz.sessionData.items = biz.sessionData.items || [];
       biz.sessionData.awaitingItemDesc = false;
       biz.sessionData.lastItem = null;
+      biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
       await saveBiz(biz);
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -828,6 +848,7 @@ Type 'menu' to return here anytime.`);
       biz.sessionData.client = client; biz.sessionData.items = []; biz.sessionState = "creating_invoice_add_items";
       biz.sessionData.awaitingItemDesc = false;
       biz.sessionData.lastItem = null;
+      biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
       await saveBiz(biz);
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -942,21 +963,56 @@ Type 'menu' to return here anytime.`);
 
       const taxRate = Number(biz.taxRate || 0);
       const applyTax = (biz.applyTax === false) ? false : true;
-      const tax = applyTax ? +(subtotal * (taxRate / 100)) : 0;
-      const total = subtotal + tax;
+      const discountPercent = Number(biz.sessionData.discountPercent || 0);
+      const discountAmount = +(subtotal * (discountPercent / 100));
+      const taxable = subtotal - discountAmount;
+      const tax = applyTax ? +(taxable * (taxRate / 100)) : 0;
+      const total = taxable + tax;
 
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
       let summary = `${label} summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
       finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
-      if (applyTax) summary += `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n`;
-      else summary += `VAT: Not applied (disabled in settings)\n`;
+      if (discountPercent && Number(discountPercent) !== 0) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
+      summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied (disabled in settings)\n`;
       summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n`;
-      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel`;
+      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
       await saveBiz(biz);
+      return sendTwimlText(res, summary);
+    }
+
+    //
+    // Set discount % state (new)
+    //
+    if (state === "creating_invoice_set_discount") {
+      // accept "10" or "10%" etc
+      const cleaned = String(trimmed || "").replace(/[^0-9.\-]+/g, "").trim();
+      const val = parseFloat(cleaned);
+      if (isNaN(val) || val < 0) return sendTwimlText(res, "Invalid discount. Send a number like 10 or 10% (use 0 to clear).");
+      biz.sessionData.discountPercent = Number(Math.round(val * 100) / 100);
+      biz.sessionState = "creating_invoice_confirm";
+      await saveBiz(biz);
+      // Recompute summary quickly to send to user
+      const finalItems = biz.sessionData.items || [];
+      const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+      const discountPercent = Number(biz.sessionData.discountPercent || 0);
+      const discountAmount = +(subtotal * (discountPercent / 100));
+      const taxRate = Number(biz.taxRate || 0);
+      const applyTax = (biz.applyTax === false) ? false : true;
+      const taxable = subtotal - discountAmount;
+      const tax = applyTax ? +(taxable * (taxRate / 100)) : 0;
+      const total = taxable + tax;
+
+      let summary = `Discount set to ${formatMoney(discountPercent)}%.\n`;
+      finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
+      if (discountPercent) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
+      summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied (disabled in settings)\n`;
+      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)`;
+
       return sendTwimlText(res, summary);
     }
 
@@ -969,6 +1025,14 @@ Type 'menu' to return here anytime.`);
         biz.sessionState = "creating_invoice_add_items";
         await saveBiz(biz);
         return sendTwimlText(res, "Send next item description:");
+      }
+      if (choice === "3") {
+        await resetSession(biz); return sendTwimlText(res, "Cancelled.");
+      }
+      if (choice === "4") {
+        biz.sessionState = "creating_invoice_set_discount";
+        await saveBiz(biz);
+        return sendTwimlText(res, `Send discount percent (e.g. 10 or 10%). Send 0 to clear discount. Current: ${Number(biz.sessionData.discountPercent||0)}%`);
       }
       if (choice === "2") {
         const items = biz.sessionData.items || [];
@@ -993,7 +1057,19 @@ Type 'menu' to return here anytime.`);
             email: client?.email || "",
             items,
             notes: "",
-            bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", taxRate: biz.taxRate || 0, applyTax: (biz.applyTax === false) ? false : true, _id: biz._id?.toString(), originalAmount: biz.sessionData.originalAmount || undefined, amountPaid: biz.sessionData.amountPaid || undefined, currentBalance: biz.sessionData.currentBalance || undefined, status: biz.status || undefined }
+            bizMeta: {
+              name: biz.name,
+              logoUrl: biz.logoUrl,
+              address: biz.address || "",
+              taxRate: Number(biz.taxRate || 0),
+              applyTax: (biz.applyTax === false) ? false : true,
+              discountPercent: Number(biz.sessionData.discountPercent || 0),
+              _id: biz._id?.toString(),
+              originalAmount: biz.sessionData.originalAmount || undefined,
+              amountPaid: biz.sessionData.amountPaid || undefined,
+              currentBalance: biz.sessionData.currentBalance || undefined,
+              status: biz.status || undefined
+            }
           });
           // save updated counters
           await saveBiz(biz);

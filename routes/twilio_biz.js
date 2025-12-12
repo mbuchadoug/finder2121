@@ -222,31 +222,71 @@ function drawTablePdfkit(doc, items, startX, startY, columnWidths, docDiscountPe
 /* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
 /* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
 async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", bizMeta = {} }) {
-  // try HTML -> PDF via Puppeteer first (preferred)
   const baseDir = await ensurePublicSubdirs();
   const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
 
-  // resolve logo URL to an absolute URL if it's root-relative
-  const rawLogoUrl = bizMeta.logoUrl || "";
-  let resolvedLogoUrl = rawLogoUrl;
-  if (rawLogoUrl && rawLogoUrl.startsWith("/")) {
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    if (site) resolvedLogoUrl = `${site}${rawLogoUrl}`;
-    // if SITE_URL isn't set, leave it as-is; Puppeteer will try relative fetch
+  // --- Resolve and possibly inline logo as data URI (prefer local file under public/docs/logos) ---
+  const rawLogoUrl = (bizMeta.logoUrl || "").trim();
+  let logoForHtml = ""; // will be either data:... or an absolute/http url or empty
+
+  try {
+    if (rawLogoUrl) {
+      // if logoUrl is root-relative (/docs/...), or full SITE_URL + /docs/..., map to local path
+      const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+      // extract the path part (e.g. /docs/logos/logo-<id>.png)
+      let logoPathPart = null;
+      if (rawLogoUrl.startsWith("/")) {
+        logoPathPart = rawLogoUrl;
+      } else if (site && rawLogoUrl.startsWith(site)) {
+        logoPathPart = rawLogoUrl.slice(site.length);
+      } else {
+        // maybe it's already absolute with different host; try to find `/docs/logos/...` segment
+        const idx = rawLogoUrl.indexOf("/docs/logos/");
+        if (idx !== -1) logoPathPart = rawLogoUrl.slice(idx);
+      }
+
+      if (logoPathPart && logoPathPart.startsWith("/docs/logos/")) {
+        const logoFilename = path.basename(logoPathPart);
+        const localLogo = path.join(process.cwd(), "public", "docs", "logos", logoFilename);
+        if (fs.existsSync(localLogo)) {
+          try {
+            const data = await fs.promises.readFile(localLogo);
+            // try to determine mime type by extension
+            const ext = path.extname(localLogo).toLowerCase();
+            let mime = "image/png";
+            if (ext === ".jpg" || ext === ".jpeg") mime = "image/jpeg";
+            else if (ext === ".gif") mime = "image/gif";
+            else if (ext === ".svg") mime = "image/svg+xml";
+            const b64 = data.toString("base64");
+            logoForHtml = `data:${mime};base64,${b64}`;
+          } catch (readErr) {
+            console.warn("generatePDF: failed to read local logo, falling back to URL", readErr);
+            logoForHtml = rawLogoUrl; // fallback to using URL
+          }
+        } else {
+          // local file not present, fallback to using the provided URL
+          logoForHtml = rawLogoUrl;
+        }
+      } else {
+        // not a local docs path; use URL as-is
+        logoForHtml = rawLogoUrl;
+      }
+    }
+  } catch (e) {
+    console.warn("generatePDF: logo inlining failed, using URL fallback", e);
+    logoForHtml = rawLogoUrl || "";
   }
 
   // Build HTML from template (bootstrap 3.3.7 + your layout)
   function buildHtml() {
     const typeLabel = type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT";
     const companyName = bizMeta.name || "";
-    const logoUrl = resolvedLogoUrl || "";
+    const logoUrl = logoForHtml || "";
     const companyAddress = bizMeta.address || "";
 
-    // document-level discount (percent) fallback for rows
     const discountPercentDoc = Number(bizMeta.discountPercent || 0);
-
     const itemsRowsHtml = items.map(it => {
       const rowDiscount = (typeof it.discount !== "undefined" && it.discount !== null) ? it.discount : discountPercentDoc;
       const qty = it.qty || it.quantity || 1;
@@ -264,13 +304,9 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     }).join("\n");
 
     const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
-
-    // document-level discount
     const discountPercent = Number(bizMeta.discountPercent || 0);
     const discountAmount = +(subtotal * (discountPercent / 100));
     const taxableBase = subtotal - discountAmount;
-
-    // vat
     const vatPercent = Number(bizMeta.vatPercent || 0);
     const applyVat = (bizMeta.applyVat === false) ? false : true;
     const vat = applyVat ? +(taxableBase * (vatPercent/100)) : 0;
@@ -282,7 +318,6 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 <head>
   <meta charset="utf-8"/>
   <title>${escapeHtml(typeLabel)} ${escapeHtml(number)}</title>
-  <!-- Bootstrap 3.3.7 -->
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
   <style>
     @page{ margin:0; }
@@ -292,19 +327,12 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     .brand img{ max-height:90px; max-width:200px; object-fit:contain; }
     .company-name{ font-size:20px; font-weight:700; }
     .meta{text-align:right;}
-    .meta h2{ margin:0; font-size:18px; color:#333; }
     table.items{ width:100%; border-collapse:collapse; margin-top:18px; }
     table.items th, table.items td{ border:1px solid #222; padding:8px; font-size:12px; }
     table.items th{ background:#f2f2f2; font-weight:700; text-align:center; }
     .totals{ width:320px; float:right; margin-top:12px; border:1px solid #222; border-collapse:collapse; }
     .totals td{ padding:8px; border-bottom:1px solid #222; }
     .totals tr:last-child td{ font-weight:800; font-size:14px; }
-    .logo-text{ font-size:18px; font-weight:700; }
-    .watermark{ position: fixed; left:0; top:140px; right:0; opacity:0.06; text-align:center; font-size:72px; transform: rotate(-20deg); pointer-events:none; }
-    table { width: 100%; min-width: max-content; table-layout:fixed; }
-    .row { margin-left:-5px; margin-right:-5px; }
-    .column { float: left; width: 50%; padding: 5px; }
-    .row::after { content: ""; clear: both; display: table; }
     body { margin: 0!important; }
   </style>
 </head>
@@ -366,7 +394,6 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     `;
   }
 
-  // small helper: escape HTML
   function escapeHtml(s) {
     if (s === undefined || s === null) return "";
     return String(s)
@@ -404,11 +431,9 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       const stream = fs.createWriteStream(filepath);
       doc.pipe(stream);
 
-      // header (logo or company name)
+      // header (logo or company name) - pdfkit uses local file if present
       if (bizMeta.logoUrl && bizMeta.logoUrl.startsWith("http")) {
-        // attempt to download inline image for pdfkit - skipping network in this simple fallback
         try {
-          // if local logo exists in public/docs/logos we can embed
           const localLogo = path.join(process.cwd(), "public", "docs", "logos", `logo-${bizMeta._id || "biz"}.png`);
           if (fs.existsSync(localLogo)) doc.image(localLogo, 50, 45, { width: 90 });
         } catch (e) {}
@@ -427,24 +452,18 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       if (email) doc.fontSize(10).fillColor("#666").text(email, 50, 170);
 
       const startY = 210;
-      // columnWidths adjusted for Item | Qty | Unit | Discount | Total
       const columnWidths = [220, 60, 70, 70, 80];
       const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths, Number(bizMeta.discountPercent || 0));
       let subtotal2 = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
 
-      // apply document discount first (bizMeta.discountPercent)
       const discountPercentUsed = Number(bizMeta.discountPercent || 0);
       const discountAmount = +(subtotal2 * (discountPercentUsed / 100));
       const taxableBase = subtotal2 - discountAmount;
-
-      // apply VAT per-document (bizMeta.vatPercent & bizMeta.applyVat)
       const vatPercentUsed = Number(bizMeta.vatPercent || 0);
-      // force applyVat true when a VAT percent > 0 has been set for the document
       const applyVatUsed = (Number(bizMeta.vatPercent || 0) > 0) ? true : ((bizMeta.applyVat === false) ? false : true);
       const vat = applyVatUsed ? +(taxableBase * (vatPercentUsed / 100)) : 0;
       const total = taxableBase + vat;
 
-      // Draw totals with a simple border
       const tx = 400, ty = afterTableY + 10;
       doc.rect(tx - 10, ty - 6, 180, 110).strokeOpacity(0.08).stroke();
       doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal2)}`, tx, ty, { align: "right" });
@@ -461,8 +480,8 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       stream.on("error", (err) => reject(err));
     } catch (err) { reject(err); }
   });
-
 }
+
 
 /* ---------- Logo saving helpers ---------- */
 async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }

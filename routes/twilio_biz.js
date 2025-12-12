@@ -1,4 +1,3 @@
-// routes/twilio_biz.js
 import express from "express";
 import { Router } from "express";
 import twilio from "twilio";
@@ -448,12 +447,14 @@ function sendMenu(res) {
   const msg = `ZimQuote | reply with a number:
 1) Create business account
 2) New invoice
-3) Add client
-4) Upload logo
-5) Settings
-6) Help
-7) New quotation
-8) New receipt`;
+3) New receipt
+4) New quotation
+5) Add client
+6) Upload logo
+7) Settings
+8) Help
+
+`;
   return sendTwimlText(res, msg);
 }
 
@@ -485,7 +486,7 @@ router.post("/webhook", async (req, res) => {
         sessionState: null,
         sessionData: {},
         counters: { invoice: 0, quote: 0, receipt: 0 },
-        currency: "ZWL",
+        currency: "USDc",
         invoicePrefix: "INV",
         quotePrefix: "QT",
         receiptPrefix: "RCPT",
@@ -519,23 +520,17 @@ router.post("/webhook", async (req, res) => {
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
       const num = trimmed;
-      if (num === "1") {
-        if (biz.name) return sendTwimlText(res, `You already have a business: "${biz.name}". Reply 5 for settings.`);
-        biz.sessionState = "awaiting_business_name";
-        biz.sessionData = {};
-        await saveBiz(biz);
-        return sendTwimlText(res, "Great | what's your business name? (e.g. 'ABC Traders')");
-      }
 
-      // 2 invoice, 7 quote, 8 receipt
-      if (num === "2" || num === "7" || num === "8") {
+      // 2 = invoice, 4 = quote, 3 = receipt (new mapping)
+      if (num === "2" || num === "4" || num === "3") {
         if (!biz.name) {
-          biz.sessionState = "awaiting_first_choice"; await saveBiz(biz);
+          biz.sessionState = "awaiting_first_choice";
+          await saveBiz(biz);
           return sendTwimlText(res, "You need to create a business first. Reply 1 to create.");
         }
         let docType = "invoice";
-        if (num === "7") docType = "quote";
-        if (num === "8") docType = "receipt";
+        if (num === "4") docType = "quote";
+        if (num === "3") docType = "receipt";
 
         biz.sessionState = "creating_invoice_choose_client";
         biz.sessionData = { items: [], docType };
@@ -545,20 +540,30 @@ router.post("/webhook", async (req, res) => {
         return sendTwimlText(res, `Create ${label} | pick option:\n1) Use saved client\n2) New client\n3) Cancel`);
       }
 
-      if (num === "3") {
+      if (num === "1") {
+        if (biz.name) return sendTwimlText(res, `You already have a business: "${biz.name}". Reply 7 for settings.`);
+        biz.sessionState = "awaiting_business_name";
+        biz.sessionData = {};
+        await saveBiz(biz);
+        return sendTwimlText(res, "Great | what's your business name? (e.g. 'ABC Traders')");
+      }
+
+      if (num === "5") {
         if (!biz.name) { biz.sessionState = "awaiting_first_choice"; await saveBiz(biz); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
         biz.sessionState = "adding_client_name";
         biz.sessionData = {};
         await saveBiz(biz);
         return sendTwimlText(res, "Adding client | what's the client name?");
       }
-      if (num === "4") {
+
+      if (num === "6") {
         biz.sessionState = "awaiting_logo_upload";
         biz.sessionData = {};
         await saveBiz(biz);
         return sendTwimlText(res, "Please send your business logo (as an image). Reply 1 to skip.");
       }
-      if (num === "5") {
+
+      if (num === "7") {
         biz.sessionState = "settings_menu";
         await saveBiz(biz);
         const sMsg = `Settings for ${biz.name || "(unnamed)"}:
@@ -573,18 +578,20 @@ router.post("/webhook", async (req, res) => {
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
       }
-      if (num === "6") {
+
+      if (num === "8") {
         return sendTwimlText(res, `Help | reply with numbers only:
 1) Create business account
 2) New invoice
-3) Add client
-4) Upload logo
-5) Settings
-6) Help
-7) New quotation
-8) New receipt
+3) New receipt
+4) New quotation
+5) Add client
+6) Upload logo
+7) Settings
+8) Help
 Type 'menu' to return here anytime.`);
       }
+
       return sendMenu(res);
     }
 

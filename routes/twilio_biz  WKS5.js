@@ -56,7 +56,6 @@ function sendTwimlWithMedia(res, text, mediaUrls = []) {
   try {
     const twiml = new MessagingResponse();
     const msg = twiml.message();
-    // if text is null/undefined/empty we do not set body (so no download/link text)
     if (text) msg.body(text);
     for (const m of (mediaUrls || [])) {
       if (m) msg.media(m);
@@ -472,52 +471,13 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
 /* ---------- Logo saving helpers ---------- */
 async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }
-
-/**
- * saveLogoFromTwilio:
- * - Accepts a mediaUrl (may be Twilio-protected API URL) and businessId.
- * - Uses Basic auth for Twilio API URLs (TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN or fallbacks).
- * - Falls back to normal GET for public URLs.
- * - Saves file to public/docs/logos/logo-<businessId>.png and returns { filepath, filename, publicUrl }.
- */
 async function saveLogoFromTwilio(mediaUrl, businessId) {
   if (!mediaUrl) throw new Error("No media URL");
   const logosDir = await ensureLogosDir();
   const filename = `logo-${businessId}.png`;
   const filepath = path.join(logosDir, filename);
-
-  // Credentials (prefer standard env names; allow your existing fallbacks)
-  const accountSid = process.env.TWILIO_ACCOUNT_SID || process.env.TWILIO_BIZ_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN || process.env.TWILIO_BIZ_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
-
-  // Determine if the URL is a Twilio API media URL (protected)
-  const isTwilioApiUrl = /:\/\/(api\.)?twilio\.com/i.test(mediaUrl) || /twilio\.com\/2010-04-01/i.test(mediaUrl);
-
-  if (isTwilioApiUrl && (!accountSid || !authToken)) {
-    throw new Error("Missing Twilio credentials (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN) required to fetch media from Twilio.");
-  }
-
-  let resp;
-  try {
-    const axiosOpts = {
-      responseType: "arraybuffer",
-      timeout: 15000,
-    };
-    if (isTwilioApiUrl) {
-      axiosOpts.auth = { username: accountSid, password: authToken };
-    }
-    resp = await axios.get(mediaUrl, axiosOpts);
-  } catch (err) {
-    const status = err?.response?.status;
-    const twilioErrCode = err?.response?.headers?.["x-twilio-error-code"];
-    const msg = `Failed to download media from ${mediaUrl} — HTTP ${status || "ERR"}${twilioErrCode ? ` (Twilio error ${twilioErrCode})` : ""}`;
-    const wrapped = new Error(msg);
-    wrapped.original = err;
-    throw wrapped;
-  }
-
+  const resp = await axios.get(mediaUrl, { responseType: "arraybuffer", timeout: 15000 });
   await fs.promises.writeFile(filepath, resp.data);
-
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
   const publicUrl = site ? `${site}/docs/logos/${filename}` : `/docs/logos/${filename}`;
   return { filepath, filename, publicUrl };

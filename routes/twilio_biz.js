@@ -1120,7 +1120,9 @@ Type 'menu' to return here anytime.`);
           const url = `${baseForMedia}/docs/generated/${docType === "invoice" ? "invoices" : docType === "quote" ? "quotes" : "receipts"}/${filename}`;
           await resetSession(biz);
           const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
-          return sendTwimlWithMedia(res, `${label} ${numberStr} created. Download: ${url}`, [url]);
+
+          // <-- CHANGED: send only the PDF media with no text body so the download text/link doesn't appear -->
+          return sendTwimlWithMedia(res, null, [url]);
         } catch (e) {
           console.error("document PDF failed", e && (e.stack || e.message) ? (e.stack || e.message) : e);
           return sendTwimlText(res, `Failed to generate ${docType} PDF; check server logs.`);

@@ -182,12 +182,15 @@ async function renderHtmlToPdf(html, filepath) {
 /**
  * Fallback pdfkit generator (keeps the earlier simple layout)
  * used if Puppeteer isn't available or fails.
+ *
+ * NOTE: Updated to remove "Description" column (prints item name instead).
  */
 function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
   let y = startY;
   doc.fontSize(10).fillColor("black");
-  doc.text("Description", startX, y, { width: columnWidths[0] });
+  // header: Item | Qty | Unit | Total
+  doc.text("Item", startX, y, { width: columnWidths[0] });
   doc.text("Qty", startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
   doc.text("Unit", startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
   doc.text("Total", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
@@ -195,7 +198,8 @@ function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
   try { doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b) => a + b, 0) + 40, y - 6).strokeOpacity(0.08).stroke(); } catch(e) {}
   for (const it of items) {
     doc.fontSize(10).fillColor("black");
-    doc.text(it.description, startX, y, { width: columnWidths[0] });
+    // print item name (fallback to description if item missing)
+    doc.text(it.item || it.description || "", startX, y, { width: columnWidths[0] });
     doc.text(String(it.qty), startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
     doc.text(formatMoney(it.unit || 0), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
     doc.text(formatMoney((it.qty||0) * (it.unit||0)), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
@@ -218,12 +222,12 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     const companyName = bizMeta.name || "";
     const logoUrl = bizMeta.logoUrl || "";
     const companyAddress = bizMeta.address || "";
+    // Removed description column from table HTML
     const itemsRowsHtml = items.map(it => {
       const line = `
         <tr>
           <td style="text-align:center; width:8%">${it.qty || it.quantity || 1}</td>
-          <td style="text-align:center; width:18%">${escapeHtml(it.item || it.description || "")}</td>
-          <td style="text-align:left; width:34%">${escapeHtml(it.description || "")}</td>
+          <td style="text-align:center; width:40%">${escapeHtml(it.item || it.description || "")}</td>
           <td style="text-align:center; width:12%">${formatMoney(it.unit||it.rate||0)}</td>
           <td style="text-align:center; width:8%">${it.discount ? escapeHtml(String(it.discount)): "0"}</td>
           <td style="text-align:center; width:20%">${formatMoney((Number(it.qty||it.quantity||0)) * (Number(it.unit||it.rate||0)))}</td>
@@ -233,7 +237,8 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     }).join("\n");
 
     const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
-    const taxRate = bizMeta.taxRate || 0;
+    // apply tax only if applyTax not explicitly false
+    const taxRate = (bizMeta.applyTax === false) ? 0 : (bizMeta.taxRate || 0);
     const tax = +(subtotal * (taxRate/100));
     const total = subtotal + tax;
 
@@ -316,8 +321,7 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     <thead>
       <tr>
         <th style="width:6%;">Qty</th>
-        <th style="width:18%;">Item</th>
-        <th style="width:34%;">Description</th>
+        <th style="width:40%;">Item</th>
         <th style="width:12%;">Rate ($)</th>
         <th style="width:8%;">Discount (%)</th>
         <th style="width:20%;">Amount ($)</th>
@@ -403,17 +407,22 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       if (email) doc.fontSize(10).fillColor("#666").text(email, 50, 170);
 
       const startY = 210;
+      // columnWidths adjusted for Item | Qty | Unit | Total
       const columnWidths = [260, 60, 80, 80];
       const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths);
       let subtotal2 = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-      const tax = 0;
+
+      // apply tax only if bizMeta.applyTax !== false
+      const taxRateUsed = (bizMeta.applyTax === false) ? 0 : (bizMeta.taxRate || 0);
+      const tax = +(subtotal2 * (taxRateUsed / 100));
       const total = subtotal2 + tax;
+
       // Draw totals with a simple border
       const tx = 400, ty = afterTableY + 10;
-      doc.rect(tx - 10, ty - 6, 180, 60).strokeOpacity(0.08).stroke();
+      doc.rect(tx - 10, ty - 6, 180, 80).strokeOpacity(0.08).stroke();
       doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal2)}`, tx, ty, { align: "right" });
-      if (tax) doc.text(`Tax: ${formatMoney(tax)}`, tx, ty + 15, { align: "right" });
-      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 30, { align: "right" });
+      doc.fontSize(10).fillColor("#111").text(`Tax (${formatMoney(taxRateUsed)}%): ${formatMoney(tax)}`, tx, ty + 15, { align: "right" });
+      doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 35, { align: "right" });
 
       if (notes) { doc.moveDown(2); doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80); doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 }); }
 
@@ -490,7 +499,9 @@ router.post("/webhook", async (req, res) => {
         invoicePrefix: "INV",
         quotePrefix: "QT",
         receiptPrefix: "RCPT",
-        paymentTermsDays: 30
+        paymentTermsDays: 30,
+        taxRate: 15,      // default VAT (Zimbabwe) = 15%
+        applyTax: true    // default: apply VAT to transactions
       });
       console.log("TWILIO (biz): created business record", biz._id?.toString());
     }
@@ -574,6 +585,7 @@ router.post("/webhook", async (req, res) => {
 5) Change logo
 6) View clients
 7) Receipt prefix (current: ${biz.receiptPrefix || "RCPT"})
+8) Tax settings (current: ${biz.applyTax ? "VAT ON, " + (biz.taxRate||0) + "%" : "VAT OFF"})
 0) Back to menu
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
@@ -653,7 +665,38 @@ Type 'menu' to return here anytime.`);
         return sendTwimlText(res, lines.join("\n"));
       }
       if (choice === "7") { biz.sessionState = "settings_rcpt_prefix"; await saveBiz(biz); return sendTwimlText(res, `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`); }
+      if (choice === "8") {
+        biz.sessionState = "settings_tax_menu";
+        await saveBiz(biz);
+        return sendTwimlText(res, `Tax settings:
+1) Set tax rate (current: ${biz.taxRate || 0}%)
+2) Toggle VAT (current: ${biz.applyTax ? "ON" : "OFF"})
+0) Back to settings`);
+      }
       return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
+    }
+
+    // Tax settings: submenu handling
+    if (state === "settings_tax_menu" && isSingleNumber) {
+      const choice = trimmed;
+      if (choice === "0") { biz.sessionState = "settings_menu"; await saveBiz(biz); return sendTwimlText(res, "Back to Settings."); }
+      if (choice === "1") { biz.sessionState = "settings_tax_rate"; await saveBiz(biz); return sendTwimlText(res, `Current tax rate: ${biz.taxRate || 0}%. Reply with new tax rate number (e.g. 15).`); }
+      if (choice === "2") {
+        biz.applyTax = !biz.applyTax;
+        biz.sessionState = "settings_menu";
+        await saveBiz(biz);
+        return sendTwimlText(res, `VAT is now ${biz.applyTax ? "ENABLED" : "DISABLED"}. Back to Settings.`);
+      }
+      return sendTwimlText(res, "Invalid selection. Reply 1/2 or 0 to go back.");
+    }
+
+    if (state === "settings_tax_rate") {
+      const val = Number(trimmed);
+      if (isNaN(val) || val < 0) return sendTwimlText(res, "Invalid tax rate. Enter a number like 15.");
+      biz.taxRate = val;
+      biz.sessionState = "settings_menu";
+      await saveBiz(biz);
+      return sendTwimlText(res, `Tax rate set to ${val}%. Back to Settings.`);
     }
 
     if (state === "settings_currency") {
@@ -808,9 +851,10 @@ Type 'menu' to return here anytime.`);
           if (trimmed === "3") { await resetSession(biz); return sendTwimlText(res, "Cancelled. Reply 'menu' to start again."); }
           return sendTwimlText(res, "Invalid qty. Enter a number like '1' (or '3' to cancel).");
         }
+        // store as item (we use item field, description still preserved)
         biz.sessionData.lastItem.qty = qty;
         biz.sessionData.items = biz.sessionData.items || [];
-        biz.sessionData.items.push({ description: biz.sessionData.lastItem.description, qty: qty, unit: null, item: biz.sessionData.lastItem.description });
+        biz.sessionData.items.push({ item: biz.sessionData.lastItem.description, description: biz.sessionData.lastItem.description, qty: qty, unit: null });
         biz.sessionData.lastItem = null;
         biz.sessionData.awaitingItemDesc = false;
         await saveBiz(biz);
@@ -830,7 +874,7 @@ Type 'menu' to return here anytime.`);
         biz.sessionData.items = itemsArr;
         await saveBiz(biz);
         const next = biz.sessionData.items[0];
-        return sendTwimlText(res, `Price entry: item 1) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
+        return sendTwimlText(res, `Price entry: item 1) ${next.item || next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
       }
 
       if (wantsAddAnother) {
@@ -889,17 +933,27 @@ Type 'menu' to return here anytime.`);
 
       if (idx < (biz.sessionData.items || []).length) {
         const next = biz.sessionData.items[idx];
-        return sendTwimlText(res, `Price entry: item ${idx+1}) ${next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
+        return sendTwimlText(res, `Price entry: item ${idx+1}) ${next.item || next.description} x${next.qty}\nEnter unit price (e.g. 450) or reply 'skip' to set 0. Reply 'back' to add more items.`);
       }
 
       // All prices done -> summarize and confirm
       const finalItems = biz.sessionData.items || [];
       const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+
+      const taxRate = Number(biz.taxRate || 0);
+      const applyTax = (biz.applyTax === false) ? false : true;
+      const tax = applyTax ? +(subtotal * (taxRate / 100)) : 0;
+      const total = subtotal + tax;
+
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
       let summary = `${label} summary for ${biz.sessionData.client?.name || biz.sessionData.client?.phone || "client"}:\n`;
-      finalItems.forEach((it, i) => summary += `${i+1}) ${it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
-      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel`;
+      finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
+      if (applyTax) summary += `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n`;
+      else summary += `VAT: Not applied (disabled in settings)\n`;
+      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n`;
+      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
       await saveBiz(biz);
@@ -939,7 +993,7 @@ Type 'menu' to return here anytime.`);
             email: client?.email || "",
             items,
             notes: "",
-            bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", taxRate: biz.taxRate || 0, _id: biz._id?.toString(), originalAmount: biz.sessionData.originalAmount || undefined, amountPaid: biz.sessionData.amountPaid || undefined, currentBalance: biz.sessionData.currentBalance || undefined, status: biz.status || undefined }
+            bizMeta: { name: biz.name, logoUrl: biz.logoUrl, address: biz.address || "", taxRate: biz.taxRate || 0, applyTax: (biz.applyTax === false) ? false : true, _id: biz._id?.toString(), originalAmount: biz.sessionData.originalAmount || undefined, amountPaid: biz.sessionData.amountPaid || undefined, currentBalance: biz.sessionData.currentBalance || undefined, status: biz.status || undefined }
           });
           // save updated counters
           await saveBiz(biz);

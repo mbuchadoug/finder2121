@@ -474,11 +474,14 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }
 
 /**
- * saveLogoFromTwilio:
- * - Accepts a mediaUrl (may be Twilio-protected API URL) and businessId.
- * - Uses Basic auth for Twilio API URLs (TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN or fallbacks).
- * - Falls back to normal GET for public URLs.
- * - Saves file to public/docs/logos/logo-<businessId>.png and returns { filepath, filename, publicUrl }.
+ * Improved saveLogoFromTwilio:
+ * - Detects Twilio account SID embedded in media URL (if present)
+ * - Chooses credentials automatically:
+ *    - If media URL SID matches TWILIO_BIZ_ACCOUNT_SID -> uses TWILIO_BIZ_AUTH_TOKEN
+ *    - Else if matches TWILIO_ACCOUNT_SID -> uses TWILIO_AUTH_TOKEN
+ *    - Otherwise prefers TWILIO_BIZ_* then TWILIO_* envs (so subaccount setups work)
+ * - Falls back to plain GET for public URLs
+ * - Provides clearer error messages when auth is missing/incorrect
  */
 async function saveLogoFromTwilio(mediaUrl, businessId) {
   if (!mediaUrl) throw new Error("No media URL");
@@ -486,36 +489,87 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   const filename = `logo-${businessId}.png`;
   const filepath = path.join(logosDir, filename);
 
-  // Credentials (prefer standard env names; allow your existing fallbacks)
-  const accountSid = process.env.TWILIO_ACCOUNT_SID || process.env.TWILIO_BIZ_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN || process.env.TWILIO_BIZ_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
+  // Environment credentials
+  const envMainSid = process.env.TWILIO_ACCOUNT_SID || null;
+  const envMainToken = process.env.TWILIO_AUTH_TOKEN || null;
+  const envBizSid = process.env.TWILIO_BIZ_ACCOUNT_SID || null;
+  const envBizToken = process.env.TWILIO_BIZ_AUTH_TOKEN || null;
 
-  // Determine if the URL is a Twilio API media URL (protected)
-  const isTwilioApiUrl = /:\/\/(api\.)?twilio\.com/i.test(mediaUrl) || /twilio\.com\/2010-04-01/i.test(mediaUrl);
+  // Extract account SID if present in the media URL (Twilio API URLs include /Accounts/<SID>/)
+  const sidMatch = String(mediaUrl).match(/\/Accounts\/(AC[0-9a-fA-F]{32})\//);
+  const accountSidInUrl = sidMatch ? sidMatch[1] : null;
 
-  if (isTwilioApiUrl && (!accountSid || !authToken)) {
-    throw new Error("Missing Twilio credentials (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN) required to fetch media from Twilio.");
+  // Detect twilio API url
+  const isTwilioUrl = /:\/\/(api\.)?twilio\.com/i.test(mediaUrl) || /twilio\.com\/2010-04-01/i.test(mediaUrl);
+
+  // Decide which credentials to use
+  let useSid = null;
+  let useToken = null;
+
+  if (isTwilioUrl) {
+    if (accountSidInUrl) {
+      // Prefer exact matches first
+      if (envBizSid && accountSidInUrl === envBizSid && envBizToken) {
+        useSid = envBizSid; useToken = envBizToken;
+      } else if (envMainSid && accountSidInUrl === envMainSid && envMainToken) {
+        useSid = envMainSid; useToken = envMainToken;
+      } else {
+        // fallback: try biz then main
+        if (envBizSid && envBizToken) { useSid = envBizSid; useToken = envBizToken; }
+        else if (envMainSid && envMainToken) { useSid = envMainSid; useToken = envMainToken; }
+        else {
+          const e = new Error(`Cannot fetch Twilio media: missing TWILIO_BIZ_AUTH_TOKEN or TWILIO_AUTH_TOKEN. Media URL expects account ${accountSidInUrl}.`);
+          e.code = "MISSING_TWILIO_AUTH";
+          throw e;
+        }
+      }
+    } else {
+      // Twilio domain but no SID in URL — pick biz if present, else main
+      if (envBizSid && envBizToken) { useSid = envBizSid; useToken = envBizToken; }
+      else if (envMainSid && envMainToken) { useSid = envMainSid; useToken = envMainToken; }
+      else {
+        const e = new Error("Cannot fetch Twilio media: no TWILIO_* credentials found in environment.");
+        e.code = "MISSING_TWILIO_AUTH";
+        throw e;
+      }
+    }
   }
 
+  // prepare axios options
+  const axiosOpts = {
+    responseType: "arraybuffer",
+    timeout: 15000,
+  };
+
+  if (isTwilioUrl && useSid && useToken) {
+    axiosOpts.auth = { username: useSid, password: useToken };
+  }
+
+  // Attempt fetch
   let resp;
   try {
-    const axiosOpts = {
-      responseType: "arraybuffer",
-      timeout: 15000,
-    };
-    if (isTwilioApiUrl) {
-      axiosOpts.auth = { username: accountSid, password: authToken };
-    }
     resp = await axios.get(mediaUrl, axiosOpts);
   } catch (err) {
-    const status = err?.response?.status;
+    const status = err?.response?.status || "ERR";
     const twilioErrCode = err?.response?.headers?.["x-twilio-error-code"];
-    const msg = `Failed to download media from ${mediaUrl} — HTTP ${status || "ERR"}${twilioErrCode ? ` (Twilio error ${twilioErrCode})` : ""}`;
-    const wrapped = new Error(msg);
+    let message = `Failed to download media from ${mediaUrl} — HTTP ${status}`;
+    if (twilioErrCode) message += ` (Twilio error ${twilioErrCode})`;
+
+    if (isTwilioUrl) {
+      if (accountSidInUrl && !( (envBizSid && accountSidInUrl === envBizSid) || (envMainSid && accountSidInUrl === envMainSid) )) {
+        message += `\nMedia URL belongs to ${accountSidInUrl}. Ensure you have set credentials for that account (TWILIO_BIZ_ACCOUNT_SID / TWILIO_BIZ_AUTH_TOKEN or TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN).`;
+      } else {
+        message += `\nCheck the corresponding TWILIO_* environment variables and ensure the auth token is valid (not revoked).`;
+      }
+      if (status === 401) message += `\nHint: Twilio returns 401 (error 20003) when credentials are missing/incorrect for that account.`;
+    }
+
+    const wrapped = new Error(message);
     wrapped.original = err;
     throw wrapped;
   }
 
+  // save file
   await fs.promises.writeFile(filepath, resp.data);
 
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
@@ -1019,7 +1073,11 @@ Type 'menu' to return here anytime.`);
       if (discountPercent && Number(discountPercent) !== 0) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
       summary += applyVat ? `VAT @ ${formatMoney(vatPercent)}%: ${formatMoney(vatAmount)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
       summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n`;
-      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(vatPercent)}%)`;
+      summary += `1) Add another item
+2) Send & generate PDF
+3) Cancel
+4) Set discount % (current: ${formatMoney(discountPercent)}%)
+5) Set VAT % (current: ${formatMoney(vatPercent)}%)`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
       await saveBiz(biz);
@@ -1055,7 +1113,11 @@ Type 'menu' to return here anytime.`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
       if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
       summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
-      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)`;
+      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item
+2) Send & generate PDF
+3) Cancel
+4) Set discount % (current: ${formatMoney(discountPercentNow)}%)
+5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)`;
 
       return sendTwimlText(res, summary);
     }
@@ -1087,7 +1149,11 @@ Type 'menu' to return here anytime.`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
       if (discountPercent) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
       summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
-      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(taxRate)}%)`;
+      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item
+2) Send & generate PDF
+3) Cancel
+4) Set discount % (current: ${formatMoney(discountPercent)}%)
+5) Set VAT % (current: ${formatMoney(taxRate)}%)`;
 
       return sendTwimlText(res, summary);
     }

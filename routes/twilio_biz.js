@@ -963,7 +963,7 @@ Type 'menu' to return here anytime.`);
       if (discountPercent && Number(discountPercent) !== 0) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
       summary += applyVat ? `VAT @ ${formatMoney(vatPercent)}%: ${formatMoney(vatAmount)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
       summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n`;
-      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(vatPercent)}%)\n6) Toggle VAT on/off (currently: ${applyVat ? "ON" : "OFF"})`;
+      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(vatPercent)}%)`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
       await saveBiz(biz);
@@ -999,37 +999,7 @@ Type 'menu' to return here anytime.`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
       if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
       summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
-      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)\n6) Toggle VAT on/off (currently: ${applyVatNow ? "ON" : "OFF"})`;
-
-      return sendTwimlText(res, summary);
-    }
-
-    //
-    // Toggle VAT (new) - flip document-level applyVat boolean and return summary
-    //
-    if (state === "creating_invoice_toggle_vat") {
-      // Flip and return to confirm state
-      const current = (biz.sessionData.applyVat === true || String(biz.sessionData.applyVat).toLowerCase() === "true");
-      biz.sessionData.applyVat = !current;
-      biz.sessionState = "creating_invoice_confirm";
-      await saveBiz(biz);
-      // Recompute summary quickly
-      const finalItems = biz.sessionData.items || [];
-      const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-      const discountPercentNow = Number(biz.sessionData.discountPercent || 0);
-      const discountAmountNow = +(subtotal * (discountPercentNow / 100));
-      const taxableNow = subtotal - discountAmountNow;
-      const vatPercentNow = Number(biz.sessionData.vatPercent || 0);
-      const applyVatNow = (biz.sessionData.applyVat === false) ? false : true;
-      const vatNow = applyVatNow ? +(taxableNow * (vatPercentNow / 100)) : 0;
-      const totalNow = taxableNow + vatNow;
-
-      let summary = `VAT is now ${applyVatNow ? "ENABLED" : "DISABLED"}.\n`;
-      finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
-      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
-      if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
-      summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
-      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)\n6) Toggle VAT on/off (currently: ${applyVatNow ? "ON" : "OFF"})`;
+      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)`;
 
       return sendTwimlText(res, summary);
     }
@@ -1061,7 +1031,7 @@ Type 'menu' to return here anytime.`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
       if (discountPercent) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
       summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
-      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(taxRate)}%)\n6) Toggle VAT on/off (currently: ${applyTax ? "ON" : "OFF"})`;
+      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(taxRate)}%)`;
 
       return sendTwimlText(res, summary);
     }
@@ -1088,37 +1058,6 @@ Type 'menu' to return here anytime.`);
         biz.sessionState = "creating_invoice_set_vat";
         await saveBiz(biz);
         return sendTwimlText(res, `Send VAT percent (e.g. 15 or 15%). Send 0 to clear VAT. Current: ${Number(biz.sessionData.vatPercent||0)}%`);
-      }
-      if (choice === "6") {
-        // toggle VAT
-        biz.sessionState = "creating_invoice_toggle_vat";
-        await saveBiz(biz);
-        // Immediately run toggle handler (it will flip and return summary)
-        // We'll fall through to the toggle handler above because state updated
-        // but since we're still in the same request, explicitly handle toggle here:
-        const current = (biz.sessionData.applyVat === true || String(biz.sessionData.applyVat).toLowerCase() === "true");
-        biz.sessionData.applyVat = !current;
-        biz.sessionState = "creating_invoice_confirm";
-        await saveBiz(biz);
-        // Recompute summary and return
-        const finalItems = biz.sessionData.items || [];
-        const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
-        const discountPercentNow = Number(biz.sessionData.discountPercent || 0);
-        const discountAmountNow = +(subtotal * (discountPercentNow / 100));
-        const taxableNow = subtotal - discountAmountNow;
-        const vatPercentNow = Number(biz.sessionData.vatPercent || 0);
-        const applyVatNow = (biz.sessionData.applyVat === false) ? false : true;
-        const vatNow = applyVatNow ? +(taxableNow * (vatPercentNow / 100)) : 0;
-        const totalNow = taxableNow + vatNow;
-
-        let summary = `VAT is now ${applyVatNow ? "ENABLED" : "DISABLED"}.\n`;
-        finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
-        summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
-        if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
-        summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
-        summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)\n6) Toggle VAT on/off (currently: ${applyVatNow ? "ON" : "OFF"})`;
-
-        return sendTwimlText(res, summary);
       }
       if (choice === "2") {
         const items = biz.sessionData.items || [];

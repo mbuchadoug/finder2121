@@ -183,7 +183,7 @@ async function renderHtmlToPdf(html, filepath) {
  * Fallback pdfkit generator (keeps the earlier simple layout)
  * used if Puppeteer isn't available or fails.
  *
- * NOTE: Updated to remove "Description" column (prints item name instead) and include discount/tax.
+ * NOTE: Updated to remove "Description" column (prints item name instead) and include discount/vat.
  */
 function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
   const lineHeight = 18;
@@ -243,10 +243,11 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     const discountAmount = +(subtotal * (discountPercent / 100));
     const taxableBase = subtotal - discountAmount;
 
-    // apply tax only if applyTax not explicitly false
-    const taxRate = (bizMeta.applyTax === false) ? 0 : (bizMeta.taxRate || 0);
-    const tax = +(taxableBase * (taxRate/100));
-    const total = taxableBase + tax;
+    // use vatPercent from bizMeta (document-level), default 0
+    const vatPercent = Number(bizMeta.vatPercent || 0);
+    const applyVat = (bizMeta.applyVat === false) ? false : true;
+    const vat = applyVat ? +(taxableBase * (vatPercent/100)) : 0;
+    const total = taxableBase + vat;
 
     // Basic escape helper
     return `
@@ -341,7 +342,7 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
   <table class="totals" cellpadding="0" cellspacing="0">
     <tr><td style="width:60%;">Subtotal</td><td style="text-align:right;">${formatMoney(subtotal)}</td></tr>
     <tr><td>Discount (${formatMoney(discountPercent)}%)</td><td style="text-align:right;">${formatMoney(discountAmount)}</td></tr>
-    <tr><td>Tax (${formatMoney(taxRate)}%)</td><td style="text-align:right;">${formatMoney(tax)}</td></tr>
+    <tr><td>VAT (${formatMoney(vatPercent)}%)</td><td style="text-align:right;">${formatMoney(vat)}</td></tr>
     <tr><td>Total</td><td style="text-align:right;">${formatMoney(total)}</td></tr>
   </table>
 
@@ -424,17 +425,18 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       const discountAmount = +(subtotal2 * (discountPercentUsed / 100));
       const taxableBase = subtotal2 - discountAmount;
 
-      // apply tax only if bizMeta.applyTax !== false
-      const taxRateUsed = (bizMeta.applyTax === false) ? 0 : (bizMeta.taxRate || 0);
-      const tax = +(taxableBase * (taxRateUsed / 100));
-      const total = taxableBase + tax;
+      // apply VAT per-document (bizMeta.vatPercent & bizMeta.applyVat)
+      const vatPercentUsed = Number(bizMeta.vatPercent || 0);
+      const applyVatUsed = (bizMeta.applyVat === false) ? false : true;
+      const vat = applyVatUsed ? +(taxableBase * (vatPercentUsed / 100)) : 0;
+      const total = taxableBase + vat;
 
       // Draw totals with a simple border
       const tx = 400, ty = afterTableY + 10;
       doc.rect(tx - 10, ty - 6, 180, 110).strokeOpacity(0.08).stroke();
       doc.fontSize(10).fillColor("#111").text(`Subtotal: ${formatMoney(subtotal2)}`, tx, ty, { align: "right" });
       doc.fontSize(10).fillColor("#111").text(`Discount (${formatMoney(discountPercentUsed)}%): ${formatMoney(discountAmount)}`, tx, ty + 15, { align: "right" });
-      doc.fontSize(10).fillColor("#111").text(`Tax (${formatMoney(taxRateUsed)}%): ${formatMoney(tax)}`, tx, ty + 30, { align: "right" });
+      doc.fontSize(10).fillColor("#111").text(`VAT (${formatMoney(vatPercentUsed)}%): ${formatMoney(vat)}`, tx, ty + 30, { align: "right" });
       doc.fontSize(12).fillColor("#000").text(`Total: ${formatMoney(total)}`, tx, ty + 50, { align: "right" });
 
       if (notes) { doc.moveDown(2); doc.fontSize(10).fillColor("#333").text("Notes:", 50, afterTableY + 80); doc.fontSize(9).fillColor("#444").text(notes, 50, afterTableY + 95, { width: 400 }); }
@@ -513,10 +515,25 @@ router.post("/webhook", async (req, res) => {
         quotePrefix: "QT",
         receiptPrefix: "RCPT",
         paymentTermsDays: 30,
-        taxRate: 15,      // default VAT (Zimbabwe) = 15%
-        applyTax: true    // default: apply VAT to transactions
+        // these are business defaults but we won't expose VAT in settings per your request;
+        // we still keep defaults so documents can prefill if desired
+        taxRate: 15,
+        applyTax: true
       });
       console.log("TWILIO (biz): created business record", biz._id?.toString());
+    }
+
+    // Ensure sessionData defaults for vat/discount when starting a document
+    if (!biz.sessionData) biz.sessionData = {};
+    // do NOT persist vat to global settings; it's per-document: initialize if missing
+    biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
+    // prefill vatPercent from biz.taxRate if present and session doesn't have it already
+    if (typeof biz.sessionData.vatPercent === "undefined") {
+      biz.sessionData.vatPercent = Number(biz.taxRate || 0);
+    }
+    // default document-level applyVat true if not set
+    if (typeof biz.sessionData.applyVat === "undefined") {
+      biz.sessionData.applyVat = true;
     }
 
     if (profileName && !biz.name) {
@@ -545,7 +562,7 @@ router.post("/webhook", async (req, res) => {
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
       const num = trimmed;
 
-      // 2 = invoice, 4 = quote, 3 = receipt (new mapping)
+      // 2 = invoice, 4 = quote, 3 = receipt (mapping retained)
       if (num === "2" || num === "4" || num === "3") {
         if (!biz.name) {
           biz.sessionState = "awaiting_first_choice";
@@ -557,7 +574,7 @@ router.post("/webhook", async (req, res) => {
         if (num === "3") docType = "receipt";
 
         biz.sessionState = "creating_invoice_choose_client";
-        biz.sessionData = { items: [], docType, discountPercent: 0 };
+        biz.sessionData = { items: [], docType, discountPercent: biz.sessionData.discountPercent || 0, vatPercent: biz.sessionData.vatPercent || Number(biz.taxRate || 0), applyVat: typeof biz.sessionData.applyVat === "undefined" ? true : !!biz.sessionData.applyVat };
         await saveBiz(biz);
 
         const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -598,7 +615,6 @@ router.post("/webhook", async (req, res) => {
 5) Change logo
 6) View clients
 7) Receipt prefix (current: ${biz.receiptPrefix || "RCPT"})
-8) Tax settings (current: ${ (biz.applyTax === true || String(biz.applyTax).toLowerCase() === "true") ? ("VAT ON, " + Number(biz.taxRate || 0) + "%") : "VAT OFF" })
 0) Back to menu
 Reply with number to edit.`;
         return sendTwimlText(res, sMsg);
@@ -678,43 +694,7 @@ Type 'menu' to return here anytime.`);
         return sendTwimlText(res, lines.join("\n"));
       }
       if (choice === "7") { biz.sessionState = "settings_rcpt_prefix"; await saveBiz(biz); return sendTwimlText(res, `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`); }
-      if (choice === "8") {
-        biz.sessionState = "settings_tax_menu";
-        await saveBiz(biz);
-        return sendTwimlText(res, `Tax settings:
-1) Set tax rate (current: ${Number(biz.taxRate || 0)}%)
-2) Toggle VAT (current: ${biz.applyTax ? "ON" : "OFF"})
-0) Back to settings`);
-      }
       return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
-    }
-
-    // Tax settings: submenu handling
-    if (state === "settings_tax_menu" && isSingleNumber) {
-      const choice = trimmed;
-      if (choice === "0") { biz.sessionState = "settings_menu"; await saveBiz(biz); return sendTwimlText(res, "Back to Settings."); }
-      if (choice === "1") { biz.sessionState = "settings_tax_rate"; await saveBiz(biz); return sendTwimlText(res, `Current tax rate: ${Number(biz.taxRate || 0)}%. Reply with new tax rate number (e.g. 15).`); }
-      if (choice === "2") {
-        // normalize current value to boolean then flip
-        const current = (biz.applyTax === true || String(biz.applyTax).toLowerCase() === "true");
-        biz.applyTax = !current;
-        biz.sessionState = "settings_menu";
-        await saveBiz(biz);
-        return sendTwimlText(res, `VAT is now ${biz.applyTax ? "ENABLED" : "DISABLED"}. Back to Settings.`);
-      }
-      return sendTwimlText(res, "Invalid selection. Reply 1/2 or 0 to go back.");
-    }
-
-    if (state === "settings_tax_rate") {
-      // allow inputs like "15", "15%", " 15.0 %"
-      const cleaned = String(trimmed || "").replace(/[^0-9.\-]+/g, "").trim();
-      const val = parseFloat(cleaned);
-      if (isNaN(val) || val < 0) return sendTwimlText(res, "Invalid tax rate. Enter a number like 15 or 15%.");
-      // ensure numeric type saved
-      biz.taxRate = Number(Math.round(val * 100) / 100); // keep up to 2 decimals
-      biz.sessionState = "settings_menu";
-      await saveBiz(biz);
-      return sendTwimlText(res, `Tax rate set to ${biz.taxRate}%. Back to Settings.`);
     }
 
     if (state === "settings_currency") {
@@ -788,6 +768,8 @@ Type 'menu' to return here anytime.`);
           biz.sessionData.awaitingItemDesc = false;
           biz.sessionData.lastItem = null;
           biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
+          biz.sessionData.vatPercent = typeof biz.sessionData.vatPercent === "undefined" ? Number(biz.taxRate || 0) : biz.sessionData.vatPercent;
+          biz.sessionData.applyVat = typeof biz.sessionData.applyVat === "undefined" ? true : !!biz.sessionData.applyVat;
           await saveBiz(biz);
           const docType = biz.sessionData.docType || "invoice";
           const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -823,6 +805,8 @@ Type 'menu' to return here anytime.`);
       biz.sessionData.awaitingItemDesc = false;
       biz.sessionData.lastItem = null;
       biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
+      biz.sessionData.vatPercent = typeof biz.sessionData.vatPercent === "undefined" ? Number(biz.taxRate || 0) : biz.sessionData.vatPercent;
+      biz.sessionData.applyVat = typeof biz.sessionData.applyVat === "undefined" ? true : !!biz.sessionData.applyVat;
       await saveBiz(biz);
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -849,6 +833,8 @@ Type 'menu' to return here anytime.`);
       biz.sessionData.awaitingItemDesc = false;
       biz.sessionData.lastItem = null;
       biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
+      biz.sessionData.vatPercent = typeof biz.sessionData.vatPercent === "undefined" ? Number(biz.taxRate || 0) : biz.sessionData.vatPercent;
+      biz.sessionData.applyVat = typeof biz.sessionData.applyVat === "undefined" ? true : !!biz.sessionData.applyVat;
       await saveBiz(biz);
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -961,13 +947,13 @@ Type 'menu' to return here anytime.`);
       const finalItems = biz.sessionData.items || [];
       const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
 
-      const taxRate = Number(biz.taxRate || 0);
-      const applyTax = (biz.applyTax === false) ? false : true;
       const discountPercent = Number(biz.sessionData.discountPercent || 0);
       const discountAmount = +(subtotal * (discountPercent / 100));
       const taxable = subtotal - discountAmount;
-      const tax = applyTax ? +(taxable * (taxRate / 100)) : 0;
-      const total = taxable + tax;
+      const vatPercent = Number(biz.sessionData.vatPercent || 0);
+      const applyVat = (biz.sessionData.applyVat === false) ? false : true;
+      const vatAmount = applyVat ? +(taxable * (vatPercent / 100)) : 0;
+      const total = taxable + vatAmount;
 
       const docType = biz.sessionData.docType || "invoice";
       const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
@@ -975,9 +961,9 @@ Type 'menu' to return here anytime.`);
       finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
       if (discountPercent && Number(discountPercent) !== 0) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
-      summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied (disabled in settings)\n`;
+      summary += applyVat ? `VAT @ ${formatMoney(vatPercent)}%: ${formatMoney(vatAmount)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
       summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n`;
-      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)`;
+      summary += `1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(vatPercent)}%)\n6) Toggle VAT on/off (currently: ${applyVat ? "ON" : "OFF"})`;
       biz.sessionState = "creating_invoice_confirm";
       delete biz.sessionData.priceIndex;
       await saveBiz(biz);
@@ -985,7 +971,71 @@ Type 'menu' to return here anytime.`);
     }
 
     //
-    // Set discount % state (new)
+    // Set VAT state (new) - sets document-level VAT %
+    //
+    if (state === "creating_invoice_set_vat") {
+      // accept "15" or "15%" etc
+      const cleaned = String(trimmed || "").replace(/[^0-9.\-]+/g, "").trim();
+      const val = parseFloat(cleaned);
+      if (isNaN(val) || val < 0) return sendTwimlText(res, "Invalid VAT percent. Send a number like 15 or 15% (use 0 to clear).");
+      biz.sessionData.vatPercent = Number(Math.round(val * 100) / 100);
+      // ensure applyVat true when user sets a percent
+      biz.sessionData.applyVat = true;
+      biz.sessionState = "creating_invoice_confirm";
+      await saveBiz(biz);
+      // Recompute summary quickly to send to user
+      const finalItems = biz.sessionData.items || [];
+      const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+      const discountPercentNow = Number(biz.sessionData.discountPercent || 0);
+      const discountAmountNow = +(subtotal * (discountPercentNow / 100));
+      const taxableNow = subtotal - discountAmountNow;
+      const vatPercentNow = Number(biz.sessionData.vatPercent || 0);
+      const applyVatNow = (biz.sessionData.applyVat === false) ? false : true;
+      const vatNow = applyVatNow ? +(taxableNow * (vatPercentNow / 100)) : 0;
+      const totalNow = taxableNow + vatNow;
+
+      let summary = `VAT set to ${formatMoney(vatPercentNow)}%.\n`;
+      finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
+      if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
+      summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
+      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)\n6) Toggle VAT on/off (currently: ${applyVatNow ? "ON" : "OFF"})`;
+
+      return sendTwimlText(res, summary);
+    }
+
+    //
+    // Toggle VAT (new) - flip document-level applyVat boolean and return summary
+    //
+    if (state === "creating_invoice_toggle_vat") {
+      // Flip and return to confirm state
+      const current = (biz.sessionData.applyVat === true || String(biz.sessionData.applyVat).toLowerCase() === "true");
+      biz.sessionData.applyVat = !current;
+      biz.sessionState = "creating_invoice_confirm";
+      await saveBiz(biz);
+      // Recompute summary quickly
+      const finalItems = biz.sessionData.items || [];
+      const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+      const discountPercentNow = Number(biz.sessionData.discountPercent || 0);
+      const discountAmountNow = +(subtotal * (discountPercentNow / 100));
+      const taxableNow = subtotal - discountAmountNow;
+      const vatPercentNow = Number(biz.sessionData.vatPercent || 0);
+      const applyVatNow = (biz.sessionData.applyVat === false) ? false : true;
+      const vatNow = applyVatNow ? +(taxableNow * (vatPercentNow / 100)) : 0;
+      const totalNow = taxableNow + vatNow;
+
+      let summary = `VAT is now ${applyVatNow ? "ENABLED" : "DISABLED"}.\n`;
+      finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+      summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
+      if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
+      summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
+      summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)\n6) Toggle VAT on/off (currently: ${applyVatNow ? "ON" : "OFF"})`;
+
+      return sendTwimlText(res, summary);
+    }
+
+    //
+    // Set discount % state (existing)
     //
     if (state === "creating_invoice_set_discount") {
       // accept "10" or "10%" etc
@@ -1000,8 +1050,8 @@ Type 'menu' to return here anytime.`);
       const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
       const discountPercent = Number(biz.sessionData.discountPercent || 0);
       const discountAmount = +(subtotal * (discountPercent / 100));
-      const taxRate = Number(biz.taxRate || 0);
-      const applyTax = (biz.applyTax === false) ? false : true;
+      const taxRate = Number(biz.sessionData.vatPercent || 0);
+      const applyTax = (biz.sessionData.applyVat === false) ? false : true;
       const taxable = subtotal - discountAmount;
       const tax = applyTax ? +(taxable * (taxRate / 100)) : 0;
       const total = taxable + tax;
@@ -1010,8 +1060,8 @@ Type 'menu' to return here anytime.`);
       finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
       summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
       if (discountPercent) summary += `Discount (${formatMoney(discountPercent)}%): -${formatMoney(discountAmount)} ${biz.currency || "ZWL"}\n`;
-      summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied (disabled in settings)\n`;
-      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)`;
+      summary += applyTax ? `VAT @ ${formatMoney(taxRate)}%: ${formatMoney(tax)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
+      summary += `Total: ${formatMoney(total)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercent)}%)\n5) Set VAT % (current: ${formatMoney(taxRate)}%)\n6) Toggle VAT on/off (currently: ${applyTax ? "ON" : "OFF"})`;
 
       return sendTwimlText(res, summary);
     }
@@ -1033,6 +1083,42 @@ Type 'menu' to return here anytime.`);
         biz.sessionState = "creating_invoice_set_discount";
         await saveBiz(biz);
         return sendTwimlText(res, `Send discount percent (e.g. 10 or 10%). Send 0 to clear discount. Current: ${Number(biz.sessionData.discountPercent||0)}%`);
+      }
+      if (choice === "5") {
+        biz.sessionState = "creating_invoice_set_vat";
+        await saveBiz(biz);
+        return sendTwimlText(res, `Send VAT percent (e.g. 15 or 15%). Send 0 to clear VAT. Current: ${Number(biz.sessionData.vatPercent||0)}%`);
+      }
+      if (choice === "6") {
+        // toggle VAT
+        biz.sessionState = "creating_invoice_toggle_vat";
+        await saveBiz(biz);
+        // Immediately run toggle handler (it will flip and return summary)
+        // We'll fall through to the toggle handler above because state updated
+        // but since we're still in the same request, explicitly handle toggle here:
+        const current = (biz.sessionData.applyVat === true || String(biz.sessionData.applyVat).toLowerCase() === "true");
+        biz.sessionData.applyVat = !current;
+        biz.sessionState = "creating_invoice_confirm";
+        await saveBiz(biz);
+        // Recompute summary and return
+        const finalItems = biz.sessionData.items || [];
+        const subtotal = finalItems.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
+        const discountPercentNow = Number(biz.sessionData.discountPercent || 0);
+        const discountAmountNow = +(subtotal * (discountPercentNow / 100));
+        const taxableNow = subtotal - discountAmountNow;
+        const vatPercentNow = Number(biz.sessionData.vatPercent || 0);
+        const applyVatNow = (biz.sessionData.applyVat === false) ? false : true;
+        const vatNow = applyVatNow ? +(taxableNow * (vatPercentNow / 100)) : 0;
+        const totalNow = taxableNow + vatNow;
+
+        let summary = `VAT is now ${applyVatNow ? "ENABLED" : "DISABLED"}.\n`;
+        finalItems.forEach((it, i) => summary += `${i+1}) ${it.item || it.description} x${it.qty} @ ${formatMoney(it.unit||0)} = ${formatMoney((it.qty||0)*(it.unit||0))}\n`);
+        summary += `Subtotal: ${formatMoney(subtotal)} ${biz.currency || "ZWL"}\n`;
+        if (discountPercentNow) summary += `Discount (${formatMoney(discountPercentNow)}%): -${formatMoney(discountAmountNow)} ${biz.currency || "ZWL"}\n`;
+        summary += applyVatNow ? `VAT @ ${formatMoney(vatPercentNow)}%: ${formatMoney(vatNow)} ${biz.currency || "ZWL"}\n` : `VAT: Not applied\n`;
+        summary += `Total: ${formatMoney(totalNow)} ${biz.currency || "ZWL"}\n\n1) Add another item\n2) Send & generate PDF\n3) Cancel\n4) Set discount % (current: ${formatMoney(discountPercentNow)}%)\n5) Set VAT % (current: ${formatMoney(vatPercentNow)}%)\n6) Toggle VAT on/off (currently: ${applyVatNow ? "ON" : "OFF"})`;
+
+        return sendTwimlText(res, summary);
       }
       if (choice === "2") {
         const items = biz.sessionData.items || [];
@@ -1061,9 +1147,9 @@ Type 'menu' to return here anytime.`);
               name: biz.name,
               logoUrl: biz.logoUrl,
               address: biz.address || "",
-              taxRate: Number(biz.taxRate || 0),
-              applyTax: (biz.applyTax === false) ? false : true,
               discountPercent: Number(biz.sessionData.discountPercent || 0),
+              vatPercent: Number(biz.sessionData.vatPercent || 0),
+              applyVat: (biz.sessionData.applyVat === false) ? false : true,
               _id: biz._id?.toString(),
               originalAmount: biz.sessionData.originalAmount || undefined,
               amountPaid: biz.sessionData.amountPaid || undefined,

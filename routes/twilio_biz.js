@@ -185,24 +185,34 @@ async function renderHtmlToPdf(html, filepath) {
  *
  * NOTE: Updated to remove "Description" column (prints item name instead) and include discount/vat.
  */
-function drawTablePdfkit(doc, items, startX, startY, columnWidths) {
+function drawTablePdfkit(doc, items, startX, startY, columnWidths, docDiscountPercent = 0) {
   const lineHeight = 18;
   let y = startY;
   doc.fontSize(10).fillColor("black");
-  // header: Item | Qty | Unit | Total
+  // header: Item | Qty | Unit | Discount | Total
   doc.text("Item", startX, y, { width: columnWidths[0] });
   doc.text("Qty", startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
   doc.text("Unit", startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
-  doc.text("Total", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
+  doc.text("Discount (%)", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
+  doc.text("Total", startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10 + columnWidths[3] + 10, y, { width: columnWidths[4], align: "right" });
   y += lineHeight;
-  try { doc.moveTo(startX, y - 6).lineTo(startX + columnWidths.reduce((a,b) => a + b, 0) + 40, y - 6).strokeOpacity(0.08).stroke(); } catch(e) {}
+  try {
+    const totalColsWidth = columnWidths.reduce((a,b) => a + b, 0) + 40;
+    doc.moveTo(startX, y - 6).lineTo(startX + totalColsWidth, y - 6).strokeOpacity(0.08).stroke();
+  } catch(e) {}
   for (const it of items) {
     doc.fontSize(10).fillColor("black");
-    // print item name (fallback to description if item missing)
-    doc.text(it.item || it.description || "", startX, y, { width: columnWidths[0] });
-    doc.text(String(it.qty), startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
-    doc.text(formatMoney(it.unit || 0), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
-    doc.text(formatMoney((it.qty||0) * (it.unit||0)), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
+    const itemName = it.item || it.description || "";
+    const qty = Number(it.qty || it.quantity || 1);
+    const unit = Number(it.unit || it.rate || 0);
+    const amount = qty * unit;
+    const rowDiscount = (typeof it.discount !== "undefined" && it.discount !== null) ? Number(it.discount) : Number(docDiscountPercent || 0);
+
+    doc.text(itemName, startX, y, { width: columnWidths[0] });
+    doc.text(String(qty), startX + columnWidths[0] + 10, y, { width: columnWidths[1], align: "right" });
+    doc.text(formatMoney(unit), startX + columnWidths[0] + 10 + columnWidths[1] + 10, y, { width: columnWidths[2], align: "right" });
+    doc.text(formatMoney(rowDiscount), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10, y, { width: columnWidths[3], align: "right" });
+    doc.text(formatMoney(amount), startX + columnWidths[0] + 10 + columnWidths[1] + 10 + columnWidths[2] + 10 + columnWidths[3] + 10, y, { width: columnWidths[4], align: "right" });
     y += lineHeight;
   }
   return y;
@@ -222,28 +232,35 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     const companyName = bizMeta.name || "";
     const logoUrl = bizMeta.logoUrl || "";
     const companyAddress = bizMeta.address || "";
-    // Removed description column from table HTML
+
+    // document-level discount (percent) fallback for rows
+    const discountPercentDoc = Number(bizMeta.discountPercent || 0);
+
+    // Removed description column from table HTML. Discount column uses item-level discount or document-level fallback.
     const itemsRowsHtml = items.map(it => {
-      const line = `
+      const rowDiscount = (typeof it.discount !== "undefined" && it.discount !== null) ? it.discount : discountPercentDoc;
+      const qty = it.qty || it.quantity || 1;
+      const rate = Number(it.unit || it.rate || 0);
+      const amount = qty * rate;
+      return `
         <tr>
-          <td style="text-align:center; width:8%">${it.qty || it.quantity || 1}</td>
+          <td style="text-align:center; width:8%">${qty}</td>
           <td style="text-align:center; width:40%">${escapeHtml(it.item || it.description || "")}</td>
-          <td style="text-align:center; width:12%">${formatMoney(it.unit||it.rate||0)}</td>
-          <td style="text-align:center; width:8%">${it.discount ? escapeHtml(String(it.discount)): "0"}</td>
-          <td style="text-align:center; width:20%">${formatMoney((Number(it.qty||it.quantity||0)) * (Number(it.unit||it.rate||0)))}</td>
+          <td style="text-align:center; width:12%">${formatMoney(rate)}</td>
+          <td style="text-align:center; width:8%">${escapeHtml(String(rowDiscount || 0))}</td>
+          <td style="text-align:center; width:20%">${formatMoney(amount)}</td>
         </tr>
       `;
-      return line;
     }).join("\n");
 
     const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
 
-    // use discountPercent from bizMeta (document-level), default 0
+    // document-level discount
     const discountPercent = Number(bizMeta.discountPercent || 0);
     const discountAmount = +(subtotal * (discountPercent / 100));
     const taxableBase = subtotal - discountAmount;
 
-    // use vatPercent from bizMeta (document-level), default 0
+    // vat
     const vatPercent = Number(bizMeta.vatPercent || 0);
     const applyVat = (bizMeta.applyVat === false) ? false : true;
     const vat = applyVat ? +(taxableBase * (vatPercent/100)) : 0;
@@ -415,9 +432,9 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
       if (email) doc.fontSize(10).fillColor("#666").text(email, 50, 170);
 
       const startY = 210;
-      // columnWidths adjusted for Item | Qty | Unit | Total
-      const columnWidths = [260, 60, 80, 80];
-      const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths);
+      // columnWidths adjusted for Item | Qty | Unit | Discount | Total
+      const columnWidths = [220, 60, 70, 70, 80];
+      const afterTableY = drawTablePdfkit(doc, items, 50, startY, columnWidths, Number(bizMeta.discountPercent || 0));
       let subtotal2 = items.reduce((s, it) => s + (Number(it.qty||0) * Number(it.unit||0)), 0);
 
       // apply document discount first (bizMeta.discountPercent)
@@ -427,7 +444,8 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
       // apply VAT per-document (bizMeta.vatPercent & bizMeta.applyVat)
       const vatPercentUsed = Number(bizMeta.vatPercent || 0);
-      const applyVatUsed = (bizMeta.applyVat === false) ? false : true;
+      // force applyVat true when a VAT percent > 0 has been set for the document
+      const applyVatUsed = (Number(bizMeta.vatPercent || 0) > 0) ? true : ((bizMeta.applyVat === false) ? false : true);
       const vat = applyVatUsed ? +(taxableBase * (vatPercentUsed / 100)) : 0;
       const total = taxableBase + vat;
 
@@ -525,13 +543,11 @@ router.post("/webhook", async (req, res) => {
 
     // Ensure sessionData defaults for vat/discount when starting a document
     if (!biz.sessionData) biz.sessionData = {};
-    // do NOT persist vat to global settings; it's per-document: initialize if missing
-    biz.sessionData.discountPercent = biz.sessionData.discountPercent || 0;
-    // prefill vatPercent from biz.taxRate if present and session doesn't have it already
+    // initialize session-level values when missing
+    biz.sessionData.discountPercent = (typeof biz.sessionData.discountPercent === "undefined") ? 0 : biz.sessionData.discountPercent;
     if (typeof biz.sessionData.vatPercent === "undefined") {
       biz.sessionData.vatPercent = Number(biz.taxRate || 0);
     }
-    // default document-level applyVat true if not set
     if (typeof biz.sessionData.applyVat === "undefined") {
       biz.sessionData.applyVat = true;
     }
@@ -1088,7 +1104,8 @@ Type 'menu' to return here anytime.`);
               address: biz.address || "",
               discountPercent: Number(biz.sessionData.discountPercent || 0),
               vatPercent: Number(biz.sessionData.vatPercent || 0),
-              applyVat: (biz.sessionData.applyVat === false) ? false : true,
+              // force applyVat true when a VAT percent > 0 has been set for the document
+              applyVat: (Number(biz.sessionData.vatPercent || 0) > 0) ? true : ((biz.sessionData.applyVat === false) ? false : true),
               _id: biz._id?.toString(),
               originalAmount: biz.sessionData.originalAmount || undefined,
               amountPaid: biz.sessionData.amountPaid || undefined,

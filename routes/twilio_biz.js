@@ -220,6 +220,7 @@ function drawTablePdfkit(doc, items, startX, startY, columnWidths, docDiscountPe
 }
 
 /* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
+/* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
 async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", bizMeta = {} }) {
   // try HTML -> PDF via Puppeteer first (preferred)
   const baseDir = await ensurePublicSubdirs();
@@ -227,17 +228,25 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
 
+  // resolve logo URL to an absolute URL if it's root-relative
+  const rawLogoUrl = bizMeta.logoUrl || "";
+  let resolvedLogoUrl = rawLogoUrl;
+  if (rawLogoUrl && rawLogoUrl.startsWith("/")) {
+    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+    if (site) resolvedLogoUrl = `${site}${rawLogoUrl}`;
+    // if SITE_URL isn't set, leave it as-is; Puppeteer will try relative fetch
+  }
+
   // Build HTML from template (bootstrap 3.3.7 + your layout)
   function buildHtml() {
     const typeLabel = type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT";
     const companyName = bizMeta.name || "";
-    const logoUrl = bizMeta.logoUrl || "";
+    const logoUrl = resolvedLogoUrl || "";
     const companyAddress = bizMeta.address || "";
 
     // document-level discount (percent) fallback for rows
     const discountPercentDoc = Number(bizMeta.discountPercent || 0);
 
-    // Removed description column from table HTML. Discount column uses item-level discount or document-level fallback.
     const itemsRowsHtml = items.map(it => {
       const rowDiscount = (typeof it.discount !== "undefined" && it.discount !== null) ? it.discount : discountPercentDoc;
       const qty = it.qty || it.quantity || 1;
@@ -267,7 +276,6 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     const vat = applyVat ? +(taxableBase * (vatPercent/100)) : 0;
     const total = taxableBase + vat;
 
-    // Basic escape helper
     return `
 <!doctype html>
 <html>
@@ -293,24 +301,11 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
     .totals tr:last-child td{ font-weight:800; font-size:14px; }
     .logo-text{ font-size:18px; font-weight:700; }
     .watermark{ position: fixed; left:0; top:140px; right:0; opacity:0.06; text-align:center; font-size:72px; transform: rotate(-20deg); pointer-events:none; }
-    /* your custom invoice CSS (copied from user design) */
     table { width: 100%; min-width: max-content; table-layout:fixed; }
     .row { margin-left:-5px; margin-right:-5px; }
     .column { float: left; width: 50%; padding: 5px; }
     .row::after { content: ""; clear: both; display: table; }
-    .column-bordered-table thead td { border-left: 1px solid #000000; border-right: 1px solid #000000; }
-    .column-bordered-table td { border-left: 1px solid #000000; border-right: 1px solid #000000; }
-    .column-bordered-table tfoot tr { border-top: 1px solid #000000; border-bottom: 1px solid #000000; }
-    .header img { float: left; width: 200px; height: 100px; background: #555; }
-    .content-container{ padding: 30px; position: relative; }
-    .content-container:before{ content: ""; position: absolute; top: 0; left: 0; background-image: url("https://lh3.googleusercontent.com/p/AF1QipM4QsTyJAvH2mqbi7nscU_rI0itolqM4uAEL9G2=s680-w680-h510"); background-size: 500px; background-position: center; background-repeat: no-repeat; width: 100%; height: 100%; opacity: .1; margin-top: 100px; }
-    .content-container .contents{ position: relative; z-index: 5; }
-    .toppane { width: 100%; height: 100px; background-color: #4da6ff; }
-    .leftpane { width: 25%; height: 45vh; }
-    .middlepane { width: 50%; height: 40vh; }
-    .rightpane { width: 20%; height: 35vh; }
     body { margin: 0!important; }
-    .d-flex { display: flex; }
   </style>
 </head>
 <body>
@@ -365,7 +360,6 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
   </table>
 
   ${ notes ? `<div style="clear:both; margin-top:16px; border-left:4px solid #1f6feb; background:#fbfdff; padding:10px; border-radius:4px;">${escapeHtml(notes)}</div>` : "" }
-
 
 </body>
 </html>

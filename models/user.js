@@ -1,32 +1,48 @@
+// models/user.js
+import mongoose from "mongoose";
+
 const LastPrefsSchema = new mongoose.Schema(
   {
     city: String,
-
-    curriculum: [{ type: String }],
-    type2: [{ type: String }],
-    facilities: [{ type: String }],
-
-    schoolPhase: [{ type: String }],   // ✅ FIXED (array)
+    curriculum: [String],
+    type2: [String],
+    facilities: [String],
+    schoolPhase: [String], // ARRAY (fixes cast error)
     learningEnvironment: String,
     gender: String,
   },
   { _id: false }
 );
 
-const UserSchema = new mongoose.Schema({
-  provider: String,
-  providerId: String,
-  name: String,
+const TutorProfileSchema = new mongoose.Schema(
+  {
+    subject: String,
+    level: String,
+    city: String,
+    phone: String,
+  },
+  { _id: false }
+);
 
-  role: { type: String, default: "user" },
+const UserSchema = new mongoose.Schema(
+  {
+    provider: String,
+    providerId: { type: String, index: true },
+    name: String,
 
-  favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "School" }],
+    role: { type: String, default: "user" },
 
-  lastPrefs: { type: LastPrefsSchema, default: {} },
+    favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "School" }],
 
-  // ✅ NEW: chatbot state
-  chatState: {
-    type: String,
-    default: "WELCOME", // WELCOME | SCHOOL_MENU | SCHOOL_QUICK | TUTOR_MENU | TUTOR_REGISTER
-  }
-});
+    lastPrefs: { type: LastPrefsSchema, default: {} },
+
+    chatState: { type: String, default: "WELCOME" },
+
+    tutorProfile: { type: TutorProfileSchema, default: {} },
+  },
+  { timestamps: true }
+);
+
+// ✅ DEFAULT EXPORT (THIS FIXES THE CRASH)
+export default mongoose.models.User ||
+  mongoose.model("User", UserSchema);

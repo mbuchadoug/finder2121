@@ -1,36 +1,32 @@
-// models/user.js
-import mongoose from "mongoose";
-
 const LastPrefsSchema = new mongoose.Schema(
   {
-    city: { type: String },
-    learningEnvironment: { type: String }, // e.g. "Urban", "Suburban", "Rural"
-    curriculum: [{ type: String }],         // ["Cambridge","ZIMSEC","IB"]
-    type: [{ type: String }],               // ["High School","Primary School","Pre-School"]
-    type2: [{ type: String }],              // ["Day","Boarding"]
-    facilities: [{ type: String }],         // keys in School.facilities
-    schoolPhase: { type: String },          // e.g. "Primary", "Secondary", "Preschool"
+    city: String,
+
+    curriculum: [{ type: String }],
+    type2: [{ type: String }],
+    facilities: [{ type: String }],
+
+    schoolPhase: [{ type: String }],   // ✅ FIXED (array)
+    learningEnvironment: String,
+    gender: String,
   },
   { _id: false }
 );
 
-const UserSchema = new mongoose.Schema(
-  {
-    provider: { type: String, required: true },
-    providerId: { type: String, required: true, index: true },
-    name: String,
-    email: { type: String, index: true },
-    photo: String,
+const UserSchema = new mongoose.Schema({
+  provider: String,
+  providerId: String,
+  name: String,
 
-    role: { type: String, enum: ["user", "admin"], default: "user", index: true },
+  role: { type: String, default: "user" },
 
-    favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "School" }],
+  favourites: [{ type: mongoose.Schema.Types.ObjectId, ref: "School" }],
 
-    // lastPrefs as a nested object (not an array) to avoid cast errors
-    lastPrefs: { type: LastPrefsSchema, default: {} },
-  },
-  { timestamps: true }
-);
+  lastPrefs: { type: LastPrefsSchema, default: {} },
 
-// Avoid model overwrite errors in watch/reload environments
-export default mongoose.models.User || mongoose.model("User", UserSchema);
+  // ✅ NEW: chatbot state
+  chatState: {
+    type: String,
+    default: "WELCOME", // WELCOME | SCHOOL_MENU | SCHOOL_QUICK | TUTOR_MENU | TUTOR_REGISTER
+  }
+});

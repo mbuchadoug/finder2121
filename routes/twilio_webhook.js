@@ -1,330 +1,234 @@
-// routes/twilio_webhook.js
 import express from "express";
 import { Router } from "express";
-import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import axios from "axios";
+import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import User from "../models/user.js";
 
 const router = Router();
 router.use(express.urlencoded({ extended: true }));
 
-/* =====================================================
-   Helpers
-===================================================== */
+/* ---------------- helpers ---------------- */
 
-function sendTwiml(res, text) {
+function send(res, text) {
   const twiml = new MessagingResponse();
   twiml.message(text);
   res.set("Content-Type", "text/xml");
   return res.send(twiml.toString());
 }
 
-function normalizePhone(from) {
-  return String(from || "")
-    .replace(/^whatsapp:/, "")
-    .replace(/\D+/g, "");
+function normalizePhone(p) {
+  return String(p || "").replace(/^whatsapp:/, "").replace(/\D+/g, "");
 }
 
-/* =====================================================
-   MENUS
-===================================================== */
+/* ---------------- menus ---------------- */
 
 const MAIN_MENU = `
 👋 *Welcome to ZimEduFinder*
 
 What are you looking for today?
 
-1️⃣ Find Schools  
-2️⃣ Find Private Tutors  
+1️⃣ Find Schools
+2️⃣ Find Private Tutors
 3️⃣ Help
 `;
 
 const SCHOOL_MENU = `
 🏫 *Find Schools*
 
-Choose an option:
+Choose a quick option:
 
-1️⃣ Cambridge schools (top rated)
-2️⃣ Boarding schools
-3️⃣ Schools with swimming pools
-4️⃣ Primary schools (advanced)
-5️⃣ Custom search
-6️⃣ Back
+1️⃣ Cambridge · Advanced · Harare
+2️⃣ Boarding · Swimming Pool
+3️⃣ Primary · Enhanced
+4️⃣ Transport + WiFi
+5️⃣ Back
 `;
 
 const TUTOR_MENU = `
 👨‍🏫 *Private Tutors*
 
-1️⃣ Find a tutor
-2️⃣ Register as a tutor
+1️⃣ Find a Tutor
+2️⃣ I am a Tutor (Register)
 3️⃣ Back
-`;
-
-const TUTOR_REGISTER_INTRO = `
-📝 *Tutor Registration*
-
-We’ll ask you a few quick questions.
-
-Reply *OK* to continue  
-or *BACK* to cancel
 `;
 
 const HELP_TEXT = `
 ℹ️ *ZimEduFinder Help*
 
-• Use numbers to choose options  
-• No typing needed  
-• Send *menu* anytime  
+• Reply with numbers to navigate
+• No typing needed
+• Smart recommendations
 
-Example:
-👉 Reply *1* to find schools
+Reply *menu* anytime to restart.
 `;
 
-/* =====================================================
-   RICH COMMAND MAP (SCHOOLS)
-===================================================== */
-
-const SCHOOL_COMMANDS = {
-  "1": "find harare cambridge advanced mixed science computer",
-  "2": "find harare boarding cambridge enhanced",
-  "3": "find harare swimming football rugby",
-  "4": "find harare primary advanced",
-};
-
-/* =====================================================
-   WEBHOOK
-===================================================== */
+/* ---------------- webhook ---------------- */
 
 router.post("/webhook", async (req, res) => {
   try {
-    const from = req.body.From;
-    const body = (req.body.Body || "").trim();
-    const text = body.toLowerCase();
+    const body = req.body || {};
+    const from = body.From;
+    const text = (body.Body || "").trim();
+    const lc = text.toLowerCase();
 
-    if (!from) return sendTwiml(res, "Missing sender");
+    if (!from) return send(res, "Missing sender");
 
-    const phone = normalizePhone(from);
+    const providerId = normalizePhone(from);
 
-    /* ---------- Load or create user ---------- */
-
-    let user = await User.findOne({ provider: "whatsapp", providerId: phone });
+    let user = await User.findOne({ provider: "whatsapp", providerId });
 
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
-        providerId: phone,
-        role: "user",
-        lastState: "MAIN_MENU",
+        providerId,
+        name: body.ProfileName || "",
       });
     }
 
-    console.log("📩 IN:", { phone, text, state: user.lastState });
+    /* ---------- global shortcuts ---------- */
 
-    /* =====================================================
-       GLOBAL COMMANDS
-    ===================================================== */
-
-    if (!text || ["hi", "hello", "menu", "start"].includes(text)) {
-      user.lastState = "MAIN_MENU";
+    if (!text || ["hi", "hello", "menu"].includes(lc)) {
+      user.chatState = "WELCOME";
       await user.save();
-      return sendTwiml(res, MAIN_MENU);
+      return send(res, MAIN_MENU);
     }
 
-    if (text === "help") {
-      return sendTwiml(res, HELP_TEXT);
-    }
+    if (lc === "help") return send(res, HELP_TEXT);
 
-    /* =====================================================
-       MAIN MENU
-    ===================================================== */
+    /* ---------- state machine ---------- */
 
-    if (user.lastState === "MAIN_MENU") {
-      if (text === "1") {
-        user.lastState = "SCHOOL_MENU";
+    switch (user.chatState) {
+
+      /* ===== WELCOME ===== */
+      case "WELCOME":
+        if (text === "1") {
+          user.chatState = "SCHOOL_MENU";
+          await user.save();
+          return send(res, SCHOOL_MENU);
+        }
+        if (text === "2") {
+          user.chatState = "TUTOR_MENU";
+          await user.save();
+          return send(res, TUTOR_MENU);
+        }
+        if (text === "3") return send(res, HELP_TEXT);
+
+        return send(res, MAIN_MENU);
+
+      /* ===== SCHOOL QUICK SEARCH ===== */
+      case "SCHOOL_MENU": {
+        let command = null;
+
+        if (text === "1")
+          command = "find harare cambridge advanced";
+        if (text === "2")
+          command = "find harare boarding swimming";
+        if (text === "3")
+          command = "find harare primary enhanced";
+        if (text === "4")
+          command = "find harare transport wifi";
+        if (text === "5") {
+          user.chatState = "WELCOME";
+          await user.save();
+          return send(res, MAIN_MENU);
+        }
+
+        if (!command) return send(res, SCHOOL_MENU);
+
+        // 🔥 reuse existing search API
+        user.chatState = "WELCOME";
         await user.save();
-        return sendTwiml(res, SCHOOL_MENU);
+
+        const site = process.env.SITE_URL.replace(/\/$/, "");
+
+        const resp = await axios.post(`${site}/api/recommend`, {
+          city: "Harare",
+          curriculum: command.includes("cambridge") ? ["Cambridge"] : [],
+          type2: command.includes("boarding") ? ["Boarding"] : [],
+          schoolPhase: command.includes("primary") ? ["Primary School"] : [],
+          learningEnvironment: command.includes("advanced")
+            ? "Advanced"
+            : command.includes("enhanced")
+            ? "Enhanced"
+            : undefined,
+          facilities: [
+            command.includes("swimming") && "swimmingPool",
+            command.includes("wifi") && "wifiCampus",
+            command.includes("transport") && "transportBuses",
+          ].filter(Boolean),
+        });
+
+        const schools = resp.data?.recommendations || [];
+
+        if (!schools.length)
+          return send(res, "No schools found. Try another option.");
+
+        let msg = `🎓 *Top schools for you:*\n`;
+
+        schools.slice(0, 5).forEach((s, i) => {
+          msg += `\n${i + 1}. ${s.name}\n   ${s.website || ""}`;
+        });
+
+        return send(res, msg);
       }
 
-      if (text === "2") {
-        user.lastState = "TUTOR_MENU";
+      /* ===== TUTOR MENU ===== */
+      case "TUTOR_MENU":
+        if (text === "1") {
+          return send(
+            res,
+            "🔍 Tutor search coming soon.\nReply 3 to go back."
+          );
+        }
+
+        if (text === "2") {
+          user.chatState = "TUTOR_SUBJECT";
+          await user.save();
+          return send(res, "📘 What subject do you teach?");
+        }
+
+        if (text === "3") {
+          user.chatState = "WELCOME";
+          await user.save();
+          return send(res, MAIN_MENU);
+        }
+
+        return send(res, TUTOR_MENU);
+
+      /* ===== TUTOR SMART FORM ===== */
+      case "TUTOR_SUBJECT":
+        user.tutorProfile.subject = text;
+        user.chatState = "TUTOR_LEVEL";
         await user.save();
-        return sendTwiml(res, TUTOR_MENU);
-      }
+        return send(res, "🎓 Which level? (Primary / Secondary / A-Level)");
 
-      if (text === "3") {
-        return sendTwiml(res, HELP_TEXT);
-      }
-
-      return sendTwiml(res, MAIN_MENU);
-    }
-
-    /* =====================================================
-       SCHOOL MENU
-    ===================================================== */
-
-    if (user.lastState === "SCHOOL_MENU") {
-      if (text === "6") {
-        user.lastState = "MAIN_MENU";
+      case "TUTOR_LEVEL":
+        user.tutorProfile.level = text;
+        user.chatState = "TUTOR_CITY";
         await user.save();
-        return sendTwiml(res, MAIN_MENU);
-      }
+        return send(res, "📍 Which city are you based in?");
 
-      if (text === "5") {
-        user.lastState = "CUSTOM_SCHOOL_SEARCH";
+      case "TUTOR_CITY":
+        user.tutorProfile.city = text;
+        user.tutorProfile.phone = providerId;
+        user.chatState = "WELCOME";
         await user.save();
-        return sendTwiml(
+
+        return send(
           res,
-          "✏️ Type your search like:\nfind harare cambridge boarding swimming"
+          "✅ *Registration complete!*\nWe’ll contact you when parents need your subject."
         );
-      }
 
-      if (SCHOOL_COMMANDS[text]) {
-        const command = SCHOOL_COMMANDS[text];
-        user.lastState = "MAIN_MENU";
+      default:
+        user.chatState = "WELCOME";
         await user.save();
-        return handleFindCommand(res, user, command);
-      }
-
-      return sendTwiml(res, SCHOOL_MENU);
+        return send(res, MAIN_MENU);
     }
 
-    /* =====================================================
-       CUSTOM SCHOOL SEARCH
-    ===================================================== */
-
-    if (user.lastState === "CUSTOM_SCHOOL_SEARCH") {
-      if (!text.startsWith("find")) {
-        return sendTwiml(
-          res,
-          "Please start with *find*.\nExample:\nfind harare cambridge"
-        );
-      }
-
-      user.lastState = "MAIN_MENU";
-      await user.save();
-      return handleFindCommand(res, user, body);
-    }
-
-    /* =====================================================
-       TUTOR MENU
-    ===================================================== */
-
-    if (user.lastState === "TUTOR_MENU") {
-      if (text === "3") {
-        user.lastState = "MAIN_MENU";
-        await user.save();
-        return sendTwiml(res, MAIN_MENU);
-      }
-
-      if (text === "1") {
-        return sendTwiml(
-          res,
-          "🔍 Tutor search coming soon.\nSend *menu* to continue."
-        );
-      }
-
-      if (text === "2") {
-        user.lastState = "TUTOR_REGISTER";
-        await user.save();
-        return sendTwiml(res, TUTOR_REGISTER_INTRO);
-      }
-
-      return sendTwiml(res, TUTOR_MENU);
-    }
-
-    /* =====================================================
-       TUTOR REGISTRATION (SMART FORM ENTRY)
-    ===================================================== */
-
-    if (user.lastState === "TUTOR_REGISTER") {
-      if (text === "back") {
-        user.lastState = "TUTOR_MENU";
-        await user.save();
-        return sendTwiml(res, TUTOR_MENU);
-      }
-
-      if (text === "ok") {
-        user.lastState = "TUTOR_REGISTER_NAME";
-        await user.save();
-        return sendTwiml(res, "👤 What is your full name?");
-      }
-
-      return sendTwiml(res, TUTOR_REGISTER_INTRO);
-    }
-
-    if (user.lastState === "TUTOR_REGISTER_NAME") {
-      user.tutorProfile = { name: body };
-      user.lastState = "TUTOR_REGISTER_SUBJECTS";
-      await user.save();
-      return sendTwiml(
-        res,
-        "📘 What subjects do you teach?\nExample: Maths, Physics"
-      );
-    }
-
-    if (user.lastState === "TUTOR_REGISTER_SUBJECTS") {
-      user.tutorProfile.subjects = body;
-      user.lastState = "TUTOR_REGISTER_CITY";
-      await user.save();
-      return sendTwiml(res, "📍 Which city are you based in?");
-    }
-
-    if (user.lastState === "TUTOR_REGISTER_CITY") {
-      user.tutorProfile.city = body;
-      user.lastState = "TUTOR_REGISTER_DONE";
-      await user.save();
-      return sendTwiml(
-        res,
-        "✅ Registration complete!\nWe will review and list your profile."
-      );
-    }
-
-    /* =====================================================
-       FALLBACK
-    ===================================================== */
-
-    return sendTwiml(res, MAIN_MENU);
   } catch (err) {
-    console.error("❌ TWILIO ERROR:", err);
-    return sendTwiml(res, "Something went wrong. Send *menu* to restart.");
+    console.error("TWILIO ERROR:", err);
+    return send(res, "Something went wrong. Send *menu* to restart.");
   }
 });
-
-/* =====================================================
-   FIND HANDLER
-===================================================== */
-
-async function handleFindCommand(res, user, command) {
-  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-
-  if (!site) {
-    return sendTwiml(res, "Search unavailable. Try again later.");
-  }
-
-  let recs = [];
-
-  try {
-    const resp = await axios.post(`${site}/api/recommend`, {
-      query: command,
-    });
-    recs = resp.data?.recommendations || [];
-  } catch (e) {
-    return sendTwiml(res, "Search failed. Please try again.");
-  }
-
-  if (!recs.length) {
-    return sendTwiml(res, "No schools found. Try another option.");
-  }
-
-  const lines = ["🎯 *Top school matches:*"];
-
-  for (const r of recs.slice(0, 5)) {
-    lines.push(`\n• *${r.name}*`);
-    if (r.city) lines.push(`  📍 ${r.city}`);
-    if (r.website) lines.push(`  🌐 ${r.website}`);
-  }
-
-  return sendTwiml(res, lines.join("\n"));
-}
 
 export default router;

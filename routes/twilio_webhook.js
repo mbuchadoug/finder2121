@@ -22,52 +22,6 @@ function normalizePhone(p) {
   return String(p || "").replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
-/* ================= SCHOOL FILTERS (UNCHANGED LOGIC) ================= */
-
-function parseFiltersFromWords(words) {
-  const filters = {
-    curriculum: [],
-    type2: [],
-    schoolPhase: [],
-    learningEnvironment: "",
-    gender: "",
-    facilities: [],
-  };
-
-  const add = (arr, v) => !arr.includes(v) && arr.push(v);
-
-  for (const raw of words) {
-    const w = raw.toLowerCase();
-
-    if (w === "cambridge") add(filters.curriculum, "Cambridge");
-    if (w === "zimsec") add(filters.curriculum, "Zimsec");
-    if (w === "ib") add(filters.curriculum, "IB");
-
-    if (w === "boarding") add(filters.type2, "Boarding");
-    if (w === "day") add(filters.type2, "Day");
-
-    if (w === "primary") add(filters.schoolPhase, "Primary School");
-    if (w === "high") add(filters.schoolPhase, "High School");
-    if (w === "pre") add(filters.schoolPhase, "Pre-School");
-
-    if (w === "advanced") filters.learningEnvironment = "Advanced";
-    if (w === "enhanced") filters.learningEnvironment = "Enhanced";
-    if (w === "comprehensive") filters.learningEnvironment = "Comprehensive";
-
-    if (w === "girls") filters.gender = "Girls";
-    if (w === "boys") filters.gender = "Boys";
-    if (w === "mixed") filters.gender = "Mixed";
-
-    if (w === "swimming") add(filters.facilities, "swimmingPool");
-    if (w === "computer") add(filters.facilities, "computerLab");
-    if (w === "science") add(filters.facilities, "scienceLabs");
-    if (w === "library") add(filters.facilities, "library");
-    if (w === "aftercare") add(filters.facilities, "aftercare");
-  }
-
-  return filters;
-}
-
 /* ================= CONSTANT MENUS ================= */
 
 const HOME_MENU = [
@@ -81,7 +35,7 @@ const HOME_MENU = [
 ].join("\n");
 
 const TUTOR_CATEGORY_MENU = [
-  "📚 *Select your teaching category:*",
+  "📚 *Select your main teaching category:*",
   "",
   "1️⃣ Maths",
   "2️⃣ Sciences",
@@ -92,7 +46,7 @@ const TUTOR_CATEGORY_MENU = [
 ].join("\n");
 
 const TUTOR_LEVEL_MENU = [
-  "🎓 *Select level(s):*",
+  "🎓 *Which level do you teach?*",
   "",
   "1️⃣ Primary",
   "2️⃣ High School",
@@ -117,23 +71,22 @@ router.post("/webhook", async (req, res) => {
 
     if (!From) return sendTwiml(res, "Missing sender");
 
-    const providerId = normalizePhone(From);
+    const phone = normalizePhone(From);
 
-    let user = await User.findOne({ provider: "whatsapp", providerId });
+    let user = await User.findOne({ provider: "whatsapp", providerId: phone });
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
-        providerId,
-        phone: providerId,
+        providerId: phone,
+        phone,
         chatState: "HOME",
         tutorDraft: {},
       });
     }
 
-    // 🔒 HARD SAFETY
     if (!user.tutorDraft) user.tutorDraft = {};
 
-    /* ========== RESET / HOME ========== */
+    /* ===== RESET ===== */
     if (["hi", "menu", "home", "start"].includes(lc)) {
       user.chatState = "HOME";
       user.tutorDraft = {};
@@ -141,22 +94,13 @@ router.post("/webhook", async (req, res) => {
       return sendTwiml(res, HOME_MENU);
     }
 
-    /* ========== HOME MENU ========== */
+    /* ===== HOME ===== */
     if (user.chatState === "HOME") {
-      if (lc === "1") {
-        user.chatState = "SCHOOLS_MENU";
+      if (lc === "3") {
+        user.chatState = "TUTOR_REGISTER_NAME";
+        user.tutorDraft = {};
         await user.save();
-        return sendTwiml(
-          res,
-          [
-            "🏫 *Find Schools*",
-            "",
-            "Reply with:",
-            "1️⃣ Harare · Cambridge · Advanced",
-            "2️⃣ Harare · Boarding · Primary",
-            "3️⃣ Harare · Swimming Schools",
-          ].join("\n")
-        );
+        return sendTwiml(res, "📝 *Tutor Registration*\n\nWhat is your full name?");
       }
 
       if (lc === "2") {
@@ -167,7 +111,6 @@ router.post("/webhook", async (req, res) => {
           [
             "👩‍🏫 *Find a Tutor*",
             "",
-            "Choose subject:",
             "1️⃣ Maths",
             "2️⃣ Sciences",
             "3️⃣ Languages",
@@ -178,140 +121,99 @@ router.post("/webhook", async (req, res) => {
         );
       }
 
-      if (lc === "3") {
-        user.chatState = "TUTOR_REGISTER_NAME";
-        user.tutorDraft = {};
-        await user.save();
-        return sendTwiml(res, "📝 *Tutor Registration*\n\nWhat is your full name?");
-      }
-
-      return sendTwiml(res, "Please reply with 1, 2 or 3.");
+      return sendTwiml(res, HOME_MENU);
     }
 
-    /* ========== SCHOOL SEARCH (WORKING LOGIC KEPT) ========== */
-    if (user.chatState === "SCHOOLS_MENU") {
-      let command = lc;
-      if (lc === "1") command = "find harare cambridge advanced";
-      if (lc === "2") command = "find harare boarding primary";
-      if (lc === "3") command = "find harare swimming";
-
-      const words = command.split(/\s+/);
-      if (words[0] !== "find") return sendTwiml(res, "Invalid option.");
-
-      const city = words[1] || "harare";
-      const filters = parseFiltersFromWords(words.slice(2));
-
-      const site = process.env.SITE_URL.replace(/\/$/, "");
-      const resp = await axios.post(`${site}/api/recommend`, {
-        city: city.charAt(0).toUpperCase() + city.slice(1),
-        ...filters,
-      });
-
-      const recs = resp.data?.recommendations || [];
-      if (!recs.length) return sendTwiml(res, "No schools found.");
-
-      const twiml = new MessagingResponse();
-      let pinned = false;
-
-      for (const r of recs.slice(0, 5)) {
-        twiml.message(`🏫 ${r.name}\n${r.website || ""}`);
-        if (/st[\s-]*eurit/i.test(r.name)) pinned = true;
-      }
-
-      if (pinned) {
-        const msg = twiml.message(
-          "⭐ *Pinned School: St Eurit International School*\n👉 https://skoolfinder.net/register/st-eurit-international-school"
-        );
-        msg.media(`${site}/docs/st-eurit.jpg`);
-        msg.media(`${site}/docs/st-eurit-registration.pdf`);
-      }
-
-      user.chatState = "HOME";
-      await user.save();
-
-      res.set("Content-Type", "text/xml");
-      return res.send(twiml.toString());
-    }
-
-    /* ========== TUTOR SEARCH ========== */
-    if (user.chatState === "TUTOR_SEARCH") {
-      const map = {
-        "1": "Maths",
-        "2": "Science",
-        "3": "Language",
-        "4": "Commercial",
-        "5": "ICT",
-        "6": "Exam",
-      };
-
-      const key = map[lc];
-      if (!key) return sendTwiml(res, "Choose a valid option.");
-
-      const tutors = await Tutor.find({
-        subjects: { $regex: key, $options: "i" },
-      }).limit(5);
-
-      if (!tutors.length) return sendTwiml(res, "No tutors found.");
-
-      user.chatState = "HOME";
-      await user.save();
-
-      return sendTwiml(
-        res,
-        tutors.map(t => `👤 ${t.name}\n📞 ${t.phone}\n📍 ${t.city}`).join("\n\n")
-      );
-    }
-
-    /* ========== TUTOR REGISTRATION (SMART FORM) ========== */
+    /* ===== TUTOR REGISTRATION FLOW ===== */
 
     if (user.chatState === "TUTOR_REGISTER_NAME") {
-      user.tutorDraft.name = Body;
+      user.tutorDraft = {
+        ...user.tutorDraft,
+        name: Body,
+        phone,
+      };
       user.chatState = "TUTOR_REGISTER_CATEGORY";
       await user.save();
       return sendTwiml(res, TUTOR_CATEGORY_MENU);
     }
 
     if (user.chatState === "TUTOR_REGISTER_CATEGORY") {
-      const cats = {
+      const map = {
         "1": "Maths",
         "2": "Sciences",
         "3": "Languages",
         "4": "Commercial Subjects",
         "5": "ICT",
-        "6": "Exam Prep",
+        "6": "Exam Preparation",
       };
-      user.tutorDraft.subjects = [cats[lc]];
+
+      if (!map[lc]) return sendTwiml(res, "Please choose a valid option.");
+
+      user.tutorDraft = {
+        ...user.tutorDraft,
+        subjects: [map[lc]],
+      };
+
       user.chatState = "TUTOR_REGISTER_LEVEL";
       await user.save();
       return sendTwiml(res, TUTOR_LEVEL_MENU);
     }
 
     if (user.chatState === "TUTOR_REGISTER_LEVEL") {
-      user.tutorDraft.levels =
-        lc === "3" ? ["Primary", "High School"] : [lc === "1" ? "Primary" : "High School"];
+      const levels =
+        lc === "1" ? ["Primary"] :
+        lc === "2" ? ["High School"] :
+        lc === "3" ? ["Primary", "High School"] :
+        null;
+
+      if (!levels) return sendTwiml(res, "Please choose a valid option.");
+
+      user.tutorDraft = {
+        ...user.tutorDraft,
+        levels,
+      };
+
       user.chatState = "TUTOR_REGISTER_MODE";
       await user.save();
       return sendTwiml(res, TUTOR_MODE_MENU);
     }
 
     if (user.chatState === "TUTOR_REGISTER_MODE") {
-      user.tutorDraft.mode = lc === "1" ? "in-person" : lc === "2" ? "online" : "both";
+      const mode =
+        lc === "1" ? "in-person" :
+        lc === "2" ? "online" :
+        lc === "3" ? "both" :
+        null;
+
+      if (!mode) return sendTwiml(res, "Please choose a valid option.");
+
+      user.tutorDraft = {
+        ...user.tutorDraft,
+        mode,
+      };
+
       user.chatState = "TUTOR_REGISTER_CITY";
       await user.save();
       return sendTwiml(res, "📍 Which city are you based in?");
     }
 
     if (user.chatState === "TUTOR_REGISTER_CITY") {
-      user.tutorDraft.city = Body;
-      user.tutorDraft.phone = providerId;
+      const tutorData = {
+        ...user.tutorDraft,
+        city: Body,
+        verified: false,
+      };
 
-      await Tutor.create(user.tutorDraft);
+      await Tutor.create(tutorData);
 
       user.chatState = "HOME";
       user.tutorDraft = {};
       await user.save();
 
-      return sendTwiml(res, "✅ *Tutor registration complete!*");
+      return sendTwiml(
+        res,
+        "✅ *Registration complete!*\nYour tutor profile has been saved and is pending verification."
+      );
     }
 
     return sendTwiml(res, "Type *hi* to start.");

@@ -9,6 +9,7 @@ const TutorSchema = new mongoose.Schema(
     levels: [String],
     mode: { type: String }, // in-person | online | both
     city: String,
+     bio: { type: String, default: "" }, // ✅ NEW
     experience: String,
     verified: { type: Boolean, default: false },
   },

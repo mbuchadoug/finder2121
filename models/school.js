@@ -38,9 +38,7 @@ const FacilitiesSchema = new mongoose.Schema(
     transportBuses: { type: Boolean, default: false },
 
     // Campus & Safety
-    wifiCampus: { type: Boolean, default: false },
-    cctvSecurity: { type: Boolean, default: false },
-    powerBackup: { type: Boolean, default: false },
+  
   },
   { _id: false }
 );

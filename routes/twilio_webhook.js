@@ -44,6 +44,7 @@ function parseSchoolFilters(words) {
 
     if (w === "cambridge") add(f.curriculum, "Cambridge");
     if (w === "zimsec") add(f.curriculum, "Zimsec");
+    if (w === "ib") add(f.curriculum, "IB");
 
     if (w === "boarding") add(f.type2, "Boarding");
     if (w === "day") add(f.type2, "Day");
@@ -51,13 +52,28 @@ function parseSchoolFilters(words) {
     if (w === "primary") add(f.schoolPhase, "Primary School");
     if (w === "high") add(f.schoolPhase, "High School");
 
-    if (w === "swimming") add(f.facilities, "swimmingPool");
-    if (w === "computer") add(f.facilities, "computerLab");
     if (w === "science") add(f.facilities, "scienceLabs");
+    if (w === "computer") add(f.facilities, "computerLab");
+    if (w === "library") add(f.facilities, "library");
+    if (w === "steam") add(f.facilities, "makerSpaceSteamLab");
+    if (w === "swimming") add(f.facilities, "swimmingPool");
+    if (w === "rugby") add(f.facilities, "rugbyField");
+    if (w === "hockey") add(f.facilities, "hockeyField");
+    if (w === "football") add(f.facilities, "footballPitch");
+    if (w === "tennis") add(f.facilities, "tennisCourts");
+    if (w === "basketball") add(f.facilities, "basketballCourt");
+    if (w === "sen") add(f.facilities, "learningSupportSEN");
+    if (w === "clinic") add(f.facilities, "schoolClinicNurse");
+    if (w === "aftercare") add(f.facilities, "aftercare");
+    if (w === "transport") add(f.facilities, "transportBuses");
 
     if (w === "advanced") f.learningEnvironment = "Advanced";
+    if (w === "enhanced") f.learningEnvironment = "Enhanced";
+    if (w === "comprehensive") f.learningEnvironment = "Comprehensive";
+
     if (w === "boys") f.gender = "Boys";
     if (w === "girls") f.gender = "Girls";
+    if (w === "mixed") f.gender = "Mixed";
   }
 
   return f;
@@ -122,9 +138,16 @@ router.post("/webhook", async (req, res) => {
 `🏫 *Find Schools*
 Reply with a number:
 
-1️⃣ Harare · Cambridge
-2️⃣ Harare · Boarding · Primary
-3️⃣ Harare · Swimming
+1️⃣ Cambridge · Advanced · Science & ICT
+2️⃣ Boarding · Primary · Swimming
+3️⃣ Sports Focused · Boarding
+4️⃣ Comprehensive · Family Schools
+5️⃣ Girls · Cambridge · Advanced
+6️⃣ Boys · Boarding · Rugby
+7️⃣ SEN Support · Primary · Day
+8️⃣ IB · Enhanced · High School
+9️⃣ Day · Comprehensive
+🔟 STEM / Robotics · Primary
 
 0️⃣ Back to menu`
         );
@@ -171,7 +194,7 @@ Reply with a number:
       return send(res, "Reply with 1, 2, 3 or 4.");
     }
 
-    /* ========== SCHOOL SEARCH (NUMERIC – OLD BEHAVIOUR) ========== */
+    /* ========== SCHOOL SEARCH (PATCHED ONLY) ========== */
     if (user.chatState === "SCHOOL_SEARCH") {
 
       if (lc === "0") {
@@ -180,14 +203,21 @@ Reply with a number:
         return send(res, "Back to menu.\n\nType *hi*");
       }
 
-      let command = null;
-      if (lc === "1") command = "find harare cambridge";
-      if (lc === "2") command = "find harare boarding primary";
-      if (lc === "3") command = "find harare swimming";
+      const MAP = {
+        "1": "find harare cambridge advanced science computer library",
+        "2": "find harare boarding primary swimming cafeteria",
+        "3": "find harare boarding rugby hockey football athletics",
+        "4": "find harare comprehensive mixed aftercare transport",
+        "5": "find harare girls cambridge advanced science library",
+        "6": "find harare boys boarding rugby football cricket",
+        "7": "find harare primary day sen counseling clinic",
+        "8": "find harare high ib enhanced science library",
+        "9": "find harare day comprehensive transport cafeteria",
+        "10": "find harare primary cambridge advanced steam computer science",
+      };
 
-      if (!command) {
-        return send(res, "Choose 1, 2, 3 or 0.");
-      }
+      const command = MAP[lc];
+      if (!command) return send(res, "Choose 1–10 or 0.");
 
       const parts = command.split(/\s+/);
       const city = parts[1];
@@ -200,24 +230,31 @@ Reply with a number:
       });
 
       const schools = resp.data?.recommendations || [];
+      const twiml = new MessagingResponse();
+      let pinned = false;
 
-      user.chatState = "HOME";
-      await user.save();
-
-      if (!schools.length) {
-        return send(res, "No schools found.");
+      for (const s of schools.slice(0, 5)) {
+        twiml.message(`🏫 ${s.name}\n${s.website || ""}`);
+        if (/st[\s-]*eurit/i.test(s.name)) pinned = true;
       }
 
-      return send(
-        res,
-        schools
-          .slice(0, 5)
-          .map(s => `🏫 ${s.name}\n${s.website || ""}`)
-          .join("\n\n")
-      );
+      if (pinned) {
+        const m = twiml.message(
+`⭐ *Pinned School: St Eurit International School*
+👉 https://skoolfinder.net/register/st-eurit-international-school`
+        );
+        m.media(`${site}/docs/st-eurit.jpg`);
+        m.media(`${site}/docs/st-eurit-registration.pdf`);
+        m.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
+      }
+
+      twiml.message("\n0️⃣ Back to menu\nType *hi*");
+
+      res.set("Content-Type", "text/xml");
+      return res.send(twiml.toString());
     }
 
-    /* ========== TUTOR SEARCH (NUMERIC) ========== */
+    /* ========== TUTOR SEARCH (UNCHANGED) ========== */
     if (user.chatState === "TUTOR_SEARCH") {
 
       if (lc === "0") {
@@ -252,7 +289,7 @@ Reply with a number:
       );
     }
 
-    /* ========== TUTOR REGISTRATION FLOW ========== */
+    /* ========== TUTOR REGISTRATION & BIO (UNCHANGED) ========== */
 
     const d = user.tutorDraft || {};
 
@@ -347,17 +384,13 @@ Reply with a number:
       );
     }
 
-    /* ========== TUTOR BIO UPDATE ========== */
     if (user.chatState === "TUTOR_BIO") {
       await Tutor.updateOne({ phone }, { bio: body });
 
       user.chatState = "HOME";
       await user.save();
 
-      return send(
-        res,
-"✅ Bio updated successfully.\n\nType *hi*"
-      );
+      return send(res, "✅ Bio updated successfully.\n\nType *hi*");
     }
 
     return send(res, "Type *hi* to start.");

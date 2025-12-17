@@ -396,7 +396,7 @@ To activate your tutor profile:
 2️⃣ Select *Send Money*
 3️⃣ Enter number: 0771446827
 4️⃣ Amount: 2
-5️⃣ Reference: Your name
+5️⃣ Reference: C. Musasa
 
 After payment, reply:
 1️⃣ I have paid

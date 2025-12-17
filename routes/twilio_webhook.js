@@ -22,44 +22,27 @@ function normalizePhone(p) {
   return String(p || "").replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
-/* ================= CONSTANT MENUS ================= */
+/* ================= CONSTANTS ================= */
 
-const HOME_MENU = [
-  "👋 *Welcome to ZimEduFinder*",
-  "",
-  "What would you like to do?",
-  "",
-  "1️⃣ Find Schools",
-  "2️⃣ Find Private Tutors",
-  "3️⃣ I am a Tutor (Register)",
-].join("\n");
+const SUBJECT_CATEGORIES = {
+  "1": { name: "Mathematics", subjects: ["Mathematics"] },
+  "2": { name: "Sciences", subjects: ["Physics", "Chemistry", "Biology"] },
+  "3": { name: "Commercials", subjects: ["Accounting", "Business Studies", "Economics"] },
+  "4": { name: "Languages", subjects: ["English", "Shona", "Ndebele"] },
+  "5": { name: "ICT", subjects: ["Computer Science", "ICT"] },
+};
 
-const TUTOR_CATEGORY_MENU = [
-  "📚 *Select your main teaching category:*",
-  "",
-  "1️⃣ Maths",
-  "2️⃣ Sciences",
-  "3️⃣ Languages",
-  "4️⃣ Commercial Subjects",
-  "5️⃣ ICT / Computer Studies",
-  "6️⃣ Exam Preparation",
-].join("\n");
+const LEVELS = {
+  "1": "Primary",
+  "2": "High School",
+  "3": "A Level",
+};
 
-const TUTOR_LEVEL_MENU = [
-  "🎓 *Which level do you teach?*",
-  "",
-  "1️⃣ Primary",
-  "2️⃣ High School",
-  "3️⃣ Both",
-].join("\n");
-
-const TUTOR_MODE_MENU = [
-  "🏫 *Teaching mode:*",
-  "",
-  "1️⃣ In-person",
-  "2️⃣ Online",
-  "3️⃣ Both",
-].join("\n");
+const MODES = {
+  "1": "in-person",
+  "2": "online",
+  "3": "both",
+};
 
 /* ================= MAIN WEBHOOK ================= */
 
@@ -71,140 +54,134 @@ router.post("/webhook", async (req, res) => {
 
     if (!From) return sendTwiml(res, "Missing sender");
 
-    const phone = normalizePhone(From);
+    const providerId = normalizePhone(From);
 
-    let user = await User.findOne({ provider: "whatsapp", providerId: phone });
+    let user = await User.findOne({ provider: "whatsapp", providerId });
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
-        providerId: phone,
-        phone,
+        providerId,
+        phone: providerId,
         chatState: "HOME",
         tutorDraft: {},
       });
     }
 
-    if (!user.tutorDraft) user.tutorDraft = {};
-
-    /* ===== RESET ===== */
+    /* ========== GLOBAL RESET ========== */
     if (["hi", "menu", "home", "start"].includes(lc)) {
       user.chatState = "HOME";
       user.tutorDraft = {};
       await user.save();
-      return sendTwiml(res, HOME_MENU);
+
+      return sendTwiml(
+        res,
+        [
+          "👋 *Welcome to ZimEduFinder*",
+          "",
+          "What would you like to do?",
+          "",
+          "1️⃣ Find Schools",
+          "2️⃣ Find Private Tutors",
+          "3️⃣ I am a Tutor (Register)",
+        ].join("\n")
+      );
     }
 
-    /* ===== HOME ===== */
+    /* ========== HOME ========== */
     if (user.chatState === "HOME") {
       if (lc === "3") {
-        user.chatState = "TUTOR_REGISTER_NAME";
+        user.chatState = "TUTOR_NAME";
         user.tutorDraft = {};
         await user.save();
         return sendTwiml(res, "📝 *Tutor Registration*\n\nWhat is your full name?");
       }
-
-      if (lc === "2") {
-        user.chatState = "TUTOR_SEARCH";
-        await user.save();
-        return sendTwiml(
-          res,
-          [
-            "👩‍🏫 *Find a Tutor*",
-            "",
-            "1️⃣ Maths",
-            "2️⃣ Sciences",
-            "3️⃣ Languages",
-            "4️⃣ Commercial Subjects",
-            "5️⃣ ICT",
-            "6️⃣ Exam Prep",
-          ].join("\n")
-        );
-      }
-
-      return sendTwiml(res, HOME_MENU);
+      return sendTwiml(res, "Please reply with 1, 2 or 3.");
     }
 
-    /* ===== TUTOR REGISTRATION FLOW ===== */
+    /* ========== TUTOR REGISTRATION FLOW ========== */
 
-    if (user.chatState === "TUTOR_REGISTER_NAME") {
-      user.tutorDraft = {
-        ...user.tutorDraft,
-        name: Body,
-        phone,
-      };
-      user.chatState = "TUTOR_REGISTER_CATEGORY";
+    // Always ensure draft exists
+    user.tutorDraft = user.tutorDraft || {};
+
+    if (user.chatState === "TUTOR_NAME") {
+      user.tutorDraft.name = Body;
+      user.chatState = "TUTOR_SUBJECTS";
       await user.save();
-      return sendTwiml(res, TUTOR_CATEGORY_MENU);
+
+      return sendTwiml(
+        res,
+        [
+          "📚 *Subjects you teach* (reply with a number):",
+          "1️⃣ Mathematics",
+          "2️⃣ Sciences",
+          "3️⃣ Commercials (Accounts, Business, Economics)",
+          "4️⃣ Languages",
+          "5️⃣ ICT",
+        ].join("\n")
+      );
     }
 
-    if (user.chatState === "TUTOR_REGISTER_CATEGORY") {
-      const map = {
-        "1": "Maths",
-        "2": "Sciences",
-        "3": "Languages",
-        "4": "Commercial Subjects",
-        "5": "ICT",
-        "6": "Exam Preparation",
-      };
+    if (user.chatState === "TUTOR_SUBJECTS") {
+      const choice = SUBJECT_CATEGORIES[Body];
+      if (!choice) return sendTwiml(res, "Please choose a valid number.");
 
-      if (!map[lc]) return sendTwiml(res, "Please choose a valid option.");
-
-      user.tutorDraft = {
-        ...user.tutorDraft,
-        subjects: [map[lc]],
-      };
-
-      user.chatState = "TUTOR_REGISTER_LEVEL";
+      user.tutorDraft.subjects = choice.subjects;
+      user.chatState = "TUTOR_LEVELS";
       await user.save();
-      return sendTwiml(res, TUTOR_LEVEL_MENU);
+
+      return sendTwiml(
+        res,
+        [
+          "🎓 *Levels you teach*:",
+          "1️⃣ Primary",
+          "2️⃣ High School",
+          "3️⃣ A Level",
+        ].join("\n")
+      );
     }
 
-    if (user.chatState === "TUTOR_REGISTER_LEVEL") {
-      const levels =
-        lc === "1" ? ["Primary"] :
-        lc === "2" ? ["High School"] :
-        lc === "3" ? ["Primary", "High School"] :
-        null;
+    if (user.chatState === "TUTOR_LEVELS") {
+      const level = LEVELS[Body];
+      if (!level) return sendTwiml(res, "Please choose a valid number.");
 
-      if (!levels) return sendTwiml(res, "Please choose a valid option.");
-
-      user.tutorDraft = {
-        ...user.tutorDraft,
-        levels,
-      };
-
-      user.chatState = "TUTOR_REGISTER_MODE";
+      user.tutorDraft.levels = [level];
+      user.chatState = "TUTOR_MODE";
       await user.save();
-      return sendTwiml(res, TUTOR_MODE_MENU);
+
+      return sendTwiml(
+        res,
+        [
+          "🏫 *Teaching mode*:",
+          "1️⃣ In-person",
+          "2️⃣ Online",
+          "3️⃣ Both",
+        ].join("\n")
+      );
     }
 
-    if (user.chatState === "TUTOR_REGISTER_MODE") {
-      const mode =
-        lc === "1" ? "in-person" :
-        lc === "2" ? "online" :
-        lc === "3" ? "both" :
-        null;
+    if (user.chatState === "TUTOR_MODE") {
+      const mode = MODES[Body];
+      if (!mode) return sendTwiml(res, "Please choose a valid number.");
 
-      if (!mode) return sendTwiml(res, "Please choose a valid option.");
-
-      user.tutorDraft = {
-        ...user.tutorDraft,
-        mode,
-      };
-
-      user.chatState = "TUTOR_REGISTER_CITY";
+      user.tutorDraft.mode = mode;
+      user.chatState = "TUTOR_CITY";
       await user.save();
+
       return sendTwiml(res, "📍 Which city are you based in?");
     }
 
-    if (user.chatState === "TUTOR_REGISTER_CITY") {
-      const tutorData = {
-        ...user.tutorDraft,
+    if (user.chatState === "TUTOR_CITY") {
+      const d = user.tutorDraft;
+
+      await Tutor.create({
+        name: d.name,
+        phone: providerId,
+        subjects: d.subjects,
+        levels: d.levels,
+        mode: d.mode,
         city: Body,
         verified: false,
-      };
-
-      await Tutor.create(tutorData);
+      });
 
       user.chatState = "HOME";
       user.tutorDraft = {};

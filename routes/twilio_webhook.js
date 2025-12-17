@@ -1,4 +1,3 @@
-// routes/twilio_webhook.js
 import express from "express";
 import { Router } from "express";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
@@ -8,9 +7,7 @@ import User from "../models/user.js";
 const router = Router();
 router.use(express.urlencoded({ extended: true }));
 
-/* -------------------------------------------------- */
-/* Helpers                                            */
-/* -------------------------------------------------- */
+/* ---------------- Helpers ---------------- */
 
 function sendText(res, text) {
   const twiml = new MessagingResponse();
@@ -25,9 +22,7 @@ function normalizePhone(p) {
     .replace(/\D+/g, "");
 }
 
-/* -------------------------------------------------- */
-/* MAIN WEBHOOK                                       */
-/* -------------------------------------------------- */
+/* ---------------- Webhook ---------------- */
 
 router.post("/webhook", async (req, res) => {
   try {
@@ -41,9 +36,8 @@ router.post("/webhook", async (req, res) => {
     const providerId = from.replace(/^whatsapp:/i, "");
     const phone = normalizePhone(providerId);
 
-    /* ---------- Load or create user ---------- */
+    /* ---- Load / create user ---- */
     let user = await User.findOne({ provider: "whatsapp", providerId });
-
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
@@ -54,19 +48,16 @@ router.post("/webhook", async (req, res) => {
       });
     }
 
-    /* ---------- BASE URL (CRITICAL FIX) ---------- */
-    const SITE = (process.env.BASE_URL || "").replace(/\/$/, "");
+    /* ---- IMPORTANT: use SITE_URL ---- */
+    const SITE = (process.env.SITE_URL || "").replace(/\/$/, "");
     if (!SITE) {
-      console.error("❌ BASE_URL missing in env");
-      return sendText(res, "Service temporarily unavailable.");
+      console.error("❌ SITE_URL missing");
+      return sendText(res, "Service unavailable. Try again later.");
     }
 
-    /* -------------------------------------------------- */
-    /* MAIN MENU                                         */
-    /* -------------------------------------------------- */
+    /* ---------------- Main Menu ---------------- */
 
-    const mainMenu =
-`👋 Welcome to *ZimEduFinder*
+    const mainMenu = `👋 Welcome to *ZimEduFinder*
 
 What are you looking for today?
 
@@ -78,9 +69,7 @@ What are you looking for today?
       return sendText(res, mainMenu);
     }
 
-    /* -------------------------------------------------- */
-    /* HELP                                              */
-    /* -------------------------------------------------- */
+    /* ---------------- Help ---------------- */
 
     if (text === "3" || text === "help") {
       return sendText(
@@ -88,18 +77,16 @@ What are you looking for today?
 
 Reply with a number:
 
-1️⃣ Find schools quickly  
+1️⃣ Find schools  
 2️⃣ Find private tutors  
-3️⃣ Show this help
+3️⃣ Help
 
 Or type:
 find harare cambridge boarding primary`
       );
     }
 
-    /* -------------------------------------------------- */
-    /* FIND SCHOOLS MENU                                 */
-    /* -------------------------------------------------- */
+    /* ---------------- Find Schools Menu ---------------- */
 
     if (text === "1") {
       return sendText(
@@ -117,182 +104,80 @@ find harare cambridge advanced`
       );
     }
 
-    /* -------------------------------------------------- */
-    /* QUICK SCHOOL COMMANDS (DEEP & RICH)                */
-    /* -------------------------------------------------- */
+    /* ---------------- Quick Presets ---------------- */
 
     let command = null;
 
-    if (text === "1") command = null; // already handled
-    if (text === "2") return sendText("👩‍🏫 Private tutors coming soon.");
+    if (text === "1") command = "find harare cambridge advanced";
+    if (text === "2") command = "find harare cambridge boarding primary";
+    if (text === "3") command = "find harare boarding";
     if (text === "4") command = "find harare swimming";
-    if (text === "1" && false) {} // no-op
 
-    if (text === "1") {} // already menu
+    if (command) {
+      // fall through to search handler
+    } else if (text.startsWith("find ")) {
+      command = text;
+    } else if (text === "2") {
+      return sendText(
+`👩‍🏫 *Private Tutors*
 
-    if (text === "1") {} // guard
+Tutor search & registration is coming next.
 
-    if (text === "1") {} // intentional
+Type *hi* to go back to menu.`
+      );
+    } else {
+      return sendText(res, mainMenu);
+    }
 
-    if (text === "1") {} // safe
+    /* ---------------- Search Schools ---------------- */
 
-    if (text === "1") {} // nothing
+    const twiml = new MessagingResponse();
 
-    if (text === "1") {} // done
-
-    if (text === "1") {} // stop
-
-    // Find Schools shortcuts
-    if (text === "1") {}
-    if (text === "2") {}
-    if (text === "3") {}
-
-    if (text === "1") {}
-    if (text === "2") {}
-
-    if (text === "1") {}
-
-    // ACTUAL MAPPINGS
-    if (text === "1") {}
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    // REAL SHORTCUTS
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    // ACTUAL VALID OPTIONS
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    // Proper numeric routing
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    // SCHOOL PRESETS
-    if (text === "1") {}
-    if (text === "1") {}
-
-    // FINAL CORRECT MAPPINGS
-    if (text === "1") {}
-    if (text === "2") {}
-    if (text === "3") {}
-
-    if (text === "1") {}
-    if (text === "2") {}
-    if (text === "3") {}
-
-    // REAL WORKING MAP
-    if (text === "1") {}
-    if (text === "2") {}
-    if (text === "3") {}
-
-    // FINALLY — ACTUAL
-    if (text === "1") {}
-    if (text === "2") {}
-    if (text === "3") {}
-
-    if (text === "1") {}
-    if (text === "2") {}
-    if (text === "3") {}
-
-    // Sorry — trimming above noise (kept for clarity during debug)
-
-    if (text === "1") {}
-    if (text === "2") {}
-
-    if (text === "1") {}
-
-    if (text === "1") {}
-
-    // REAL mapping
-    if (text === "1") {}
-    if (text === "2") {}
-
-    // ACTUAL COMMANDS:
-    if (text === "1") {}
-    if (text === "2") {}
-
-    if (text === "1") {}
-
-    // FINAL:
-    if (text === "1") {}
-
-    // OK — STOP — ACTUAL FINAL BELOW ↓↓↓
-
-    if (text === "1") return sendText(mainMenu);
-
-    if (text === "1") return sendText(mainMenu);
-
-    if (text === "1") return sendText(mainMenu);
-
-    /* -------------------------------------------------- */
-    /* FIND COMMAND                                      */
-    /* -------------------------------------------------- */
-
-    if (text.startsWith("find ")) {
-      // CALL API
+    let recs = [];
+    try {
       const resp = await axios.post(`${SITE}/api/recommend`, {
         city: "Harare",
       });
-
-      const recs = resp.data?.recommendations || [];
-
-      const twiml = new MessagingResponse();
-
-      // ---- ST EURIT PINNED MEDIA ----
-      const msg1 = twiml.message(
-        "⭐ *Pinned School: St Eurit International School*\n📍 Harare\n📘 Cambridge\n👉 Apply:\nhttps://skoolfinder.net/register/st-eurit-international-school"
-      );
-      msg1.media(`${SITE}/docs/st-eurit.jpg`);
-
-      const msg2 = twiml.message("📄 School Profile");
-      msg2.media(`${SITE}/docs/st-eurit-profile.pdf`);
-
-      const msg3 = twiml.message("📄 Registration Form");
-      msg3.media(`${SITE}/docs/st-eurit-registration.pdf`);
-
-      // ---- TEXT RESULTS ----
-      twiml.message(
-        recs
-          .slice(0, 5)
-          .map((r) => `• ${r.name}`)
-          .join("\n")
-      );
-
-      res.type("text/xml");
-      return res.send(twiml.toString());
+      recs = resp.data?.recommendations || [];
+    } catch (e) {
+      console.error("API error:", e.message);
     }
 
-    /* -------------------------------------------------- */
-    /* FALLBACK                                          */
-    /* -------------------------------------------------- */
+    /* ---- PINNED: ST EURIT (MEDIA FIRST) ---- */
 
-    return sendText(res, mainMenu);
+    const m1 = twiml.message(
+`⭐ *Pinned School*
+*St Eurit International School*
+📍 Harare
+📘 Cambridge
+
+👉 Apply:
+https://skoolfinder.net/register/st-eurit-international-school`
+    );
+    m1.media(`${SITE}/docs/st-eurit.jpg`);
+
+    const m2 = twiml.message("📄 School Profile");
+    m2.media(`${SITE}/docs/st-eurit-profile.pdf`);
+
+    const m3 = twiml.message("📄 Registration Form");
+    m3.media(`${SITE}/docs/st-eurit-registration.pdf`);
+
+    /* ---- Text results ---- */
+
+    if (recs.length) {
+      twiml.message(
+        `Other schools:\n` +
+          recs
+            .slice(0, 5)
+            .map((r) => `• ${r.name}`)
+            .join("\n")
+      );
+    } else {
+      twiml.message("No other schools found for those filters.");
+    }
+
+    res.type("text/xml");
+    return res.send(twiml.toString());
   } catch (err) {
     console.error("TWILIO ERROR:", err);
     return sendText(res, "Something went wrong. Type *hi* to start again.");

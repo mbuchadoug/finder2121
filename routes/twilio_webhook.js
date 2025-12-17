@@ -1,186 +1,178 @@
 import express from "express";
 import { Router } from "express";
-import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import axios from "axios";
+import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import User from "../models/user.js";
 
 const router = Router();
 router.use(express.urlencoded({ extended: true }));
 
-/* ---------------- Helpers ---------------- */
+/* ------------------ helpers ------------------ */
+
+function sendTwiml(res, twiml) {
+  res.set("Content-Type", "text/xml");
+  return res.send(twiml.toString());
+}
 
 function sendText(res, text) {
   const twiml = new MessagingResponse();
   twiml.message(text);
-  res.type("text/xml");
-  return res.send(twiml.toString());
+  return sendTwiml(res, twiml);
 }
 
-function normalizePhone(p) {
-  return String(p || "")
-    .replace(/^whatsapp:/i, "")
-    .replace(/\D+/g, "");
-}
-
-/* ---------------- Webhook ---------------- */
+/* ------------------ main webhook ------------------ */
 
 router.post("/webhook", async (req, res) => {
   try {
-    const bodyRaw = String(req.body.Body || "").trim();
-    const text = bodyRaw.toLowerCase();
     const from = String(req.body.From || "");
+    const body = String(req.body.Body || "").trim().toLowerCase();
     const profileName = String(req.body.ProfileName || "");
 
-    if (!from) return sendText(res, "Missing sender info.");
+    if (!from) return sendText(res, "Missing sender info");
 
-    const providerId = from.replace(/^whatsapp:/i, "");
-    const phone = normalizePhone(providerId);
+    const phone = from.replace(/^whatsapp:/, "");
 
-    /* ---- Load / create user ---- */
-    let user = await User.findOne({ provider: "whatsapp", providerId });
+    /* ---------- load or create user ---------- */
+    let user = await User.findOne({ provider: "whatsapp", providerId: phone });
+
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
-        providerId,
-        phone,
-        name: profileName || undefined,
-        role: "user",
+        providerId: phone,
+        name: profileName,
+        lastState: "start",
       });
     }
 
-    /* ---- IMPORTANT: use SITE_URL ---- */
-    const SITE = (process.env.SITE_URL || "").replace(/\/$/, "");
-    if (!SITE) {
-      console.error("❌ SITE_URL missing");
-      return sendText(res, "Service unavailable. Try again later.");
-    }
+    /* ---------- START / RESET ---------- */
+    if (body === "hi" || body === "hello" || body === "menu" || !body) {
+      user.lastState = "main_menu";
+      await user.save();
 
-    /* ---------------- Main Menu ---------------- */
-
-    const mainMenu = `👋 Welcome to *ZimEduFinder*
-
-What are you looking for today?
-
-1️⃣ Find Schools  
-2️⃣ Find Private Tutors  
-3️⃣ Help`;
-
-    if (!text || ["hi", "hello", "menu", "start"].includes(text)) {
-      return sendText(res, mainMenu);
-    }
-
-    /* ---------------- Help ---------------- */
-
-    if (text === "3" || text === "help") {
       return sendText(
-`ℹ️ *How to use ZimEduFinder*
-
-Reply with a number:
-
-1️⃣ Find schools  
-2️⃣ Find private tutors  
-3️⃣ Help
-
-Or type:
-find harare cambridge boarding primary`
+        res,
+        [
+          "👋 Welcome to *ZimEduFinder*",
+          "",
+          "What are you looking for today?",
+          "",
+          "1️⃣ Find Schools",
+          "2️⃣ Find Private Tutors",
+          "3️⃣ Help",
+        ].join("\n")
       );
     }
 
-    /* ---------------- Find Schools Menu ---------------- */
+    /* ---------- MAIN MENU ---------- */
+    if (user.lastState === "main_menu") {
+      if (body === "1") {
+        user.lastState = "schools_menu";
+        await user.save();
 
-    if (text === "1") {
-      return sendText(
-`🏫 *Find Schools*
+        return sendText(
+          res,
+          [
+            "🏫 *Find Schools*",
+            "",
+            "Choose an option:",
+            "",
+            "1️⃣ Harare · Cambridge · Advanced",
+            "2️⃣ Harare · Cambridge · Boarding · Primary",
+            "3️⃣ Harare · Boarding · Any curriculum",
+            "4️⃣ Harare · Swimming pool · Family schools",
+          ].join("\n")
+        );
+      }
 
-Choose an option:
+      if (body === "2") {
+        user.lastState = "tutors_info";
+        await user.save();
 
-1️⃣ Harare · Cambridge · Advanced  
-2️⃣ Harare · Cambridge · Boarding · Primary  
-3️⃣ Harare · Boarding · Any curriculum  
-4️⃣ Harare · Swimming pool · Family schools
+        return sendText(
+          res,
+          [
+            "👩‍🏫 *Private Tutors*",
+            "",
+            "Tutors can register via WhatsApp.",
+            "Parents will soon be able to search by:",
+            "- Subject",
+            "- Grade",
+            "- Location",
+            "",
+            "Reply *hi* to go back.",
+          ].join("\n")
+        );
+      }
 
-Or type:
-find harare cambridge advanced`
-      );
+      if (body === "3") {
+        return sendText(res, "Type *hi* to start again.");
+      }
+
+      return sendText(res, "Invalid option. Reply *hi* to restart.");
     }
 
-    /* ---------------- Quick Presets ---------------- */
+    /* ---------- SCHOOLS MENU ---------- */
+    if (user.lastState === "schools_menu") {
+      let command = null;
 
-    let command = null;
+      if (body === "1") command = "find harare cambridge advanced";
+      if (body === "2") command = "find harare cambridge boarding primary";
+      if (body === "3") command = "find harare boarding";
+      if (body === "4") command = "find harare swimming";
 
-    if (text === "1") command = "find harare cambridge advanced";
-    if (text === "2") command = "find harare cambridge boarding primary";
-    if (text === "3") command = "find harare boarding";
-    if (text === "4") command = "find harare swimming";
+      if (!command) return sendText(res, "Reply *hi* to restart.");
 
-    if (command) {
-      // fall through to search handler
-    } else if (text.startsWith("find ")) {
-      command = text;
-    } else if (text === "2") {
-      return sendText(
-`👩‍🏫 *Private Tutors*
+      user.lastState = "searching";
+      await user.save();
 
-Tutor search & registration is coming next.
-
-Type *hi* to go back to menu.`
-      );
-    } else {
-      return sendText(res, mainMenu);
-    }
-
-    /* ---------------- Search Schools ---------------- */
-
-    const twiml = new MessagingResponse();
-
-    let recs = [];
-    try {
-      const resp = await axios.post(`${SITE}/api/recommend`, {
-        city: "Harare",
+      /* ---------- call your existing API ---------- */
+      const site = process.env.SITE_URL;
+      const resp = await axios.post(`${site}/api/recommend`, {
+        query: command,
       });
-      recs = resp.data?.recommendations || [];
-    } catch (e) {
-      console.error("API error:", e.message);
-    }
 
-    /* ---- PINNED: ST EURIT (MEDIA FIRST) ---- */
+      const recs = resp.data?.recommendations || [];
 
-    const m1 = twiml.message(
-`⭐ *Pinned School*
-*St Eurit International School*
-📍 Harare
-📘 Cambridge
+      const twiml = new MessagingResponse();
 
-👉 Apply:
-https://skoolfinder.net/register/st-eurit-international-school`
-    );
-    m1.media(`${SITE}/docs/st-eurit.jpg`);
+      let hasStEurit = false;
 
-    const m2 = twiml.message("📄 School Profile");
-    m2.media(`${SITE}/docs/st-eurit-profile.pdf`);
+      for (const r of recs.slice(0, 5)) {
+        if (/st[\s-]*eurit/i.test(r.name)) {
+          hasStEurit = true;
+        }
+      }
 
-    const m3 = twiml.message("📄 Registration Form");
-    m3.media(`${SITE}/docs/st-eurit-registration.pdf`);
+      /* ---------- MEDIA (UNCHANGED, WORKING) ---------- */
+      if (hasStEurit) {
+        const base = site;
 
-    /* ---- Text results ---- */
+        const m1 = twiml.message(
+          "⭐ *Pinned school: St Eurit International School*\nApply here:"
+        );
+        m1.media(`${base}/docs/st-eurit.jpg`);
 
-    if (recs.length) {
-      twiml.message(
-        `Other schools:\n` +
-          recs
-            .slice(0, 5)
-            .map((r) => `• ${r.name}`)
-            .join("\n")
+        const m2 = twiml.message("School profile (PDF)");
+        m2.media(`${base}/docs/st-eurit-profile.pdf`);
+
+        const m3 = twiml.message("Registration form (PDF)");
+        m3.media(`${base}/docs/st-eurit-registration.pdf`);
+      }
+
+      const lines = recs.slice(0, 5).map(
+        (r) => `• ${r.name} | ${r.city || "harare"}`
       );
-    } else {
-      twiml.message("No other schools found for those filters.");
+
+      twiml.message(lines.join("\n"));
+
+      return sendTwiml(res, twiml);
     }
 
-    res.type("text/xml");
-    return res.send(twiml.toString());
+    /* ---------- FALLBACK ---------- */
+    return sendText(res, "Something went wrong. Type *hi* to restart.");
   } catch (err) {
     console.error("TWILIO ERROR:", err);
-    return sendText(res, "Something went wrong. Type *hi* to start again.");
+    return sendText(res, "Error occurred. Type *hi* to restart.");
   }
 });
 

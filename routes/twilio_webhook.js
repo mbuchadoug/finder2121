@@ -1,3 +1,4 @@
+// routes/twilio_webhook.js
 import express from "express";
 import { Router } from "express";
 import axios from "axios";
@@ -7,172 +8,178 @@ import User from "../models/user.js";
 const router = Router();
 router.use(express.urlencoded({ extended: true }));
 
-/* ------------------ helpers ------------------ */
+/* ---------- Helpers ---------- */
 
-function sendTwiml(res, twiml) {
+function sendTwimlText(res, text) {
+  const twiml = new MessagingResponse();
+  twiml.message(text || "");
   res.set("Content-Type", "text/xml");
   return res.send(twiml.toString());
 }
 
-function sendText(res, text) {
-  const twiml = new MessagingResponse();
-  twiml.message(text);
-  return sendTwiml(res, twiml);
+function normalizePhone(p) {
+  if (!p) return "";
+  return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
-/* ------------------ main webhook ------------------ */
+/* ---------- FILTER PARSER (UNCHANGED – WORKING) ---------- */
+
+function parseFiltersFromWords(words) {
+  const filters = {
+    curriculum: [],
+    type2: [],
+    schoolPhase: [],
+    learningEnvironment: "",
+    gender: "",
+    facilities: [],
+  };
+
+  const add = (arr, v) => !arr.includes(v) && arr.push(v);
+
+  for (const raw of words) {
+    const w = raw.toLowerCase();
+
+    if (["cambridge","cam"].includes(w)) add(filters.curriculum,"Cambridge");
+    if (w === "zimsec") add(filters.curriculum,"Zimsec");
+    if (w === "ib") add(filters.curriculum,"IB");
+
+    if (w === "boarding") add(filters.type2,"Boarding");
+    if (w === "day") add(filters.type2,"Day");
+
+    if (["pre","preschool"].includes(w)) add(filters.schoolPhase,"Pre-School");
+    if (["primary"].includes(w)) add(filters.schoolPhase,"Primary School");
+    if (["high","secondary"].includes(w)) add(filters.schoolPhase,"High School");
+
+    if (["comprehensive"].includes(w)) filters.learningEnvironment="Comprehensive";
+    if (["enhanced"].includes(w)) filters.learningEnvironment="Enhanced";
+    if (["advanced"].includes(w)) filters.learningEnvironment="Advanced";
+
+    if (w === "boys") filters.gender="Boys";
+    if (w === "girls") filters.gender="Girls";
+    if (w === "mixed") filters.gender="Mixed";
+
+    if (["science","lab","labs"].includes(w)) add(filters.facilities,"scienceLabs");
+    if (["computer","ict"].includes(w)) add(filters.facilities,"computerLab");
+    if (["library"].includes(w)) add(filters.facilities,"library");
+    if (["robotics","steam"].includes(w)) add(filters.facilities,"makerSpaceSteamLab");
+    if (["swimming","pool"].includes(w)) add(filters.facilities,"swimmingPool");
+    if (["rugby"].includes(w)) add(filters.facilities,"rugbyField");
+    if (["football","soccer"].includes(w)) add(filters.facilities,"footballPitch");
+    if (["transport","bus"].includes(w)) add(filters.facilities,"transportBuses");
+    if (["clinic","nurse"].includes(w)) add(filters.facilities,"schoolClinicNurse");
+    if (["aftercare"].includes(w)) add(filters.facilities,"aftercare");
+    if (["sen"].includes(w)) add(filters.facilities,"learningSupportSEN");
+  }
+
+  return filters;
+}
+
+/* ---------- MAIN WEBHOOK ---------- */
 
 router.post("/webhook", async (req, res) => {
   try {
-    const from = String(req.body.From || "");
-    const body = String(req.body.Body || "").trim().toLowerCase();
+    const rawFrom = String(req.body.From || "");
+    const bodyRaw = String(req.body.Body || "").trim();
     const profileName = String(req.body.ProfileName || "");
 
-    if (!from) return sendText(res, "Missing sender info");
+    if (!rawFrom) return sendTwimlText(res, "Missing sender info");
 
-    const phone = from.replace(/^whatsapp:/, "");
+    const providerId = rawFrom.replace(/^whatsapp:/i,"");
+    const phone = normalizePhone(providerId);
 
-    /* ---------- load or create user ---------- */
-    let user = await User.findOne({ provider: "whatsapp", providerId: phone });
-
+    let user = await User.findOne({ provider:"whatsapp", providerId });
     if (!user) {
       user = await User.create({
-        provider: "whatsapp",
-        providerId: phone,
+        provider:"whatsapp",
+        providerId,
+        phone,
         name: profileName,
-        lastState: "start",
+        role:"user",
+        firstSeenAt:new Date(),
+        lastSeenAt:new Date()
       });
     }
 
-    /* ---------- START / RESET ---------- */
-    if (body === "hi" || body === "hello" || body === "menu" || !body) {
-      user.lastState = "main_menu";
-      await user.save();
+    const text = bodyRaw.toLowerCase();
 
-      return sendText(
-        res,
-        [
-          "👋 Welcome to *ZimEduFinder*",
-          "",
-          "What are you looking for today?",
-          "",
-          "1️⃣ Find Schools",
-          "2️⃣ Find Private Tutors",
-          "3️⃣ Help",
-        ].join("\n")
-      );
+    /* ---------- MENU ---------- */
+
+    const menu = [
+      "👋 *Welcome to ZimEduFinder*",
+      "",
+      "Reply with a number or type your own search:",
+      "",
+      "1️⃣ Harare · Cambridge · Advanced · Science & ICT",
+      "2️⃣ Harare · Cambridge · Boarding · Primary · Swimming",
+      "3️⃣ Harare · Boarding · Any curriculum · Sports focused",
+      "4️⃣ Harare · Family schools · Swimming · Aftercare",
+      "5️⃣ Harare · Girls schools · Advanced · Cambridge",
+      "6️⃣ Harare · Boys schools · Rugby · Boarding",
+      "7️⃣ Harare · SEN support · Primary · Day",
+      "8️⃣ Harare · High schools · IB · Enhanced",
+      "9️⃣ Harare · Affordable · Day · Comprehensive",
+      "",
+      "✍️ Or type:",
+      "find harare cambridge advanced swimming"
+    ].join("\n");
+
+    if (!text || ["hi","hello","menu"].includes(text)) {
+      return sendTwimlText(res, menu);
     }
 
-    /* ---------- MAIN MENU ---------- */
-    if (user.lastState === "main_menu") {
-      if (body === "1") {
-        user.lastState = "schools_menu";
-        await user.save();
+    /* ---------- NUMERIC → RICH COMMANDS ---------- */
 
-        return sendText(
-          res,
-          [
-            "🏫 *Find Schools*",
-            "",
-            "Choose an option:",
-            "",
-            "1️⃣ Harare · Cambridge · Advanced",
-            "2️⃣ Harare · Cambridge · Boarding · Primary",
-            "3️⃣ Harare · Boarding · Any curriculum",
-            "4️⃣ Harare · Swimming pool · Family schools",
-          ].join("\n")
-        );
-      }
+    let command = text;
 
-      if (body === "2") {
-        user.lastState = "tutors_info";
-        await user.save();
+    const quickMap = {
+      "1": "find harare cambridge advanced science computer",
+      "2": "find harare cambridge boarding primary swimming",
+      "3": "find harare boarding rugby football",
+      "4": "find harare day swimming aftercare",
+      "5": "find harare cambridge advanced girls",
+      "6": "find harare boarding boys rugby",
+      "7": "find harare primary sen day",
+      "8": "find harare high ib enhanced",
+      "9": "find harare day comprehensive"
+    };
 
-        return sendText(
-          res,
-          [
-            "👩‍🏫 *Private Tutors*",
-            "",
-            "Tutors can register via WhatsApp.",
-            "Parents will soon be able to search by:",
-            "- Subject",
-            "- Grade",
-            "- Location",
-            "",
-            "Reply *hi* to go back.",
-          ].join("\n")
-        );
-      }
-
-      if (body === "3") {
-        return sendText(res, "Type *hi* to start again.");
-      }
-
-      return sendText(res, "Invalid option. Reply *hi* to restart.");
+    if (quickMap[text]) {
+      command = quickMap[text];
     }
 
-    /* ---------- SCHOOLS MENU ---------- */
-    if (user.lastState === "schools_menu") {
-      let command = null;
+    /* ---------- FIND ---------- */
 
-      if (body === "1") command = "find harare cambridge advanced";
-      if (body === "2") command = "find harare cambridge boarding primary";
-      if (body === "3") command = "find harare boarding";
-      if (body === "4") command = "find harare swimming";
+    const words = command.split(" ");
+    if (words[0] === "find") {
+      const city = words[1] || "harare";
+      const parsed = parseFiltersFromWords(words.slice(2));
 
-      if (!command) return sendText(res, "Reply *hi* to restart.");
-
-      user.lastState = "searching";
-      await user.save();
-
-      /* ---------- call your existing API ---------- */
-      const site = process.env.SITE_URL;
-      const resp = await axios.post(`${site}/api/recommend`, {
-        query: command,
+      const site = process.env.SITE_URL.replace(/\/$/,"");
+      const resp = await axios.post(`${site}/api/recommend`,{
+        city: city.charAt(0).toUpperCase()+city.slice(1),
+        ...parsed
       });
 
-      const recs = resp.data?.recommendations || [];
+      const recs = resp.data.recommendations || [];
+      if (!recs.length) {
+        return sendTwimlText(res,"No schools found. Try another option.");
+      }
 
       const twiml = new MessagingResponse();
 
-      let hasStEurit = false;
-
-      for (const r of recs.slice(0, 5)) {
-        if (/st[\s-]*eurit/i.test(r.name)) {
-          hasStEurit = true;
-        }
+      for (const r of recs.slice(0,5)) {
+        twiml.message(`🏫 ${r.name}\n${r.website || ""}`);
       }
 
-      /* ---------- MEDIA (UNCHANGED, WORKING) ---------- */
-      if (hasStEurit) {
-        const base = site;
-
-        const m1 = twiml.message(
-          "⭐ *Pinned school: St Eurit International School*\nApply here:"
-        );
-        m1.media(`${base}/docs/st-eurit.jpg`);
-
-        const m2 = twiml.message("School profile (PDF)");
-        m2.media(`${base}/docs/st-eurit-profile.pdf`);
-
-        const m3 = twiml.message("Registration form (PDF)");
-        m3.media(`${base}/docs/st-eurit-registration.pdf`);
-      }
-
-      const lines = recs.slice(0, 5).map(
-        (r) => `• ${r.name} | ${r.city || "harare"}`
-      );
-
-      twiml.message(lines.join("\n"));
-
-      return sendTwiml(res, twiml);
+      res.set("Content-Type","text/xml");
+      return res.send(twiml.toString());
     }
 
-    /* ---------- FALLBACK ---------- */
-    return sendText(res, "Something went wrong. Type *hi* to restart.");
-  } catch (err) {
-    console.error("TWILIO ERROR:", err);
-    return sendText(res, "Error occurred. Type *hi* to restart.");
+    return sendTwimlText(res, menu);
+
+  } catch (e) {
+    console.error("TWILIO ERROR", e);
+    return sendTwimlText(res,"Something went wrong. Type *hi* to restart.");
   }
 });
 

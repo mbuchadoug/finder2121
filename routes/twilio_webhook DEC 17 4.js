@@ -277,18 +277,16 @@ Reply with a number:
         return send(res, "No tutors available yet.");
       }
 
-     return send(
-  res,
-  tutors.map(t =>
+      return send(
+        res,
+        tutors.map(t =>
 `👤 ${t.name}
 📚 ${t.subjects.join(", ")}
 🎓 ${t.levels.join(", ")}
 📍 ${t.city}
-📞 ${t.phone}
-📝 ${t.bio ? t.bio : "No bio provided yet."}`
-  ).join("\n\n")
-);
-
+📞 ${t.phone}`
+        ).join("\n\n")
+      );
     }
 
     /* ========== TUTOR REGISTRATION & BIO (UNCHANGED) ========== */

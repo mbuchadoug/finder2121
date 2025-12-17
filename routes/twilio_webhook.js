@@ -380,10 +380,29 @@ Reply with a number:
       user.markModified("tutorDraft");
       await user.save();
 
-      return send(
-        res,
-"✅ *Registration complete!*\nYour profile is pending verification.\n\nType *hi*"
-      );
+     user.chatState = "TUTOR_PAYMENT";
+await user.save();
+
+return send(
+  res,
+`💳 *Subscription Required*
+
+To activate your tutor profile:
+• Fee: *$2 USD per month*
+• Payment method: *EcoCash*
+
+📲 Steps:
+1️⃣ Dial *151#
+2️⃣ Select *Send Money*
+3️⃣ Enter number: 0771446827
+4️⃣ Amount: 2
+5️⃣ Reference: Your name
+
+After payment, reply:
+1️⃣ I have paid
+0️⃣ Cancel`
+);
+
     }
 
     if (user.chatState === "TUTOR_BIO") {
@@ -395,7 +414,35 @@ Reply with a number:
       return send(res, "✅ Bio updated successfully.\n\nType *hi*");
     }
 
-    return send(res, "Type *hi* to start.");
+    /* ========== TUTOR PAYMENT ========== */
+if (user.chatState === "TUTOR_PAYMENT") {
+
+  if (lc === "0") {
+    user.chatState = "HOME";
+    await user.save();
+    return send(res, "❌ Payment cancelled.\n\nType *hi*");
+  }
+
+  if (lc === "1") {
+    user.chatState = "HOME";
+    await user.save();
+
+    return send(
+      res,
+`✅ *Payment noted*
+
+Your payment will be verified shortly.
+Once confirmed, your tutor profile will appear in searches.
+
+Type *hi*`
+    );
+  }
+
+  return send(res, "Reply with 1️⃣ I have paid or 0️⃣ Cancel.");
+}
+
+
+//    return send(res, "Type *hi* to start.");
 
   } catch (err) {
     console.error("TWILIO ERROR:", err);

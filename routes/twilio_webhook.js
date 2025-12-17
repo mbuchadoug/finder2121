@@ -20,12 +20,17 @@ function send(res, text) {
 }
 
 function normalizePhone(v) {
-  return String(v || "")
-    .replace(/^whatsapp:/i, "")
-    .replace(/\D+/g, "");
+  return String(v || "").replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
-/* ================= SCHOOL FILTER PARSER ================= */
+function nav() {
+  return `
+
+1️⃣ Back
+2️⃣ Main menu`;
+}
+
+/* ================= SCHOOL FILTER PARSER (UNCHANGED) ================= */
 
 function parseSchoolFilters(words) {
   const f = {
@@ -81,11 +86,7 @@ router.post("/webhook", async (req, res) => {
     const lc = body.toLowerCase();
     const phone = normalizePhone(req.body.From);
 
-    let user = await User.findOne({
-      provider: "whatsapp",
-      providerId: phone,
-    });
-
+    let user = await User.findOne({ provider: "whatsapp", providerId: phone });
     if (!user) {
       user = await User.create({
         provider: "whatsapp",
@@ -95,8 +96,8 @@ router.post("/webhook", async (req, res) => {
       });
     }
 
-    /* ========== GLOBAL RESET ========== */
-    if (["hi", "menu", "start", "home"].includes(lc)) {
+    /* ========== GLOBAL MENU ========== */
+    if (["hi", "menu", "start", "home", "2"].includes(lc)) {
       user.chatState = "HOME";
       user.tutorDraft = {};
       user.markModified("tutorDraft");
@@ -108,11 +109,12 @@ router.post("/webhook", async (req, res) => {
 
 1️⃣ Find Schools
 2️⃣ Find Private Tutors
-3️⃣ I am a Tutor (Register)`
+3️⃣ I am a Tutor (Register)
+4️⃣ Tutor: Add / Update Bio`
       );
     }
 
-    /* ========== HOME MENU ========== */
+    /* ========== HOME ========== */
     if (user.chatState === "HOME") {
       if (lc === "1") {
         user.chatState = "SCHOOL_SEARCH";
@@ -147,18 +149,33 @@ Examples:
         user.tutorDraft = { phone };
         user.markModified("tutorDraft");
         await user.save();
-
         return send(res, "📝 Tutor Registration\n\nWhat is your *full name*?");
       }
 
-      return send(res, "Reply with 1, 2 or 3.");
+      if (lc === "4") {
+        const tutor = await Tutor.findOne({ phone, verified: true });
+        if (!tutor) {
+          return send(res, "❌ Only verified tutors can add a bio.");
+        }
+        user.chatState = "TUTOR_BIO";
+        await user.save();
+        return send(res, "✍️ Write your tutor bio:");
+      }
+
+      return send(res, "Reply with a valid option.");
     }
 
-    /* ========== SCHOOL SEARCH ========== */
+    /* ========== SCHOOL SEARCH (FULLY RESTORED) ========== */
     if (user.chatState === "SCHOOL_SEARCH") {
+      if (lc === "1") {
+        user.chatState = "HOME";
+        await user.save();
+        return send(res, "Back to menu.");
+      }
+
       const parts = lc.split(/\s+/);
       if (parts[0] !== "find") {
-        return send(res, "Use: find harare cambridge primary");
+        return send(res, "Use: find harare cambridge primary" + nav());
       }
 
       const city = parts[1] || "harare";
@@ -176,7 +193,7 @@ Examples:
       await user.save();
 
       if (!schools.length) {
-        return send(res, "No schools found.");
+        return send(res, "No schools found." + nav());
       }
 
       return send(
@@ -184,7 +201,7 @@ Examples:
         schools
           .slice(0, 5)
           .map(s => `🏫 ${s.name}\n${s.website || ""}`)
-          .join("\n\n")
+          .join("\n\n") + nav()
       );
     }
 
@@ -201,7 +218,7 @@ Examples:
       await user.save();
 
       if (!tutors.length) {
-        return send(res, "No tutors available yet.");
+        return send(res, "No tutors available yet." + nav());
       }
 
       return send(
@@ -213,13 +230,22 @@ Examples:
 📚 ${t.subjects.join(", ")}
 🎓 ${t.levels.join(", ")}
 📍 ${t.city}
+📝 ${t.bio || "No bio yet"}
 📞 ${t.phone}`
           )
-          .join("\n\n")
+          .join("\n\n") + nav()
       );
     }
 
-    /* ========== TUTOR REGISTRATION FLOW ========== */
+    /* ========== TUTOR BIO SAVE ========== */
+    if (user.chatState === "TUTOR_BIO") {
+      await Tutor.findOneAndUpdate({ phone }, { bio: body });
+      user.chatState = "HOME";
+      await user.save();
+      return send(res, "✅ Bio saved successfully.");
+    }
+
+    /* ========== REGISTRATION FLOW (UNCHANGED) ========== */
 
     const d = user.tutorDraft || {};
 
@@ -243,7 +269,6 @@ Examples:
 
     if (user.chatState === "TUTOR_SUBJECTS") {
       if (!SUBJECTS[lc]) return send(res, "Choose 1–5.");
-
       d.subjects = SUBJECTS[lc];
       user.tutorDraft = d;
       user.chatState = "TUTOR_LEVELS";
@@ -261,11 +286,9 @@ Examples:
 
     if (user.chatState === "TUTOR_LEVELS") {
       d.levels =
-        lc === "1"
-          ? ["Primary"]
-          : lc === "2"
-          ? ["High School"]
-          : ["Primary", "High School"];
+        lc === "1" ? ["Primary"]
+        : lc === "2" ? ["High School"]
+        : ["Primary", "High School"];
 
       user.tutorDraft = d;
       user.chatState = "TUTOR_MODE";
@@ -309,17 +332,14 @@ Examples:
       user.markModified("tutorDraft");
       await user.save();
 
-      return send(
-        res,
-        "✅ *Registration complete!*\nYour profile is pending verification."
-      );
+      return send(res, "✅ Registration complete. Pending verification.");
     }
 
-    return send(res, "Type *hi* to start.");
+    return send(res, "Type *menu* to continue.");
 
   } catch (err) {
     console.error("TWILIO ERROR:", err);
-    return send(res, "Something went wrong. Type *hi*.");
+    return send(res, "Something went wrong. Type *menu*.");
   }
 });
 

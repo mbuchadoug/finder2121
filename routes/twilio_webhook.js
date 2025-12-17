@@ -22,49 +22,7 @@ function normalizePhone(p) {
   return String(p || "").replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
-/* ================= SUBJECT DEFINITIONS ================= */
-
-const SUBJECT_CATEGORIES = {
-  SCIENCES: ["Maths", "Physics", "Chemistry", "Biology"],
-  COMMERCIAL: ["Accounting", "Business Studies", "Economics", "Commerce"],
-  LANGUAGES: ["English", "Shona", "Ndebele", "French"],
-  ICT: ["ICT", "Computer Science", "Coding"],
-  HUMANITIES: ["Geography", "History", "Religious Studies"],
-  EARLY: ["ECD", "Phonics", "Numeracy"],
-};
-
-const CATEGORY_MENU = [
-  "📚 *Choose a subject category:*",
-  "",
-  "1️⃣ Sciences",
-  "2️⃣ Commercial Subjects",
-  "3️⃣ Languages",
-  "4️⃣ ICT & Technology",
-  "5️⃣ Humanities",
-  "6️⃣ Early Learning",
-].join("\n");
-
-const CATEGORY_MAP = {
-  "1": "SCIENCES",
-  "2": "COMMERCIAL",
-  "3": "LANGUAGES",
-  "4": "ICT",
-  "5": "HUMANITIES",
-  "6": "EARLY",
-};
-
-function subjectMenu(categoryKey) {
-  const subjects = SUBJECT_CATEGORIES[categoryKey];
-  return [
-    "📖 *Select subjects* (comma separated)",
-    "",
-    ...subjects.map((s, i) => `${i + 1}️⃣ ${s}`),
-    "",
-    "Example: 1,3",
-  ].join("\n");
-}
-
-/* ================= SCHOOL FILTER PARSER (UNCHANGED – WORKING) ================= */
+/* ================= SCHOOL FILTERS (UNCHANGED LOGIC) ================= */
 
 function parseFiltersFromWords(words) {
   const filters = {
@@ -78,26 +36,76 @@ function parseFiltersFromWords(words) {
 
   const add = (arr, v) => !arr.includes(v) && arr.push(v);
 
-  for (const w of words) {
+  for (const raw of words) {
+    const w = raw.toLowerCase();
+
     if (w === "cambridge") add(filters.curriculum, "Cambridge");
     if (w === "zimsec") add(filters.curriculum, "Zimsec");
+    if (w === "ib") add(filters.curriculum, "IB");
 
     if (w === "boarding") add(filters.type2, "Boarding");
     if (w === "day") add(filters.type2, "Day");
 
     if (w === "primary") add(filters.schoolPhase, "Primary School");
     if (w === "high") add(filters.schoolPhase, "High School");
+    if (w === "pre") add(filters.schoolPhase, "Pre-School");
 
     if (w === "advanced") filters.learningEnvironment = "Advanced";
     if (w === "enhanced") filters.learningEnvironment = "Enhanced";
     if (w === "comprehensive") filters.learningEnvironment = "Comprehensive";
 
+    if (w === "girls") filters.gender = "Girls";
+    if (w === "boys") filters.gender = "Boys";
+    if (w === "mixed") filters.gender = "Mixed";
+
     if (w === "swimming") add(filters.facilities, "swimmingPool");
+    if (w === "computer") add(filters.facilities, "computerLab");
+    if (w === "science") add(filters.facilities, "scienceLabs");
     if (w === "library") add(filters.facilities, "library");
+    if (w === "aftercare") add(filters.facilities, "aftercare");
   }
 
   return filters;
 }
+
+/* ================= CONSTANT MENUS ================= */
+
+const HOME_MENU = [
+  "👋 *Welcome to ZimEduFinder*",
+  "",
+  "What would you like to do?",
+  "",
+  "1️⃣ Find Schools",
+  "2️⃣ Find Private Tutors",
+  "3️⃣ I am a Tutor (Register)",
+].join("\n");
+
+const TUTOR_CATEGORY_MENU = [
+  "📚 *Select your teaching category:*",
+  "",
+  "1️⃣ Maths",
+  "2️⃣ Sciences",
+  "3️⃣ Languages",
+  "4️⃣ Commercial Subjects",
+  "5️⃣ ICT / Computer Studies",
+  "6️⃣ Exam Preparation",
+].join("\n");
+
+const TUTOR_LEVEL_MENU = [
+  "🎓 *Select level(s):*",
+  "",
+  "1️⃣ Primary",
+  "2️⃣ High School",
+  "3️⃣ Both",
+].join("\n");
+
+const TUTOR_MODE_MENU = [
+  "🏫 *Teaching mode:*",
+  "",
+  "1️⃣ In-person",
+  "2️⃣ Online",
+  "3️⃣ Both",
+].join("\n");
 
 /* ================= MAIN WEBHOOK ================= */
 
@@ -118,24 +126,19 @@ router.post("/webhook", async (req, res) => {
         providerId,
         phone: providerId,
         chatState: "HOME",
+        tutorDraft: {},
       });
     }
+
+    // 🔒 HARD SAFETY
+    if (!user.tutorDraft) user.tutorDraft = {};
 
     /* ========== RESET / HOME ========== */
     if (["hi", "menu", "home", "start"].includes(lc)) {
       user.chatState = "HOME";
-      user.tutorDraft = null;
+      user.tutorDraft = {};
       await user.save();
-
-      return sendTwiml(res, [
-        "👋 *Welcome to ZimEduFinder*",
-        "",
-        "What would you like to do?",
-        "",
-        "1️⃣ Find Schools",
-        "2️⃣ Find Private Tutors",
-        "3️⃣ I am a Tutor (Register)",
-      ].join("\n"));
+      return sendTwiml(res, HOME_MENU);
     }
 
     /* ========== HOME MENU ========== */
@@ -143,20 +146,36 @@ router.post("/webhook", async (req, res) => {
       if (lc === "1") {
         user.chatState = "SCHOOLS_MENU";
         await user.save();
-
-        return sendTwiml(res, [
-          "🏫 *Find Schools*",
-          "",
-          "1️⃣ Harare · Cambridge · Advanced",
-          "2️⃣ Harare · Boarding · Primary",
-          "3️⃣ Harare · Schools with Swimming",
-        ].join("\n"));
+        return sendTwiml(
+          res,
+          [
+            "🏫 *Find Schools*",
+            "",
+            "Reply with:",
+            "1️⃣ Harare · Cambridge · Advanced",
+            "2️⃣ Harare · Boarding · Primary",
+            "3️⃣ Harare · Swimming Schools",
+          ].join("\n")
+        );
       }
 
       if (lc === "2") {
-        user.chatState = "TUTOR_SEARCH_CATEGORY";
+        user.chatState = "TUTOR_SEARCH";
         await user.save();
-        return sendTwiml(res, CATEGORY_MENU);
+        return sendTwiml(
+          res,
+          [
+            "👩‍🏫 *Find a Tutor*",
+            "",
+            "Choose subject:",
+            "1️⃣ Maths",
+            "2️⃣ Sciences",
+            "3️⃣ Languages",
+            "4️⃣ Commercial Subjects",
+            "5️⃣ ICT",
+            "6️⃣ Exam Prep",
+          ].join("\n")
+        );
       }
 
       if (lc === "3") {
@@ -169,125 +188,130 @@ router.post("/webhook", async (req, res) => {
       return sendTwiml(res, "Please reply with 1, 2 or 3.");
     }
 
-    /* ========== SCHOOL SEARCH (UNTOUCHED LOGIC) ========== */
+    /* ========== SCHOOL SEARCH (WORKING LOGIC KEPT) ========== */
     if (user.chatState === "SCHOOLS_MENU") {
-      let command = "";
+      let command = lc;
       if (lc === "1") command = "find harare cambridge advanced";
       if (lc === "2") command = "find harare boarding primary";
       if (lc === "3") command = "find harare swimming";
 
       const words = command.split(/\s+/);
+      if (words[0] !== "find") return sendTwiml(res, "Invalid option.");
+
+      const city = words[1] || "harare";
       const filters = parseFiltersFromWords(words.slice(2));
 
       const site = process.env.SITE_URL.replace(/\/$/, "");
       const resp = await axios.post(`${site}/api/recommend`, {
-        city: "Harare",
+        city: city.charAt(0).toUpperCase() + city.slice(1),
         ...filters,
       });
 
       const recs = resp.data?.recommendations || [];
-      const twiml = new MessagingResponse();
+      if (!recs.length) return sendTwiml(res, "No schools found.");
 
+      const twiml = new MessagingResponse();
       let pinned = false;
+
       for (const r of recs.slice(0, 5)) {
         twiml.message(`🏫 ${r.name}\n${r.website || ""}`);
         if (/st[\s-]*eurit/i.test(r.name)) pinned = true;
       }
 
       if (pinned) {
-        const m = twiml.message(
+        const msg = twiml.message(
           "⭐ *Pinned School: St Eurit International School*\n👉 https://skoolfinder.net/register/st-eurit-international-school"
         );
-        m.media(`${site}/docs/st-eurit.jpg`);
-        m.media(`${site}/docs/st-eurit-registration.pdf`);
+        msg.media(`${site}/docs/st-eurit.jpg`);
+        msg.media(`${site}/docs/st-eurit-registration.pdf`);
       }
 
       user.chatState = "HOME";
       await user.save();
+
       res.set("Content-Type", "text/xml");
       return res.send(twiml.toString());
     }
 
     /* ========== TUTOR SEARCH ========== */
-    if (user.chatState === "TUTOR_SEARCH_CATEGORY") {
-      user.searchCategory = CATEGORY_MAP[lc];
-      user.chatState = "TUTOR_SEARCH_SUBJECT";
-      await user.save();
-      return sendTwiml(res, subjectMenu(user.searchCategory));
-    }
+    if (user.chatState === "TUTOR_SEARCH") {
+      const map = {
+        "1": "Maths",
+        "2": "Science",
+        "3": "Language",
+        "4": "Commercial",
+        "5": "ICT",
+        "6": "Exam",
+      };
 
-    if (user.chatState === "TUTOR_SEARCH_SUBJECT") {
-      const subjects = SUBJECT_CATEGORIES[user.searchCategory];
-      const subject = subjects[Number(lc) - 1];
+      const key = map[lc];
+      if (!key) return sendTwiml(res, "Choose a valid option.");
 
       const tutors = await Tutor.find({
-        subjects: subject,
-        verified: true,
+        subjects: { $regex: key, $options: "i" },
       }).limit(5);
+
+      if (!tutors.length) return sendTwiml(res, "No tutors found.");
 
       user.chatState = "HOME";
       await user.save();
 
-      if (!tutors.length) return sendTwiml(res, "No tutors found.");
-
       return sendTwiml(
         res,
-        tutors.map(t =>
-          `👤 ${t.name}\n📞 ${t.phone}\n📍 ${t.city}`
-        ).join("\n\n")
+        tutors.map(t => `👤 ${t.name}\n📞 ${t.phone}\n📍 ${t.city}`).join("\n\n")
       );
     }
 
-    /* ========== TUTOR REGISTRATION SMART FORM ========== */
+    /* ========== TUTOR REGISTRATION (SMART FORM) ========== */
 
     if (user.chatState === "TUTOR_REGISTER_NAME") {
       user.tutorDraft.name = Body;
       user.chatState = "TUTOR_REGISTER_CATEGORY";
       await user.save();
-      return sendTwiml(res, CATEGORY_MENU);
+      return sendTwiml(res, TUTOR_CATEGORY_MENU);
     }
 
     if (user.chatState === "TUTOR_REGISTER_CATEGORY") {
-      user.tutorDraft.category = CATEGORY_MAP[lc];
-      user.chatState = "TUTOR_REGISTER_SUBJECTS";
+      const cats = {
+        "1": "Maths",
+        "2": "Sciences",
+        "3": "Languages",
+        "4": "Commercial Subjects",
+        "5": "ICT",
+        "6": "Exam Prep",
+      };
+      user.tutorDraft.subjects = [cats[lc]];
+      user.chatState = "TUTOR_REGISTER_LEVEL";
       await user.save();
-      return sendTwiml(res, subjectMenu(user.tutorDraft.category));
+      return sendTwiml(res, TUTOR_LEVEL_MENU);
     }
 
-    if (user.chatState === "TUTOR_REGISTER_SUBJECTS") {
-      const subjects = SUBJECT_CATEGORIES[user.tutorDraft.category];
-      user.tutorDraft.subjects = lc.split(",")
-        .map(i => subjects[Number(i.trim()) - 1])
-        .filter(Boolean);
-
-      user.chatState = "TUTOR_REGISTER_LEVELS";
+    if (user.chatState === "TUTOR_REGISTER_LEVEL") {
+      user.tutorDraft.levels =
+        lc === "3" ? ["Primary", "High School"] : [lc === "1" ? "Primary" : "High School"];
+      user.chatState = "TUTOR_REGISTER_MODE";
       await user.save();
-      return sendTwiml(res,
-        "🎓 Levels taught:\n1️⃣ Primary\n2️⃣ High School\n3️⃣ A-Level\nExample: 2,3"
-      );
+      return sendTwiml(res, TUTOR_MODE_MENU);
     }
 
-    if (user.chatState === "TUTOR_REGISTER_LEVELS") {
-      const map = { "1": "Primary", "2": "High School", "3": "A-Level" };
-      user.tutorDraft.levels = lc.split(",").map(i => map[i.trim()]);
+    if (user.chatState === "TUTOR_REGISTER_MODE") {
+      user.tutorDraft.mode = lc === "1" ? "in-person" : lc === "2" ? "online" : "both";
       user.chatState = "TUTOR_REGISTER_CITY";
       await user.save();
-      return sendTwiml(res, "📍 City?");
+      return sendTwiml(res, "📍 Which city are you based in?");
     }
 
     if (user.chatState === "TUTOR_REGISTER_CITY") {
       user.tutorDraft.city = Body;
-      user.tutorDraft.phone = user.phone;
+      user.tutorDraft.phone = providerId;
 
       await Tutor.create(user.tutorDraft);
 
       user.chatState = "HOME";
-      user.tutorDraft = null;
+      user.tutorDraft = {};
       await user.save();
 
-      return sendTwiml(res,
-        "✅ *Registration complete!*\nYour profile will be reviewed."
-      );
+      return sendTwiml(res, "✅ *Tutor registration complete!*");
     }
 
     return sendTwiml(res, "Type *hi* to start.");

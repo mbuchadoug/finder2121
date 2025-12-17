@@ -4,7 +4,12 @@ import axios from "axios";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 
 import User from "../models/user.js";
-import Tutor from "../models/tutor.js";
+import mongoose from "mongoose";
+import TutorModel from "../models/tutor.js";
+
+const Tutor =
+  mongoose.models.Tutor || TutorModel;
+
 
 const router = Router();
 router.use(express.urlencoded({ extended: true }));

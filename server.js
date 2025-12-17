@@ -17,6 +17,11 @@ import twilioWebhookRoutes from "./routes/twilio_webhook.js";
 // NEW: import the new twilio biz route
 import twilioBizRoutes from "./routes/twilio_biz.js";
 
+import adminTutorRoutes from "./routes/admin_tutors.js";
+
+
+
+
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
 const SITE_URL = process.env.SITE_URL || "https://skoolfinder.net";
@@ -345,7 +350,7 @@ app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 app.use("/register", registerRoutes);
-
+app.use(adminTutorRoutes);
 // Mount Twilio routes under /twilio
 // Note: the twilioWebhookRoutes file expects router.post("/webhook") internally,
 // so the final endpoint will be /twilio/webhook

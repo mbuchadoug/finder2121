@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{title}}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      background: #f4f7fb;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+      font-size: 14px;
+    }
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+    }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .yes { background: #dcfce7; color: #166534; }
+    .no { background: #fee2e2; color: #991b1b; }
+
+    form {
+      display: inline;
+    }
+    button {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      margin-right: 4px;
+    }
+    .verify { background: #16a34a; color: #fff; }
+    .unverify { background: #eab308; color: #000; }
+    .delete { background: #dc2626; color: #fff; }
+  </style>
+</head>
+<body>
+
+<h1>👩‍🏫 Tutor Management</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Phone</th>
+      <th>Subjects</th>
+      <th>Levels</th>
+      <th>City</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each tutors}}
+      <tr>
+        <td>{{name}}</td>
+        <td>{{phone}}</td>
+        <td>{{subjects}}</td>
+        <td>{{levels}}</td>
+        <td>{{city}}</td>
+        <td>
+          {{#if verified}}
+            <span class="badge yes">Verified</span>
+          {{else}}
+            <span class="badge no">Pending</span>
+          {{/if}}
+        </td>
+        <td>
+          {{#if verified}}
+            <form method="POST" action="/admin/tutors/{{_id}}/unverify">
+              <button class="unverify">Unverify</button>
+            </form>
+          {{else}}
+            <form method="POST" action="/admin/tutors/{{_id}}/verify">
+              <button class="verify">Verify</button>
+            </form>
+          {{/if}}
+
+          <form method="POST" action="/admin/tutors/{{_id}}/delete" onsubmit="return confirm('Delete this tutor?')">
+            <button class="delete">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+</body>
+</html>

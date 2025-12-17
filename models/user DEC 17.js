@@ -1,3 +1,4 @@
+// models/user.js
 import mongoose from "mongoose";
 
 const LastPrefsSchema = new mongoose.Schema(
@@ -6,7 +7,7 @@ const LastPrefsSchema = new mongoose.Schema(
     curriculum: [String],
     type2: [String],
     facilities: [String],
-    schoolPhase: [String],
+    schoolPhase: [String], // ARRAY (fixes cast error)
     learningEnvironment: String,
     gender: String,
   },
@@ -37,17 +38,11 @@ const UserSchema = new mongoose.Schema(
 
     chatState: { type: String, default: "WELCOME" },
 
-    // ✅ FINAL tutor snapshot (optional / future use)
     tutorProfile: { type: TutorProfileSchema, default: {} },
-
-    // ✅ NEW: WhatsApp multi-step draft (CRITICAL FIX)
-    tutorDraft: {
-      type: Object,
-      default: {},
-    },
   },
   { timestamps: true }
 );
 
+// ✅ DEFAULT EXPORT (THIS FIXES THE CRASH)
 export default mongoose.models.User ||
   mongoose.model("User", UserSchema);

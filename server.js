@@ -26,6 +26,10 @@ import metaWebhookRoutes from "./routes/meta_webhook.js";
 dotenv.config();
 const PROD = process.env.NODE_ENV === "production";
 const SITE_URL = process.env.SITE_URL || "https://skoolfinder.net";
+console.log(
+  "META TOKEN CHECK:",
+  process.env.META_ACCESS_TOKEN?.slice(0, 10) + "..."
+);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

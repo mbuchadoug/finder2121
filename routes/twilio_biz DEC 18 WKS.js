@@ -9,13 +9,6 @@ import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import Business from "../models/business.js";
 import Client from "../models/client.js";
 
-import Branch from "../models/branch.js";
-import UserRole from "../models/userRole.js";
-import Invoice from "../models/invoice.js";
-import Payment from "../models/payment.js";
-import Receipt from "../models/receipt.js";
-
-
 let PDFDocument;
 try {
   PDFDocument = await (async () => {
@@ -652,23 +645,6 @@ router.post("/webhook", async (req, res) => {
         taxRate: 15,
         applyTax: true
       });
-
-      const existingBranch = await Branch.findOne({ businessId: biz._id });
-if (!existingBranch) {
-  const branch = await Branch.create({
-    businessId: biz._id,
-    name: "Main Branch",
-    isDefault: true
-  });
-
-  await UserRole.create({
-    businessId: biz._id,
-    branchId: branch._id,
-    phone: providerId,
-    role: "owner"
-  });
-}
-
       console.log("TWILIO (biz): created business record", biz._id?.toString());
     }
 
@@ -688,85 +664,14 @@ if (!existingBranch) {
       await saveBiz(biz).catch(() => {});
     }
 
-const text = bodyRaw || "";
-const trimmed = text.trim();
+    const text = bodyRaw || "";
+    const trimmed = text.trim();
 
-if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
-  await resetSession(biz);
-  return sendMenu(res);
-}
+    if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
+      await resetSession(biz);
+      return sendMenu(res);
+    }
 
-/* ================= REPORT COMMANDS (ADD HERE) ================= */
-
-// DAILY REPORT
-if (/^report today$/i.test(trimmed)) {
-  const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
-
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
-const query = {
-  businessId: biz._id,
-  createdAt: { $gte: start, $lte: end }
-};
-
-if (branch?._id) query.branchId = branch._id;
-
-const invoices = await Invoice.find(query);
-
-  const total = invoices.reduce((s, i) => s + (i.total || 0), 0);
-
-  return sendTwimlText(
-    res,
-`📊 Daily Report
-Invoices: ${invoices.length}
-Total: ${formatMoney(total)} ${biz.currency}`
-  );
-}
-
-// CLIENT STATEMENT
-if (/^statement\s+/i.test(trimmed)) {
-  const name = trimmed.replace(/^statement\s+/i, "").trim();
-
-  const client = await Client.findOne({
-    businessId: biz._id,
-    name: new RegExp(`^${name}`, "i")
-  });
-
-  if (!client) {
-    return sendTwimlText(res, "Client not found.");
-  }
-
-  const invoices = await Invoice.find({ clientId: client._id });
-  const total = invoices.reduce((s, i) => s + (i.total || 0), 0);
-
-  return sendTwimlText(
-    res,
-`📄 Statement: ${client.name}
-Invoices: ${invoices.length}
-Total billed: ${formatMoney(total)} ${biz.currency}`
-  );
-}
-
-
-/* ================= PAYMENTS ================= */
-
-// START PAYMENT FLOW
-if (/^record payment$/i.test(trimmed)) {
-  biz.sessionState = "payment_invoice_number";
-  biz.sessionData = {};
-  await saveBiz(biz);
-  return sendTwimlText(res, "Enter invoice number (e.g. INV-000123)");
-}
-
-/* ================= END REPORT COMMANDS ================= */
-
-
-
-    
     if (!biz.name && !biz.sessionState) {
       biz.sessionState = "awaiting_first_choice";
       await saveBiz(biz);
@@ -775,129 +680,6 @@ if (/^record payment$/i.test(trimmed)) {
 
     const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
-
-    /* ================= PAYMENT FLOW STATES ================= */
-
-// STEP 1: invoice number
-if (state === "payment_invoice_number") {
-  const invoice = await Invoice.findOne({
-    businessId: biz._id,
-    number: trimmed
-  });
-
-  if (!invoice) {
-    return sendTwimlText(res, "Invoice not found. Try again or type menu.");
-  }
-
-  biz.sessionData.invoice = invoice;
-  biz.sessionState = "payment_amount";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-    `Invoice ${invoice.number} found.\nEnter amount paid:`
-  );
-}
-
-// STEP 2: amount
-if (state === "payment_amount") {
-  const amount = Number(trimmed);
-  if (isNaN(amount) || amount <= 0) {
-    return sendTwimlText(res, "Invalid amount. Enter a number.");
-  }
-
-  biz.sessionData.amount = amount;
-  biz.sessionState = "payment_method";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-`Payment method:
-1) Cash
-2) Bank
-3) EcoCash
-4) Other`
-  );
-}
-
-// STEP 3: method → SAVE + RECEIPT
-if (state === "payment_method" && isSingleNumber) {
-  const methods = {
-    "1": "cash",
-    "2": "bank",
-    "3": "ecocash",
-    "4": "other"
-  };
-
-  const method = methods[trimmed];
-  if (!method) return sendTwimlText(res, "Invalid choice.");
-
-  const invoice = biz.sessionData.invoice;
-  const amount = biz.sessionData.amount;
-
-  const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
-
-  // SAVE PAYMENT
-  const payment = await Payment.create({
-    businessId: biz._id,
-    branchId: branch?._id,
-    invoiceId: invoice._id,
-    amount,
-    method,
-    paidBy: providerId
-  });
-
-  // AUTO RECEIPT NUMBER (uses existing counters)
-  biz.counters = biz.counters || { receipt: 0 };
-  biz.counters.receipt = (biz.counters.receipt || 0) + 1;
-
-  const receiptNumber = `${biz.receiptPrefix}-${String(biz.counters.receipt).padStart(6, "0")}`;
-
-  const receipt = await Receipt.create({
-    businessId: biz._id,
-    branchId: branch?._id,
-    invoiceId: invoice._id,
-    paymentId: payment._id,
-    number: receiptNumber,
-    amount
-  });
-
-  await saveBiz(biz);
-
-  // GENERATE RECEIPT PDF
-  const { filename } = await generatePDF({
-    type: "receipt",
-    number: receiptNumber,
-    date: new Date(),
-    billingTo: invoice.clientId?.name || "Client",
-    items: [
-      { item: `Payment for ${invoice.number}`, qty: 1, unit: amount }
-    ],
-    bizMeta: {
-      name: biz.name,
-      logoUrl: biz.logoUrl,
-      address: biz.address || "",
-      discountPercent: 0,
-      vatPercent: 0,
-      applyVat: false,
-      _id: biz._id
-    }
-  });
-
-  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-  const baseForMedia = site || `${(req.get("x-forwarded-proto") || req.protocol)}://${req.get("host")}`;
-  const url = `${baseForMedia}/docs/generated/receipts/${filename}`;
-
-  await resetSession(biz);
-
-  return sendTwimlWithMedia(
-    res,
-    "✅ Payment recorded. Receipt attached.",
-    [url]
-  );
-}
-
-/* ================= END PAYMENT FLOW STATES ================= */
 
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
@@ -1425,39 +1207,6 @@ Type 'menu' to return here anytime.`);
         const numberStr = `${prefix}-${String(biz.counters[counterKey]).padStart(6, "0")}`;
 
         const date = new Date();
-        // ===== NEW: persist invoice before PDF =====
-const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
-
-const subtotal = items.reduce((s, it) => s + (it.qty * it.unit), 0);
-const discountPercent = Number(biz.sessionData.discountPercent || 0);
-const discountAmount = subtotal * (discountPercent / 100);
-const vatPercent = Number(biz.sessionData.vatPercent || 0);
-const vatAmount = (biz.sessionData.applyVat !== false)
-  ? (subtotal - discountAmount) * (vatPercent / 100)
-  : 0;
-const total = subtotal - discountAmount + vatAmount;
-
-const invoiceDoc = await Invoice.create({
-  businessId: biz._id,
-  branchId: branch?._id,
-  clientId: client?._id,
-  number: numberStr,
-  currency: biz.currency,
-  items: items.map(i => ({
-    item: i.item,
-    qty: i.qty,
-    unit: i.unit,
-    total: i.qty * i.unit
-  })),
-  subtotal,
-  discountPercent,
-  discountAmount,
-  vatPercent,
-  vatAmount,
-  total,
-  createdBy: providerId
-});
-
         try {
           const { filename } = await generatePDF({
             type: docType === "invoice" ? "invoice" : docType === "quote" ? "quote" : "receipt",

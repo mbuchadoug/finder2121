@@ -382,6 +382,33 @@ app.get("/signed-out", (_req, res) => {
   res.render("signed_out", { title: "Signed out", canonicalPath: "/signed-out" });
 });
 
+
+app.get("/meta-test", async (req, res) => {
+  try {
+    const r = await axios.post(
+      `https://graph.facebook.com/v19.0/${process.env.META_PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: "2637XXXXXXXX", // YOUR WhatsApp number (no +)
+        type: "text",
+        text: { body: "✅ Meta Cloud API is working!" }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({ success: true, data: r.data });
+  } catch (e) {
+    res.status(500).json({
+      error: e.response?.data || e.message
+    });
+  }
+});
+
 // Health check
 app.get("/health", (_req, res) => res.status(200).send("ok"));
 

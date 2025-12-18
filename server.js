@@ -389,7 +389,7 @@ app.get("/meta-test", async (req, res) => {
       `https://graph.facebook.com/v19.0/${process.env.META_PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
-        to: "2637XXXXXXXX", // YOUR WhatsApp number (no +)
+        to: "263771446827", // YOUR WhatsApp number (no +)
         type: "text",
         text: { body: "✅ Meta Cloud API is working!" }
       },

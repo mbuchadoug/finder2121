@@ -18,6 +18,7 @@ import twilioWebhookRoutes from "./routes/twilio_webhook.js";
 import twilioBizRoutes from "./routes/twilio_biz.js";
 
 import adminTutorRoutes from "./routes/admin_tutors.js";
+import metaWebhookRoutes from "./routes/meta_webhook.js";
 
 
 
@@ -71,6 +72,7 @@ import School from "./models/school.js"; // ensure this exists (or remove usage 
 import authRoutes from "./routes/auth.js";
 import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
+
 
 /* Static public */
 app.use(express.static(path.join(__dirname, "public")));
@@ -350,6 +352,8 @@ app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 app.use("/admin", adminRoutes);
 app.use("/register", registerRoutes);
+app.use("/meta", metaWebhookRoutes);
+
 app.use(adminTutorRoutes);
 // Mount Twilio routes under /twilio
 // Note: the twilioWebhookRoutes file expects router.post("/webhook") internally,

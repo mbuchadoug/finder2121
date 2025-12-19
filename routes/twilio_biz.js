@@ -85,6 +85,19 @@ function normalizePhone(p) {
   return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
 }
 
+/* ---------- Role guard ---------- */
+async function requireRole(biz, providerId, allowed = []) {
+  const role = await UserRole.findOne({
+    businessId: biz._id,
+    phone: providerId
+  });
+
+  if (!role || !allowed.includes(role.role)) {
+    return false;
+  }
+  return true;
+}
+
 /* ---------- small save helper to mark sessionData modified ---------- */
 async function saveBiz(biz) {
   try {
@@ -1179,34 +1192,50 @@ if (state === "expense_method" && isSingleNumber) {
         return sendTwimlText(res, "Please send your business logo (as an image). Reply 1 to skip.");
       }
 
-      if (num === "7") {
-        biz.sessionState = "settings_menu";
-        await saveBiz(biz);
-        const sMsg = `Settings for ${biz.name || "(unnamed)"}:
-1) Currency (current: ${biz.currency || "ZWL"})
-2) Payment terms days (current: ${biz.paymentTermsDays || 30})
-3) Invoice prefix (current: ${biz.invoicePrefix || "INV"})
-4) Quote prefix (current: ${biz.quotePrefix || "QT"})
+     if (num === "7") {
+  const ok = await requireRole(biz, providerId, ["owner"]);
+  if (!ok) {
+    return sendTwimlText(res, "⛔ Only the business owner can access Settings.");
+  }
+
+  biz.sessionState = "settings_menu";
+  await saveBiz(biz);
+
+  const sMsg = `Settings for ${biz.name || "(unnamed)"}:
+1) Currency
+2) Payment terms days
+3) Invoice prefix
+4) Quote prefix
 5) Change logo
 6) View clients
-7) Receipt prefix (current: ${biz.receiptPrefix || "RCPT"})
-0) Back to menu
+7) Receipt prefix
+8) Branches
+0) Back
 Reply with number to edit.`;
-        return sendTwimlText(res, sMsg);
-      }
 
-      if (num === "8") {
-        return sendTwimlText(res, `Help | reply with numbers only:
-1) Create business account
-2) New invoice
-3) New receipt
-4) New quotation
-5) Add client
-6) Upload logo
-7) Settings
-8) Help
-Type 'menu' to return here anytime.`);
-      }
+  return sendTwimlText(res, sMsg);
+}
+
+
+ if (state === "settings_menu" && trimmed === "8") {
+  const ok = await requireRole(biz, providerId, ["owner"]);
+  if (!ok) {
+    return sendTwimlText(res, "⛔ Only the owner can manage branches.");
+  }
+
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Branches:
+1) View branches
+2) Add branch
+3) Assign user to branch
+0) Back`
+  );
+}
+
 
       return sendMenu(res);
     }
@@ -1271,6 +1300,170 @@ Type 'menu' to return here anytime.`);
       if (choice === "7") { biz.sessionState = "settings_rcpt_prefix"; await saveBiz(biz); return sendTwimlText(res, `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`); }
       return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
     }
+
+    // SETTINGS → BRANCHES MENU
+if (state === "settings_menu" && trimmed === "8") {
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+  return sendTwimlText(
+    res,
+`Branches:
+1) View branches
+2) Add branch
+3) Assign user to branch
+0) Back`
+  );
+}
+
+// BRANCHES → VIEW BRANCHES
+if (state === "branches_menu" && trimmed === "1") {
+  const branches = await Branch.find({ businessId: biz._id });
+
+  if (!branches.length) {
+    return sendTwimlText(res, "No branches found.");
+  }
+
+  let msg = "Branches:\n";
+  branches.forEach((b, i) => {
+    msg += `${i + 1}) ${b.name}${b.isDefault ? " (default)" : ""}\n`;
+  });
+
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+  return sendTwimlText(res, msg);
+}
+
+// BRANCHES → ADD BRANCH (START)
+if (state === "branches_menu" && trimmed === "2") {
+  biz.sessionState = "branch_add_name";
+  await saveBiz(biz);
+  return sendTwimlText(res, "Enter new branch name:");
+}
+
+// BRANCHES → ADD BRANCH (SAVE)
+if (state === "branch_add_name") {
+  const name = trimmed;
+
+  if (!name) {
+    return sendTwimlText(res, "Branch name cannot be empty.");
+  }
+
+  await Branch.create({
+    businessId: biz._id,
+    name,
+    isDefault: false
+  });
+
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+    `✅ Branch "${name}" added.\n\n1) View branches\n2) Add branch\n3) Assign user to branch\n0) Back`
+  );
+}
+
+
+// BRANCHES → ASSIGN USER (START)
+if (state === "branches_menu" && trimmed === "3") {
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    return sendTwimlText(res, "No branches available.");
+  }
+
+  biz.sessionData.branches = branches;
+  biz.sessionState = "assign_user_choose_branch";
+  await saveBiz(biz);
+
+  let msg = "Select branch:\n";
+  branches.forEach((b, i) => {
+    msg += `${i + 1}) ${b.name}\n`;
+  });
+  msg += "0) Cancel";
+
+  return sendTwimlText(res, msg);
+}
+
+// ASSIGN USER → PICK BRANCH
+if (state === "assign_user_choose_branch" && isSingleNumber) {
+  if (trimmed === "0") {
+    biz.sessionState = "branches_menu";
+    await saveBiz(biz);
+    return sendTwimlText(res, "Cancelled.\n1) View branches\n2) Add branch\n3) Assign user\n0) Back");
+  }
+
+  const idx = Number(trimmed) - 1;
+  const branches = biz.sessionData.branches || [];
+
+  if (!branches[idx]) {
+    return sendTwimlText(res, "Invalid selection.");
+  }
+
+  biz.sessionData.branch = branches[idx];
+  biz.sessionState = "assign_user_phone";
+  await saveBiz(biz);
+
+  return sendTwimlText(res, "Enter user phone number (WhatsApp number):");
+}
+
+// ASSIGN USER → PHONE
+if (state === "assign_user_phone") {
+  const phone = normalizePhone(trimmed);
+
+  if (!phone) {
+    return sendTwimlText(res, "Invalid phone number.");
+  }
+
+  biz.sessionData.userPhone = phone;
+  biz.sessionState = "assign_user_role";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Select role:
+1) Owner
+2) Manager
+3) Clerk`
+  );
+}
+
+// ASSIGN USER → SAVE
+if (state === "assign_user_role" && isSingleNumber) {
+  const roles = {
+    "1": "owner",
+    "2": "manager",
+    "3": "clerk"
+  };
+
+  const role = roles[trimmed];
+  if (!role) {
+    return sendTwimlText(res, "Invalid role selection.");
+  }
+
+  const branch = biz.sessionData.branch;
+  const phone = biz.sessionData.userPhone;
+
+  await UserRole.findOneAndUpdate(
+    {
+      businessId: biz._id,
+      branchId: branch._id,
+      phone
+    },
+    { role },
+    { upsert: true }
+  );
+
+  biz.sessionState = "branches_menu";
+  biz.sessionData = {};
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+    `✅ User assigned\n📍 Branch: ${branch.name}\n👤 Phone: ${phone}\n🔑 Role: ${role}`
+  );
+}
+
 
     if (state === "settings_currency") {
       const cur = trimmed.toUpperCase();

@@ -9,6 +9,8 @@ import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 
 import Business from "../models/business.js";
 import Client from "../models/client.js";
+import UserRole from "../models/userRole.js";
+
 
 let PDFDocument;
 try {
@@ -445,6 +447,70 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   return { filepath, filename, publicUrl };
 }
 
+
+async function sendMenuForUser(res, biz, providerId) {
+  const roleRec = await UserRole.findOne({
+    businessId: biz._id,
+    phone: providerId
+  });
+
+  if (!roleRec) {
+    return sendTwimlText(res, "⛔ You are not assigned to this business.");
+  }
+
+  if (roleRec.role === "owner") {
+    return sendTwimlText(res, ownerMenu(biz));
+  }
+
+  if (roleRec.role === "manager") {
+    return sendTwimlText(res, managerMenu(biz));
+  }
+
+  if (roleRec.role === "clerk") {
+    return sendTwimlText(res, clerkMenu(biz));
+  }
+
+  return sendTwimlText(res, ownerMenu(biz)); // fallback
+}
+
+
+function ownerMenu(biz) {
+  return `ZimQuote — Owner Menu
+1) Create business account
+2) New invoice
+3) New receipt
+4) New quotation
+5) Add client
+6) Upload logo
+7) Settings
+9) Record payment (IN)
+10) Record expense (OUT)
+11) Daily report
+12) Client statement
+0) Menu`;
+}
+
+function managerMenu(biz) {
+  return `ZimQuote — Manager Menu
+2) New invoice
+3) New receipt
+4) New quotation
+5) Add client
+9) Record payment (IN)
+10) Record expense (OUT)
+11) Daily report
+12) Client statement
+0) Menu`;
+}
+
+function clerkMenu(biz) {
+  return `ZimQuote — Clerk Menu
+2) New invoice
+9) Record payment (IN)
+11) Daily summary
+0) Menu`;
+}
+
 async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return saveBiz(biz); }
 
 function sendMenu(res) {
@@ -507,7 +573,8 @@ router.post("/webhook", async (req, res) => {
 
     if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
       await resetSession(biz);
-      return sendMenu(res);
+     sendMenuForUser(res, biz, providerId)
+
     }
 
     if (!biz.name && !biz.sessionState) {
@@ -588,7 +655,8 @@ Reply with number to edit.`;
 8) New receipt
 Type 'menu' to return here anytime.`);
       }
-      return sendMenu(res);
+     sendMenuForUser(res, biz, providerId)
+
     }
 
     // Onboarding and simple states

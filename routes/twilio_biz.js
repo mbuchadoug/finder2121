@@ -784,6 +784,55 @@ if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
   return sendMenuForUser(res, biz, providerId);
 }
 
+// ===== MAIN MENU OPTIONS (1–6) =====
+if ((state === "idle" || state === "ready") && isSingleNumber) {
+
+  // 1) Create business
+  if (trimmed === "1") {
+    if (biz.name) {
+      return sendTwimlText(res, `Business already exists: ${biz.name}\nReply 7 for settings.`);
+    }
+    biz.sessionState = "awaiting_business_name";
+    await saveBiz(biz);
+    return sendTwimlText(res, "Enter business name:");
+  }
+
+  // 2) New invoice
+  if (trimmed === "2") {
+    biz.sessionState = "creating_invoice_choose_client";
+    biz.sessionData = { docType: "invoice", items: [] };
+    await saveBiz(biz);
+    return sendTwimlText(res, "Invoice:\n1) Use saved client\n2) New client\n3) Cancel");
+  }
+
+  // 3) New receipt
+  if (trimmed === "3") {
+    return sendTwimlText(res, "Use option 9 to record payments and auto-generate receipts.");
+  }
+
+  // 4) New quotation
+  if (trimmed === "4") {
+    biz.sessionState = "creating_invoice_choose_client";
+    biz.sessionData = { docType: "quote", items: [] };
+    await saveBiz(biz);
+    return sendTwimlText(res, "Quotation:\n1) Use saved client\n2) New client\n3) Cancel");
+  }
+
+  // 5) Add client
+  if (trimmed === "5") {
+    biz.sessionState = "adding_client_name";
+    biz.sessionData = {};
+    await saveBiz(biz);
+    return sendTwimlText(res, "Enter client name:");
+  }
+
+  // 6) Upload logo
+  if (trimmed === "6") {
+    biz.sessionState = "awaiting_logo_upload";
+    await saveBiz(biz);
+    return sendTwimlText(res, "Send your logo image now.");
+  }
+}
 
 
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
@@ -891,6 +940,128 @@ if ((state === "idle" || state === "ready") && trimmed === "7") {
 0) Menu`
   );
 }
+
+
+  // Settings menu blocks:
+   // Settings menu blocks:
+if (state === "settings_menu" && isSingleNumber) {
+  const choice = trimmed;
+
+  // 0) Back to menu
+  if (choice === "0") { 
+  await resetSession(biz);
+return sendMenuForUser(res, biz, providerId);
+
+
+  }
+
+  // 1) Currency
+  if (choice === "1") {
+    biz.sessionState = "settings_currency";
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      `Current currency: ${biz.currency || "ZWL"}. Reply with new currency (ZWL, USD, ZAR).`
+    );
+  }
+
+  // 2) Payment terms
+  if (choice === "2") {
+    biz.sessionState = "settings_terms";
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      `Current payment terms: ${biz.paymentTermsDays || 30} days. Reply with new number.`
+    );
+  }
+
+  // 3) Invoice prefix
+  if (choice === "3") {
+    biz.sessionState = "settings_inv_prefix";
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      `Current invoice prefix: ${biz.invoicePrefix || "INV"}. Reply with new prefix.`
+    );
+  }
+
+  // 4) Quote prefix
+  if (choice === "4") {
+    biz.sessionState = "settings_qt_prefix";
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      `Current quote prefix: ${biz.quotePrefix || "QT"}. Reply with new prefix.`
+    );
+  }
+
+  // 5) Change logo
+  if (choice === "5") {
+    biz.sessionState = "awaiting_logo_upload";
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      "Send new logo image now (or reply 1 to cancel)."
+    );
+  }
+
+  // 6) View clients
+  if (choice === "6") {
+    const clients = await Client.find({ businessId: biz._id })
+      .sort({ updatedAt: -1 })
+      .limit(50)
+      .lean();
+
+    if (!clients.length) {
+      biz.sessionState = "settings_menu";
+      await saveBiz(biz);
+      return sendTwimlText(res, "No clients saved yet.");
+    }
+
+    let lines = ["Clients:"];
+    clients.forEach((c, i) =>
+      lines.push(`${i + 1}) ${c.name} | ${c.phone || "no phone"}`)
+    );
+
+    biz.sessionState = "settings_menu";
+    await saveBiz(biz);
+    return sendTwimlText(res, lines.join("\n"));
+  }
+
+  // 7) Receipt prefix
+  if (choice === "7") {
+    biz.sessionState = "settings_rcpt_prefix";
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`
+    );
+  }
+
+  // 8) Branches
+  if (choice === "8") {
+    const ok = await requireRole(biz, providerId, ["owner"]);
+    if (!ok) {
+      return sendTwimlText(res, "⛔ Only the business owner can manage branches.");
+    }
+
+    biz.sessionState = "branches_menu";
+    await saveBiz(biz);
+
+    return sendTwimlText(
+      res,
+`Branches:
+1) View branches
+2) Add branch
+3) Assign user to branch
+0) Back`
+    );
+  }
+
+  // fallback
+  return sendTwimlText(res, "Invalid selection. Reply with a number from the menu.");
+}
+
 
 /* ================= CLIENT STATEMENT ================= */
 
@@ -1061,13 +1232,6 @@ if ((state === "idle" || state === "ready") && trimmed === "10") {
 /* ================= END REPORT COMMANDS ================= */
 
 
-
-    
-    if (!biz.name && !biz.sessionState) {
-      biz.sessionState = "awaiting_first_choice";
-      await saveBiz(biz);
-      return sendTwimlText(res, `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo\n3) Help\nReply with a number.`);
-    }
 
     
 
@@ -1358,127 +1522,7 @@ const branchId = ctx?.branchId || null;
       }
     }
 
-    // Settings menu blocks:
-   // Settings menu blocks:
-if (state === "settings_menu" && isSingleNumber) {
-  const choice = trimmed;
-
-  // 0) Back to menu
-  if (choice === "0") { 
-  await resetSession(biz);
-return sendMenuForUser(res, biz, providerId);
-
-
-  }
-
-  // 1) Currency
-  if (choice === "1") {
-    biz.sessionState = "settings_currency";
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      `Current currency: ${biz.currency || "ZWL"}. Reply with new currency (ZWL, USD, ZAR).`
-    );
-  }
-
-  // 2) Payment terms
-  if (choice === "2") {
-    biz.sessionState = "settings_terms";
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      `Current payment terms: ${biz.paymentTermsDays || 30} days. Reply with new number.`
-    );
-  }
-
-  // 3) Invoice prefix
-  if (choice === "3") {
-    biz.sessionState = "settings_inv_prefix";
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      `Current invoice prefix: ${biz.invoicePrefix || "INV"}. Reply with new prefix.`
-    );
-  }
-
-  // 4) Quote prefix
-  if (choice === "4") {
-    biz.sessionState = "settings_qt_prefix";
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      `Current quote prefix: ${biz.quotePrefix || "QT"}. Reply with new prefix.`
-    );
-  }
-
-  // 5) Change logo
-  if (choice === "5") {
-    biz.sessionState = "awaiting_logo_upload";
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      "Send new logo image now (or reply 1 to cancel)."
-    );
-  }
-
-  // 6) View clients
-  if (choice === "6") {
-    const clients = await Client.find({ businessId: biz._id })
-      .sort({ updatedAt: -1 })
-      .limit(50)
-      .lean();
-
-    if (!clients.length) {
-      biz.sessionState = "settings_menu";
-      await saveBiz(biz);
-      return sendTwimlText(res, "No clients saved yet.");
-    }
-
-    let lines = ["Clients:"];
-    clients.forEach((c, i) =>
-      lines.push(`${i + 1}) ${c.name} | ${c.phone || "no phone"}`)
-    );
-
-    biz.sessionState = "settings_menu";
-    await saveBiz(biz);
-    return sendTwimlText(res, lines.join("\n"));
-  }
-
-  // 7) Receipt prefix
-  if (choice === "7") {
-    biz.sessionState = "settings_rcpt_prefix";
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`
-    );
-  }
-
-  // 8) Branches
-  if (choice === "8") {
-    const ok = await requireRole(biz, providerId, ["owner"]);
-    if (!ok) {
-      return sendTwimlText(res, "⛔ Only the business owner can manage branches.");
-    }
-
-    biz.sessionState = "branches_menu";
-    await saveBiz(biz);
-
-    return sendTwimlText(
-      res,
-`Branches:
-1) View branches
-2) Add branch
-3) Assign user to branch
-0) Back`
-    );
-  }
-
-  // fallback
-  return sendTwimlText(res, "Invalid selection. Reply with a number from the menu.");
-}
-
-
+  
 // BRANCHES → VIEW BRANCHES
 if (state === "branches_menu" && trimmed === "1") {
   const branches = await Branch.find({ businessId: biz._id });
@@ -2114,15 +2158,25 @@ const invoiceDoc = await Invoice.create({
     // fallback
   // fallback only when truly idle
 // FINAL fallback — do NOT override active flows
+/*if (state === "idle" || state === "ready") {
+  return sendMenuForUser(res, biz, providerId);
+}*/
+
+// User is inside a flow, but typed something unexpected
+//return sendTwimlText(res, "Invalid option. Reply with a number shown, or 0 for menu.");
+
+
+
+// ===== FINAL FALLBACK (ONLY AFTER EVERYTHING ELSE) =====
 if (state === "idle" || state === "ready") {
   return sendMenuForUser(res, biz, providerId);
 }
 
-// User is inside a flow, but typed something unexpected
-return sendTwimlText(res, "Invalid option. Reply with a number shown, or 0 for menu.");
-
-
-
+// User is inside a flow but typed something invalid
+return sendTwimlText(
+  res,
+  "Invalid option. Reply with a number shown, or 0 for menu."
+);
 
 
   } catch (err) {

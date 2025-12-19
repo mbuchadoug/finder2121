@@ -744,19 +744,28 @@ const invoices = await Invoice.find(query);
 
 const totalOutstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
 
-const payments = await Payment.find({
+const payQuery = {
   businessId: biz._id,
   createdAt: { $gte: start, $lte: end }
-});
+};
+if (branch?._id) payQuery.branchId = branch._id;
+
+const payments = await Payment.find(payQuery);
+
+
 
 const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
 
 
 
-const expenses = await Expense.find({
+const expQuery = {
   businessId: biz._id,
   createdAt: { $gte: start, $lte: end }
-});
+};
+if (branch?._id) expQuery.branchId = branch._id;
+
+const expenses = await Expense.find(expQuery);
+
 
 const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
 
@@ -888,7 +897,8 @@ if (state === "payment_choose_invoice" && isSingleNumber) {
     );
   }
 
-  biz.sessionData.invoice = invoice;
+  biz.sessionData.invoiceId = invoice._id;
+
   biz.sessionState = "payment_amount";
   await saveBiz(biz);
 
@@ -966,17 +976,25 @@ if (state === "payment_method" && isSingleNumber) {
   const method = methods[trimmed];
   if (!method) return sendTwimlText(res, "Invalid choice.");
 
-  const invoice = biz.sessionData.invoice;
+ const invoice = await Invoice.findById(biz.sessionData.invoiceId);
+if (!invoice) {
+  await resetSession(biz);
+  return sendTwimlText(res, "Invoice not found. Start again.");
+}
+
   const amount = biz.sessionData.amount;
 
   const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
 
-  if (amount > invoice.balance) {
+if (amount > invoice.balance) {
+  biz.sessionState = "payment_amount";
+  await saveBiz(biz);
   return sendTwimlText(
     res,
-    `Payment exceeds invoice balance.\nBalance: ${formatMoney(invoice.balance)} ${invoice.currency}`
+    `Payment exceeds invoice balance.\nBalance: ${formatMoney(invoice.balance)} ${invoice.currency}\nEnter a valid amount:`
   );
 }
+
 
   // SAVE PAYMENT
   const payment = await Payment.create({
@@ -988,17 +1006,18 @@ if (state === "payment_method" && isSingleNumber) {
     paidBy: providerId
   });
 
-  invoice.amountPaid = (invoice.amountPaid || 0) + amount;
-invoice.balance = invoice.total - invoice.amountPaid;
+ const updatedInvoice = await Invoice.findByIdAndUpdate(
+  invoice._id,
+  {
+    $inc: { amountPaid: amount },
+    $set: {
+      status: invoice.balance - amount <= 0 ? "paid" : "partial",
+      balance: Math.max(invoice.balance - amount, 0)
+    }
+  },
+  { new: true }
+);
 
-if (invoice.balance <= 0) {
-  invoice.status = "paid";
-  invoice.balance = 0;
-} else {
-  invoice.status = "partial";
-}
-
-await invoice.save();
 
 
   // AUTO RECEIPT NUMBER (uses existing counters)
@@ -1014,7 +1033,7 @@ await invoice.save();
   invoiceId: invoice._id,
   paymentId: payment._id,
   number: receiptNumber,
-  type: invoice.balance === 0 ? "final" : "partial",
+type: updatedInvoice.balance === 0 ? "final" : "partial",
 
   amount
 });
@@ -1217,24 +1236,7 @@ Reply with number to edit.`;
 }
 
 
- if (state === "settings_menu" && trimmed === "8") {
-  const ok = await requireRole(biz, providerId, ["owner"]);
-  if (!ok) {
-    return sendTwimlText(res, "⛔ Only the owner can manage branches.");
-  }
 
-  biz.sessionState = "branches_menu";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-`Branches:
-1) View branches
-2) Add branch
-3) Assign user to branch
-0) Back`
-  );
-}
 
 
       return sendMenu(res);
@@ -1297,14 +1299,24 @@ Reply with number to edit.`;
         biz.sessionState = "settings_menu"; await saveBiz(biz);
         return sendTwimlText(res, lines.join("\n"));
       }
-      if (choice === "7") { biz.sessionState = "settings_rcpt_prefix"; await saveBiz(biz); return sendTwimlText(res, `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`); }
-      return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
-    }
+      if (choice === "7") {
+  biz.sessionState = "settings_rcpt_prefix";
+  await saveBiz(biz);
+  return sendTwimlText(
+    res,
+    `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}. Reply with new prefix.`
+  );
+}
 
-    // SETTINGS → BRANCHES MENU
-if (state === "settings_menu" && trimmed === "8") {
+if (choice === "8") {
+  const ok = await requireRole(biz, providerId, ["owner"]);
+  if (!ok) {
+    return sendTwimlText(res, "⛔ Only the business owner can manage branches.");
+  }
+
   biz.sessionState = "branches_menu";
   await saveBiz(biz);
+
   return sendTwimlText(
     res,
 `Branches:
@@ -1314,6 +1326,10 @@ if (state === "settings_menu" && trimmed === "8") {
 0) Back`
   );
 }
+
+      return sendTwimlText(res, "Invalid selection. Reply with setting number or 0 to go back.");
+    }
+
 
 // BRANCHES → VIEW BRANCHES
 if (state === "branches_menu" && trimmed === "1") {

@@ -778,10 +778,12 @@ const trimmed = text.trim();
 
 const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
-if (trimmed.toLowerCase() === "menu") {
+// GLOBAL MENU HANDLER (works everywhere)
+if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
   await resetSession(biz);
   return sendMenuForUser(res, biz, providerId);
 }
+
 
 
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
@@ -789,12 +791,13 @@ if (trimmed.toLowerCase() === "menu") {
 // DAILY REPORT (11)
 if ((state === "idle" || state === "ready") && trimmed === "11") {
 
- const { role, branchId } = await getUserBranchContext(biz, providerId);
+const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role || "owner";
+const branchId = ctx?.branchId || null;
 
-let branchFilter = {};
-if (role !== "owner") {
-  branchFilter.branchId = branchId;
-}
+
+
+
 
 
   const start = new Date();
@@ -813,7 +816,8 @@ if (role !== "owner") {
 }
 
 
-const invoices = await Invoice.find(query);
+const invoices = await Invoice.find(query).lean();
+
 
   const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
 
@@ -828,7 +832,7 @@ if (role !== "owner") {
 }
 
 
-const payments = await Payment.find(payQuery);
+const payments = await Payment.find(payQuery).lean()
 
 
 
@@ -845,7 +849,7 @@ if (role !== "owner") {
 }
 
 
-const expenses = await Expense.find(expQuery);
+const expenses = await Expense.find(expQuery).lean();
 
 
 const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
@@ -862,6 +866,30 @@ Outstanding: ${formatMoney(totalOutstanding)} ${biz.currency}`
 );
 
 
+}
+
+
+
+
+
+// SETTINGS MENU (7)
+if ((state === "idle" || state === "ready") && trimmed === "7") {
+  biz.sessionState = "settings_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Settings:
+1) Currency
+2) Payment terms
+3) Invoice prefix
+4) Quote prefix
+5) Change logo
+6) View clients
+7) Receipt prefix
+8) Branches
+0) Menu`
+  );
 }
 
 /* ================= CLIENT STATEMENT ================= */
@@ -889,9 +917,17 @@ if (state === "statement_choose_client") {
     );
   }
 
-  const { role, branchId } = await getUserBranchContext(biz, providerId);
+const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role || "owner";
+const branchId = ctx?.branchId || null;
 
-const invQuery = { clientId: client._id };
+
+
+const invQuery = {
+  businessId: biz._id,
+  clientId: client._id
+};
+
 
 if (role !== "owner") {
   invQuery.branchId = branchId;
@@ -930,7 +966,11 @@ Balance: ${formatMoney(balance)} ${biz.currency}`
 // START PAYMENT FLOW (RECENT UNPAID INVOICES)
 if ((state === "idle" || state === "ready") && trimmed === "9") {
 
-const { role, branchId } = await getUserBranchContext(biz, providerId);
+const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role || "owner";
+const branchId = ctx?.branchId || null;
+
+
 
 const invQuery = {
   businessId: biz._id,
@@ -968,15 +1008,6 @@ const invoices = await Invoice.find(invQuery)
 
 // PAYMENT: choose invoice from recent unpaid list
 if (state === "payment_choose_invoice" && isSingleNumber) {
-
-  if (trimmed === "0") {
-  await resetSession(biz);
-return sendMenuForUser(res, biz, providerId);
-
-
-
-
-  }
 
   const idx = Number(trimmed) - 1;
   const list = biz.sessionData.invoiceList || [];
@@ -1086,7 +1117,11 @@ if (!invoice) {
 
   const amount = biz.sessionData.amount;
 
-const { role, branchId } = await getUserBranchContext(biz, providerId);
+const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role || "owner";
+const branchId = ctx?.branchId || null;
+
+
 
 
 if (amount > invoice.balance) {
@@ -1185,10 +1220,17 @@ const client = await Client.findById(invoice.clientId);
 
 // STEP 1: expense amount
 if (state === "expense_amount") {
+
+  if (trimmed === "0") {
+    await resetSession(biz);
+    return sendMenuForUser(res, biz, providerId);
+  }
+
   const amount = Number(trimmed);
   if (isNaN(amount) || amount <= 0) {
-    return sendTwimlText(res, "Invalid amount. Enter a number.");
+    return sendTwimlText(res, "Invalid amount. Enter a number or 0 for menu.");
   }
+
 
   biz.sessionData.amount = amount;
   biz.sessionState = "expense_category";
@@ -1248,7 +1290,11 @@ if (state === "expense_method" && isSingleNumber) {
   const method = methods[trimmed];
   if (!method) return sendTwimlText(res, "Invalid choice.");
 
- const { role, branchId } = await getUserBranchContext(biz, providerId);
+const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role || "owner";
+const branchId = ctx?.branchId || null;
+
+
 
 
  await Expense.create({
@@ -1270,84 +1316,7 @@ if (state === "expense_method" && isSingleNumber) {
 
 
 
-    // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
-    if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
-      const num = trimmed;
 
-      // 2 = invoice, 4 = quote, 3 = receipt (mapping retained)
-      if (num === "2" || num === "4" || num === "3") {
-        if (!biz.name) {
-          biz.sessionState = "awaiting_first_choice";
-          await saveBiz(biz);
-          return sendTwimlText(res, "You need to create a business first. Reply 1 to create.");
-        }
-        let docType = "invoice";
-        if (num === "4") docType = "quote";
-        if (num === "3") docType = "receipt";
-
-        biz.sessionState = "creating_invoice_choose_client";
-        biz.sessionData = { items: [], docType, discountPercent: biz.sessionData.discountPercent || 0, vatPercent: biz.sessionData.vatPercent || Number(biz.taxRate || 0), applyVat: typeof biz.sessionData.applyVat === "undefined" ? true : !!biz.sessionData.applyVat };
-        await saveBiz(biz);
-
-        const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
-        return sendTwimlText(res, `Create ${label} | pick option:\n1) Use saved client\n2) New client\n3) Cancel`);
-      }
-
-      if (num === "1") {
-        if (biz.name) return sendTwimlText(res, `You already have a business: "${biz.name}". Reply 7 for settings.`);
-        biz.sessionState = "awaiting_business_name";
-        biz.sessionData = {};
-        await saveBiz(biz);
-        return sendTwimlText(res, "Great | what's your business name? (e.g. 'ABC Traders')");
-      }
-
-      if (num === "5") {
-        if (!biz.name) { biz.sessionState = "awaiting_first_choice"; await saveBiz(biz); return sendTwimlText(res, "You need to create a business first. Reply 1 to create."); }
-        biz.sessionState = "adding_client_name";
-        biz.sessionData = {};
-        await saveBiz(biz);
-        return sendTwimlText(res, "Adding client | what's the client name?");
-      }
-
-      if (num === "6") {
-        biz.sessionState = "awaiting_logo_upload";
-        biz.sessionData = {};
-        await saveBiz(biz);
-        return sendTwimlText(res, "Please send your business logo (as an image). Reply 1 to skip.");
-      }
-
-     if (num === "7") {
-  const ok = await requireRole(biz, providerId, ["owner"]);
-  if (!ok) {
-    return sendTwimlText(res, "⛔ Only the business owner can access Settings.");
-  }
-
-  biz.sessionState = "settings_menu";
-  await saveBiz(biz);
-
-  const sMsg = `Settings for ${biz.name || "(unnamed)"}:
-1) Currency
-2) Payment terms days
-3) Invoice prefix
-4) Quote prefix
-5) Change logo
-6) View clients
-7) Receipt prefix
-8) Branches
-0) Back
-Reply with number to edit.`;
-
-  return sendTwimlText(res, sMsg);
-}
-
-
-
-
-
-
-
-
-    }
 
     // Onboarding and simple states
     if (state === "awaiting_business_name") {
@@ -1582,11 +1551,11 @@ if (state === "branches_menu" && trimmed === "3") {
 
 // ASSIGN USER → PICK BRANCH
 if (state === "assign_user_choose_branch" && isSingleNumber) {
-  if (trimmed === "0") {
-    biz.sessionState = "branches_menu";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Cancelled.\n1) View branches\n2) Add branch\n3) Assign user\n0) Back");
-  }
+ if (trimmed === "0") {
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+  return sendTwimlText(res, "Cancelled.\n1) View branches\n2) Add branch\n3) Assign user\n0) Back");
+}
 
   const idx = Number(trimmed) - 1;
   const branches = biz.sessionData.branches || [];
@@ -2048,7 +2017,11 @@ if (state === "assign_user_role" && isSingleNumber) {
 
         const date = new Date();
         // ===== NEW: persist invoice before PDF =====
-const { role, branchId } = await getUserBranchContext(biz, providerId);
+const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role || "owner";
+const branchId = ctx?.branchId || null;
+
+
 
 
 const subtotal = items.reduce((s, it) => s + (it.qty * it.unit), 0);
@@ -2134,14 +2107,20 @@ const invoiceDoc = await Invoice.create({
       }
     }
 
+
+
+
+
     // fallback
   // fallback only when truly idle
+// FINAL fallback — do NOT override active flows
 if (state === "idle" || state === "ready") {
   return sendMenuForUser(res, biz, providerId);
 }
 
-// otherwise do nothing (wait for valid input)
-return sendTwimlText(res, "Invalid input. Reply 0 for menu.");
+// User is inside a flow, but typed something unexpected
+return sendTwimlText(res, "Invalid option. Reply with a number shown, or 0 for menu.");
+
 
 
 

@@ -14,6 +14,8 @@ import UserRole from "../models/userRole.js";
 import Invoice from "../models/invoice.js";
 import Payment from "../models/payment.js";
 import Receipt from "../models/receipt.js";
+import Expense from "../models/expense.js";
+
 
 
 let PDFDocument;
@@ -609,10 +611,15 @@ function sendMenu(res) {
 6) Upload logo
 7) Settings
 8) Help
-
+9) Record payment (IN)
+10) Record expense (OUT)
+11) Daily report
+12) Client statement
 `;
   return sendTwimlText(res, msg);
 }
+
+
 
 /* ---------- Main webhook (keeps your flow intact) ---------- */
 router.post("/webhook", async (req, res) => {
@@ -642,7 +649,7 @@ router.post("/webhook", async (req, res) => {
         sessionState: null,
         sessionData: {},
         counters: { invoice: 0, quote: 0, receipt: 0 },
-        currency: "USDc",
+        currency: "USD",
         invoicePrefix: "INV",
         quotePrefix: "QT",
         receiptPrefix: "RCPT",
@@ -691,6 +698,8 @@ if (!existingBranch) {
 const text = bodyRaw || "";
 const trimmed = text.trim();
 
+const isSingleNumber = /^\d+$/.test(trimmed);
+    const state = biz.sessionState || "idle";
 if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
   await resetSession(biz);
   return sendMenu(res);
@@ -698,8 +707,9 @@ if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
 
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 
-// DAILY REPORT
-if (/^report today$/i.test(trimmed)) {
+// DAILY REPORT (11)
+if ((state === "idle" || state === "ready") && trimmed === "11") {
+
   const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
 
   const start = new Date();
@@ -717,19 +727,52 @@ if (branch?._id) query.branchId = branch._id;
 
 const invoices = await Invoice.find(query);
 
-  const total = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
 
-  return sendTwimlText(
-    res,
-`📊 Daily Report
-Invoices: ${invoices.length}
-Total: ${formatMoney(total)} ${biz.currency}`
-  );
+const totalOutstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+const payments = await Payment.find({
+  businessId: biz._id,
+  createdAt: { $gte: start, $lte: end }
+});
+
+const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+
+
+
+const expenses = await Expense.find({
+  businessId: biz._id,
+  createdAt: { $gte: start, $lte: end }
+});
+
+const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+ return sendTwimlText(
+  res,
+`📊 Daily Report (${start.toISOString().slice(0,10)})
+
+Invoices issued: ${invoices.length}
+Sales (invoiced): ${formatMoney(totalInvoiced)} ${biz.currency}
+Cash received: ${formatMoney(totalReceived)} ${biz.currency}
+Expenses: ${formatMoney(totalExpenses)} ${biz.currency}
+Outstanding: ${formatMoney(totalOutstanding)} ${biz.currency}`
+);
+
+
 }
 
-// CLIENT STATEMENT
-if (/^statement\s+/i.test(trimmed)) {
-  const name = trimmed.replace(/^statement\s+/i, "").trim();
+/* ================= CLIENT STATEMENT ================= */
+
+// STEP 1: user chooses statement from menu
+if ((state === "idle" || state === "ready") && trimmed === "12") {
+  biz.sessionState = "statement_choose_client";
+  await saveBiz(biz);
+  return sendTwimlText(res, "Enter client name:");
+}
+
+// STEP 2: user enters client name
+if (state === "statement_choose_client") {
+  const name = trimmed;
 
   const client = await Client.findOne({
     businessId: biz._id,
@@ -737,30 +780,127 @@ if (/^statement\s+/i.test(trimmed)) {
   });
 
   if (!client) {
-    return sendTwimlText(res, "Client not found.");
+    return sendTwimlText(
+      res,
+      "Client not found. Try again or reply 0 for menu."
+    );
   }
 
   const invoices = await Invoice.find({ clientId: client._id });
-  const total = invoices.reduce((s, i) => s + (i.total || 0), 0);
+
+  const totalBilled = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const totalPaid = invoices.reduce((s, i) => s + (i.amountPaid || 0), 0);
+  const balance = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+  await resetSession(biz);
 
   return sendTwimlText(
     res,
 `📄 Statement: ${client.name}
+
 Invoices: ${invoices.length}
-Total billed: ${formatMoney(total)} ${biz.currency}`
+Total billed: ${formatMoney(totalBilled)} ${biz.currency}
+Paid: ${formatMoney(totalPaid)} ${biz.currency}
+Balance: ${formatMoney(balance)} ${biz.currency}`
   );
 }
-
 
 /* ================= PAYMENTS ================= */
 
 // START PAYMENT FLOW
-if (/^record payment$/i.test(trimmed)) {
+/*if (/^record payment$/i.test(trimmed)) {
   biz.sessionState = "payment_invoice_number";
   biz.sessionData = {};
   await saveBiz(biz);
   return sendTwimlText(res, "Enter invoice number (e.g. INV-000123)");
+}*/
+
+// START PAYMENT FLOW (RECENT UNPAID INVOICES)
+if ((state === "idle" || state === "ready") && trimmed === "9") {
+
+  const invoices = await Invoice.find({
+    businessId: biz._id,
+    balance: { $gt: 0 }
+  })
+  .sort({ createdAt: -1 })
+  .limit(5);
+
+  if (!invoices.length) {
+    return sendTwimlText(
+      res,
+      "✅ No unpaid invoices found.\nReply 0 for menu."
+    );
+  }
+
+  // store list in session
+  biz.sessionData.invoiceList = invoices;
+  biz.sessionState = "payment_choose_invoice";
+  await saveBiz(biz);
+
+  let msg = "Select invoice to pay:\n";
+  invoices.forEach((inv, i) => {
+    msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
+  });
+  msg += "0) Menu";
+
+  return sendTwimlText(res, msg);
 }
+
+// PAYMENT: choose invoice from recent unpaid list
+if (state === "payment_choose_invoice" && isSingleNumber) {
+
+  if (trimmed === "0") {
+    await resetSession(biz);
+    return sendMenu(res);
+  }
+
+  const idx = Number(trimmed) - 1;
+  const list = biz.sessionData.invoiceList || [];
+
+  if (!list[idx]) {
+    return sendTwimlText(
+      res,
+      "Invalid selection. Choose a number from the list or 0 for menu."
+    );
+  }
+
+  const invoice = list[idx];
+
+  // safety check
+  if (invoice.balance <= 0) {
+    await resetSession(biz);
+    return sendTwimlText(
+      res,
+      "Invoice already fully paid. Reply 0 for menu."
+    );
+  }
+
+  biz.sessionData.invoice = invoice;
+  biz.sessionState = "payment_amount";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Invoice ${invoice.number}
+Total: ${formatMoney(invoice.total)} ${invoice.currency}
+Paid: ${formatMoney(invoice.amountPaid || 0)} ${invoice.currency}
+Balance: ${formatMoney(invoice.balance)} ${invoice.currency}
+
+Enter amount paid:`
+  );
+}
+
+
+
+
+// START EXPENSE FLOW (OUTGOING)
+if ((state === "idle" || state === "ready") && trimmed === "10") {
+  biz.sessionState = "expense_amount";
+  biz.sessionData = {};
+  await saveBiz(biz);
+  return sendTwimlText(res, "Enter expense amount:");
+}
+
 
 /* ================= END REPORT COMMANDS ================= */
 
@@ -773,31 +913,12 @@ if (/^record payment$/i.test(trimmed)) {
       return sendTwimlText(res, `Welcome to ZimQuote 👋\nQuick setup:\n1) Create business account\n2) Try demo\n3) Help\nReply with a number.`);
     }
 
-    const isSingleNumber = /^\d+$/.test(trimmed);
-    const state = biz.sessionState || "idle";
+    
 
     /* ================= PAYMENT FLOW STATES ================= */
 
-// STEP 1: invoice number
-if (state === "payment_invoice_number") {
-  const invoice = await Invoice.findOne({
-    businessId: biz._id,
-    number: trimmed
-  });
 
-  if (!invoice) {
-    return sendTwimlText(res, "Invoice not found. Try again or type menu.");
-  }
 
-  biz.sessionData.invoice = invoice;
-  biz.sessionState = "payment_amount";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-    `Invoice ${invoice.number} found.\nEnter amount paid:`
-  );
-}
 
 // STEP 2: amount
 if (state === "payment_amount") {
@@ -837,6 +958,13 @@ if (state === "payment_method" && isSingleNumber) {
 
   const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
 
+  if (amount > invoice.balance) {
+  return sendTwimlText(
+    res,
+    `Payment exceeds invoice balance.\nBalance: ${formatMoney(invoice.balance)} ${invoice.currency}`
+  );
+}
+
   // SAVE PAYMENT
   const payment = await Payment.create({
     businessId: biz._id,
@@ -847,29 +975,47 @@ if (state === "payment_method" && isSingleNumber) {
     paidBy: providerId
   });
 
+  invoice.amountPaid = (invoice.amountPaid || 0) + amount;
+invoice.balance = invoice.total - invoice.amountPaid;
+
+if (invoice.balance <= 0) {
+  invoice.status = "paid";
+  invoice.balance = 0;
+} else {
+  invoice.status = "partial";
+}
+
+await invoice.save();
+
+
   // AUTO RECEIPT NUMBER (uses existing counters)
   biz.counters = biz.counters || { receipt: 0 };
   biz.counters.receipt = (biz.counters.receipt || 0) + 1;
 
   const receiptNumber = `${biz.receiptPrefix}-${String(biz.counters.receipt).padStart(6, "0")}`;
 
-  const receipt = await Receipt.create({
-    businessId: biz._id,
-    branchId: branch?._id,
-    invoiceId: invoice._id,
-    paymentId: payment._id,
-    number: receiptNumber,
-    amount
-  });
+ const receipt = await Receipt.create({
+  businessId: biz._id,
+  branchId: branch?._id,
+  clientId: invoice.clientId, // ✅ ADD THIS
+  invoiceId: invoice._id,
+  paymentId: payment._id,
+  number: receiptNumber,
+  type: invoice.balance === 0 ? "final" : "partial",
+
+  amount
+});
+
 
   await saveBiz(biz);
+const client = await Client.findById(invoice.clientId);
 
   // GENERATE RECEIPT PDF
   const { filename } = await generatePDF({
     type: "receipt",
     number: receiptNumber,
     date: new Date(),
-    billingTo: invoice.clientId?.name || "Client",
+    billingTo: client?.name || "Client",
     items: [
       { item: `Payment for ${invoice.number}`, qty: 1, unit: amount }
     ],
@@ -898,6 +1044,94 @@ if (state === "payment_method" && isSingleNumber) {
 }
 
 /* ================= END PAYMENT FLOW STATES ================= */
+
+/* ================= EXPENSE FLOW STATES ================= */
+
+// STEP 1: expense amount
+if (state === "expense_amount") {
+  const amount = Number(trimmed);
+  if (isNaN(amount) || amount <= 0) {
+    return sendTwimlText(res, "Invalid amount. Enter a number.");
+  }
+
+  biz.sessionData.amount = amount;
+  biz.sessionState = "expense_category";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Expense category:
+1) Rent
+2) Transport
+3) Salaries
+4) Utilities
+5) Supplies
+6) Other`
+  );
+}
+
+
+// STEP 2: expense category
+if (state === "expense_category" && isSingleNumber) {
+  const categories = {
+    "1": "Rent",
+    "2": "Transport",
+    "3": "Salaries",
+    "4": "Utilities",
+    "5": "Supplies",
+    "6": "Other"
+  };
+
+  const category = categories[trimmed];
+  if (!category) return sendTwimlText(res, "Invalid choice.");
+
+  biz.sessionData.category = category;
+  biz.sessionState = "expense_method";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Payment method:
+1) Cash
+2) Bank
+3) EcoCash
+4) Other`
+  );
+}
+
+
+// STEP 3: expense method → SAVE
+if (state === "expense_method" && isSingleNumber) {
+  const methods = {
+    "1": "cash",
+    "2": "bank",
+    "3": "ecocash",
+    "4": "other"
+  };
+
+  const method = methods[trimmed];
+  if (!method) return sendTwimlText(res, "Invalid choice.");
+
+  const branch = await Branch.findOne({ businessId: biz._id, isDefault: true });
+
+  await Expense.create({
+    businessId: biz._id,
+    branchId: branch?._id,
+    amount: biz.sessionData.amount,
+    category: biz.sessionData.category,
+    method,
+    createdBy: providerId
+  });
+
+  await resetSession(biz);
+
+  return sendTwimlText(res, "✅ Expense recorded successfully.");
+}
+
+/* ================= END EXPENSE FLOW STATES ================= */
+
+
+
 
     // Accept numeric top-level commands when state is idle, awaiting_first_choice OR ready.
     if ((state === "idle" || state === "awaiting_first_choice" || state === "ready") && isSingleNumber) {
@@ -1436,25 +1670,32 @@ const vatAmount = (biz.sessionData.applyVat !== false)
   ? (subtotal - discountAmount) * (vatPercent / 100)
   : 0;
 const total = subtotal - discountAmount + vatAmount;
-
 const invoiceDoc = await Invoice.create({
   businessId: biz._id,
   branchId: branch?._id,
   clientId: client?._id,
   number: numberStr,
   currency: biz.currency,
+
   items: items.map(i => ({
     item: i.item,
     qty: i.qty,
     unit: i.unit,
     total: i.qty * i.unit
   })),
+
   subtotal,
   discountPercent,
   discountAmount,
   vatPercent,
   vatAmount,
   total,
+
+  // ✅ NEW FIELDS (IMPORTANT)
+  amountPaid: 0,
+  balance: total,
+  status: "unpaid",
+
   createdBy: providerId
 });
 
@@ -1480,7 +1721,9 @@ const invoiceDoc = await Invoice.create({
               originalAmount: biz.sessionData.originalAmount || undefined,
               amountPaid: biz.sessionData.amountPaid || undefined,
               currentBalance: biz.sessionData.currentBalance || undefined,
-              status: biz.status || undefined
+              //status: biz.status || undefined
+              status: invoiceDoc.status
+
             }
           });
           // save updated counters

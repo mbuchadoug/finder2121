@@ -635,7 +635,7 @@ router.post("/webhook", async (req, res) => {
         sessionState: null,
         sessionData: {},
         counters: { invoice: 0, quote: 0, receipt: 0 },
-        currency: "USDc",
+        currency: "USD",
         invoicePrefix: "INV",
         quotePrefix: "QT",
         receiptPrefix: "RCPT",

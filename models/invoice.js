@@ -8,6 +8,23 @@ const InvoiceSchema = new mongoose.Schema({
   number: { type: String, index: true },
   currency: String,
 
+  status: {
+  type: String,
+  enum: ["unpaid", "partial", "paid"],
+  default: "unpaid"
+},
+
+amountPaid: {
+  type: Number,
+  default: 0
+},
+
+balance: {
+  type: Number,
+  default: 0
+}
+,
+
   items: [{
     item: String,
     qty: Number,

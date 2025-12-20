@@ -953,6 +953,26 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
 
 }
 
+if (action === "daily_report") {
+  biz.sessionState = "report_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`📊 Reports
+1) Today
+2) By date
+3) By month
+4) By year
+0) Menu`
+  );
+}
+
+if (action === "statement") {
+  biz.sessionState = "statement_choose_client";
+  await saveBiz(biz);
+  return sendTwimlText(res, "Enter client name:");
+}
 
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 

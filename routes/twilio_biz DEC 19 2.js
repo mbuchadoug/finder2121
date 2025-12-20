@@ -16,7 +16,6 @@ import Payment from "../models/payment.js";
 import Receipt from "../models/receipt.js";
 import Expense from "../models/expense.js";
 
-import UserSession from "../models/userSession.js";
 
 
 let PDFDocument;
@@ -719,87 +718,55 @@ router.post("/webhook", async (req, res) => {
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
     const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
+    let biz = await Business.findOne({ provider: "whatsapp", providerId });
+    if (!biz) {
+      biz = await Business.create({
+        provider: "whatsapp",
+        providerId,
+        name: null,
+        sessionState: null,
+        sessionData: {},
+        counters: { invoice: 0, quote: 0, receipt: 0 },
+        currency: "USD",
+        invoicePrefix: "INV",
+        quotePrefix: "QT",
+        receiptPrefix: "RCPT",
+        paymentTermsDays: 30,
+        // these are business defaults but we won't expose VAT in settings per your request;
+        // we still keep defaults so documents can prefill if desired
+        taxRate: 15,
+        applyTax: true
+      });
 
-
-  
-
-const session = await UserSession.findOne({ phone: providerId });
-
-let biz = null;
-if (session?.activeBusinessId) {
-  biz = await Business.findById(session.activeBusinessId);
-}
-
-
-// Ensure sessionData defaults for vat/discount when starting a document
- // ✅ SAFE: only initialize when biz exists
-if (biz) {
-  if (!biz.sessionData) biz.sessionData = {};
-
-  biz.sessionData.discountPercent =
-    typeof biz.sessionData.discountPercent === "undefined"
-      ? 0
-      : biz.sessionData.discountPercent;
-
-  if (typeof biz.sessionData.vatPercent === "undefined") {
-    biz.sessionData.vatPercent = Number(biz.taxRate || 0);
-  }
-
-  if (typeof biz.sessionData.applyVat === "undefined") {
-    biz.sessionData.applyVat = true;
-  }
-}
-
-  
-
-// 🚨 No active business selected
-if (!biz) {
-  const roles = await UserRole.find({ phone: providerId }).populate("businessId");
-
-  // User belongs to NO businesses
-  if (!roles.length) {
-    return sendTwimlText(
-      res,
-`Welcome to ZimQuote 👋
-You are not linked to any business.
-
-1) Create new business`
-    );
-  }
-
-  // User belongs to ONE business → auto-select
-  if (roles.length === 1) {
-    await UserSession.findOneAndUpdate(
-      { phone: providerId },
-      { activeBusinessId: roles[0].businessId._id },
-      { upsert: true }
-    );
-
-    return sendTwimlText(
-      res,
-      `Switched to ${roles[0].businessId.name}\nReply 'menu' to continue.`
-    );
-  }
-
-  // User belongs to MULTIPLE businesses
-  let msg = "Select a business:\n";
-  roles.forEach((r, i) => {
-    msg += `${i + 1}) ${r.businessId.name} (${r.role})\n`;
+      const existingBranch = await Branch.findOne({ businessId: biz._id });
+if (!existingBranch) {
+  const branch = await Branch.create({
+    businessId: biz._id,
+    name: "Main Branch",
+    isDefault: true
   });
-  msg += `${roles.length + 1}) ➕ Create new business`;
 
-  // store for selection
-  await UserSession.findOneAndUpdate(
-    { phone: providerId },
-    { activeBusinessId: null, pendingChoices: roles.map(r => r.businessId._id) },
-    { upsert: true }
-  );
-
-  return sendTwimlText(res, msg);
+  await UserRole.create({
+    businessId: biz._id,
+    branchId: branch._id,
+    phone: providerId,
+    role: "owner"
+  });
 }
 
+      console.log("TWILIO (biz): created business record", biz._id?.toString());
+    }
 
-
+    // Ensure sessionData defaults for vat/discount when starting a document
+    if (!biz.sessionData) biz.sessionData = {};
+    // initialize session-level values when missing
+    biz.sessionData.discountPercent = (typeof biz.sessionData.discountPercent === "undefined") ? 0 : biz.sessionData.discountPercent;
+    if (typeof biz.sessionData.vatPercent === "undefined") {
+      biz.sessionData.vatPercent = Number(biz.taxRate || 0);
+    }
+    if (typeof biz.sessionData.applyVat === "undefined") {
+      biz.sessionData.applyVat = true;
+    }
 
     if (profileName && !biz.name) {
       biz.name = biz.name || profileName;
@@ -811,11 +778,6 @@ const trimmed = text.trim();
 
 const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
-
-
-
-
-
 // GLOBAL MENU HANDLER (works everywhere)
 if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
   await resetSession(biz);

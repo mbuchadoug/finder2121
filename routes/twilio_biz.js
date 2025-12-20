@@ -951,9 +951,7 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
 0) Menu`);
   }
 
-}
-
-if (action === "daily_report") {
+  if (action === "daily_report") {
   biz.sessionState = "report_menu";
   await saveBiz(biz);
 
@@ -973,6 +971,9 @@ if (action === "statement") {
   await saveBiz(biz);
   return sendTwimlText(res, "Enter client name:");
 }
+
+}
+
 
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 

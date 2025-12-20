@@ -1010,20 +1010,50 @@ if (action === "payment") {
 0) Menu`);
   }
 
-  if (action === "daily_report") {
-  biz.sessionState = "report_menu";
-  await saveBiz(biz);
+if (action === "daily_report") {
+
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const query = {
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  if (role !== "owner" && branchId) {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query).lean();
+  const payments = await Payment.find(query).lean();
+  const expenses = await Expense.find(query).lean();
+
+  const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const totalOutstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+  const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+  await resetSession(biz);
 
   return sendTwimlText(
     res,
-`📊 Reports
-1) Today
-2) By date
-3) By month
-4) By year
-0) Menu`
+`📊 Daily Report (${start.toISOString().slice(0,10)})
+
+Invoices issued: ${invoices.length}
+Sales (invoiced): ${formatMoney(totalInvoiced)} ${biz.currency}
+Cash received: ${formatMoney(totalReceived)} ${biz.currency}
+Expenses: ${formatMoney(totalExpenses)} ${biz.currency}
+Outstanding: ${formatMoney(totalOutstanding)} ${biz.currency}`
   );
 }
+
 
 if (action === "statement") {
   biz.sessionState = "statement_choose_client";
@@ -1082,86 +1112,9 @@ if (state === "payment_start") {
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 
 
-// REPORT MENU SELECTION
-if (state === "report_menu" && isSingleNumber) {
 
-  if (trimmed === "0") {
-    await resetSession(biz);
-    return sendMenuForUser(res, biz, providerId);
-  }
 
-  if (trimmed === "1") {
-    biz.sessionState = "report_today";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Generating today’s report…");
-  }
 
-  if (trimmed === "2") {
-    biz.sessionState = "report_by_date";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Enter date (YYYY-MM-DD):");
-  }
-
-  if (trimmed === "3") {
-    biz.sessionState = "report_by_month";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Enter month (YYYY-MM):");
-  }
-
-  if (trimmed === "4") {
-    biz.sessionState = "report_by_year";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Enter year (YYYY):");
-  }
-
-  return sendTwimlText(res, "Invalid option.");
-}
-
-// TODAY REPORT
-if (state === "report_today") {
-
-  const ctx = await getUserBranchContext(biz, providerId);
-  const role = ctx?.role || "owner";
-  const branchId = ctx?.branchId || null;
-
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
-  const query = {
-    businessId: biz._id,
-    createdAt: { $gte: start, $lte: end }
-  };
-
-if (role !== "owner" && branchId) {
-  query.branchId = branchId;
-}
-
-  const invoices = await Invoice.find(query).lean();
-  const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
-  const totalOutstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-
-  const payments = await Payment.find(query).lean();
-  const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
-
-  const expenses = await Expense.find(query).lean();
-  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-
-  await resetSession(biz);
-
-  return sendTwimlText(
-    res,
-`📊 Daily Report (${start.toISOString().slice(0,10)})
-
-Invoices issued: ${invoices.length}
-Sales (invoiced): ${formatMoney(totalInvoiced)} ${biz.currency}
-Cash received: ${formatMoney(totalReceived)} ${biz.currency}
-Expenses: ${formatMoney(totalExpenses)} ${biz.currency}
-Outstanding: ${formatMoney(totalOutstanding)} ${biz.currency}`
-  );
-}
 
 
 

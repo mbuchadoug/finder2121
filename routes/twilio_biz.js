@@ -1068,9 +1068,9 @@ if (state === "report_today") {
     createdAt: { $gte: start, $lte: end }
   };
 
-  if (role !== "owner") {
-    query.branchId = branchId;
-  }
+if (role !== "owner" && branchId) {
+  query.branchId = branchId;
+}
 
   const invoices = await Invoice.find(query).lean();
   const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
@@ -1279,9 +1279,10 @@ const invQuery = {
 };
 
 
-if (role !== "owner") {
+if (role !== "owner" && branchId) {
   invQuery.branchId = branchId;
 }
+
 
 const invoices = await Invoice.find(invQuery);
 
@@ -1328,9 +1329,10 @@ if (state === "payment_start") {
   };
 
   // Managers & clerks only see their branch invoices
-  if (role !== "owner") {
-    query.branchId = branchId;
-  }
+ if (role !== "owner" && branchId) {
+  query.branchId = branchId;
+}
+
 
   const invoices = await Invoice.find(query)
     .sort({ createdAt: -1 })

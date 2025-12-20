@@ -1055,6 +1055,26 @@ if (action === "statement") {
   return sendTwimlText(res, "Enter client name:");
 }
 
+if (action === "invite_user") {
+  const ok = await requireRole(biz, providerId, ["owner"]);
+  if (!ok) {
+    return sendTwimlText(res, "⛔ Only the owner can invite users.");
+  }
+
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`Invite user:
+1) View branches
+2) Add branch
+3) Assign user to branch
+0) Back`
+  );
+}
+
+
 }
 
 // ================= PAYMENT START =================

@@ -631,22 +631,20 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
 }
 function resolveMenuAction(role, choice) {
   const maps = {
-   owner: {
-  "1": "create_business",
-  "2": "invoice",
-  "3": "receipt",
-  "4": "quote",
-  "5": "add_client",
-
-  "6": "payment",
-  "7": "expense",
-  "8": "reports_menu",
-  "9": "statement",
-
-  "10": "invite_user",
-  "11": "upload_logo",
-  "12": "settings"
-},
+    owner: {
+      "1": "create_business",
+      "2": "invoice",
+      "3": "receipt",
+      "4": "quote",
+      "5": "add_client",
+      "6": "upload_logo",
+      "7": "settings",
+      "8": "invite_user",
+      "9": "payment",
+      "10": "expense",
+      "11": "reports_menu",
+      "12": "statement"
+    },
     manager: {
       "1": "invoice",
       "2": "receipt",
@@ -678,16 +676,15 @@ function ownerMenu() {
 3) New receipt
 4) New quotation
 5) Add client
-6) Record payment (IN)
-7) Record expense (OUT)
-8) Reports
-9) Client statement
-10) Invite user
-11) Upload logo
-12) Settings
+6) Upload logo
+7) Settings
+8) Invite user
+9) Record payment (IN)
+10) Record expense (OUT)
+11) Reports
+12) Client statement
 0) Menu`;
 }
-
 
 function managerMenu() {
   return `ZimQuote — Manager Menu

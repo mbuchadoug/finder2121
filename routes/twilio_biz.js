@@ -525,8 +525,8 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 ////////////////////////////////////////////////////////////////////////////
 async function sendWhatsAppMessage(toPhone, message) {
   const client = twilio(
-    process.env.TWILIO_ACCOUNT_SID,
-    process.env.TWILIO_AUTH_TOKEN
+    process.env.TWILIO_BIZ_ACCOUNT_SID,
+    process.env.TWILIO_BIZ_AUTH_TOKEN
   );
 
   return client.messages.create({
@@ -535,6 +535,7 @@ async function sendWhatsAppMessage(toPhone, message) {
     body: message
   });
 }
+
 
 /* ---------- Logo saving helpers ---------- */
 async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }

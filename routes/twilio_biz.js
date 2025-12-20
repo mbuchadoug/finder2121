@@ -936,6 +936,26 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
     return sendTwimlText(res, "Fetching unpaid invoices...");
   }
 
+
+    if (action === "receipt") {
+    biz.sessionState = "creating_invoice_choose_client";
+    biz.sessionData = { docType: "receipt", items: [] };
+    await saveBiz(biz);
+    return sendTwimlText(
+      res,
+      "Receipt:\n1) Use saved client\n2) New client\n3) Cancel"
+    );
+  }
+
+
+    if (action === "expense") {
+    biz.sessionState = "expense_amount";
+    biz.sessionData = {};
+    await saveBiz(biz);
+    return sendTwimlText(res, "Enter expense amount:");
+  }
+
+
   if (action === "settings") {
     biz.sessionState = "settings_menu";
     await saveBiz(biz);
@@ -1293,48 +1313,6 @@ Balance: ${formatMoney(balance)} ${biz.currency}`
   return sendTwimlText(res, "Enter invoice number (e.g. INV-000123)");
 }*/
 
-// START PAYMENT FLOW (RECENT UNPAID INVOICES)
-if ((state === "idle" || state === "ready") && trimmed === "9") {
-
-const ctx = await getUserBranchContext(biz, providerId);
-const role = ctx?.role || "owner";
-const branchId = ctx?.branchId || null;
-
-
-
-const invQuery = {
-  businessId: biz._id,
-  balance: { $gt: 0 }
-};
-
-if (role !== "owner") {
-  invQuery.branchId = branchId;
-}
-
-const invoices = await Invoice.find(invQuery)
-  .sort({ createdAt: -1 })
-  .limit(5);
-
-  if (!invoices.length) {
-    return sendTwimlText(
-      res,
-      "✅ No unpaid invoices found.\nReply 0 for menu."
-    );
-  }
-
-  // store list in session
-  biz.sessionData.invoiceList = invoices;
-  biz.sessionState = "payment_choose_invoice";
-  await saveBiz(biz);
-
-  let msg = "Select invoice to pay:\n";
-  invoices.forEach((inv, i) => {
-    msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
-  });
-  msg += "0) Menu";
-
-  return sendTwimlText(res, msg);
-}
 
 // PAYMENT: choose invoice from recent unpaid list
 if (state === "payment_choose_invoice" && isSingleNumber) {
@@ -1379,13 +1357,6 @@ Enter amount paid:`
 
 
 
-// START EXPENSE FLOW (OUTGOING)
-if ((state === "idle" || state === "ready") && trimmed === "10") {
-  biz.sessionState = "expense_amount";
-  biz.sessionData = {};
-  await saveBiz(biz);
-  return sendTwimlText(res, "Enter expense amount:");
-}
 
 
 /* ================= END REPORT COMMANDS ================= */

@@ -930,11 +930,47 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
   }
 
 if (action === "payment") {
-  biz.sessionState = "payment_start";
+
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+  const query = {
+    businessId: biz._id,
+    balance: { $gt: 0 }
+  };
+
+  // Branch restriction for manager / clerk
+  if (role !== "owner" && branchId) {
+    query.$or = [
+      { branchId },
+      { branchId: { $exists: false } },
+      { branchId: null }
+    ];
+  }
+
+  const invoices = await Invoice.find(query)
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!invoices.length) {
+    await resetSession(biz);
+    return sendTwimlText(res, "No unpaid invoices found.");
+  }
+
+  // store invoices for next step
+  biz.sessionData.invoiceList = invoices;
+  biz.sessionState = "payment_choose_invoice";
   await saveBiz(biz);
 
-  // FORCE immediate response so Twilio doesn't get silence
-  return sendTwimlText(res, "Fetching unpaid invoices...");
+  let msg = "Select invoice to record payment:\n";
+  invoices.forEach((inv, i) => {
+    msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
+  });
+  msg += "0) Cancel";
+
+  return sendTwimlText(res, msg);
 }
 
 

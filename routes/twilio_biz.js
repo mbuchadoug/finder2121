@@ -891,7 +891,8 @@ if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
 }
 
 // ===== ROLE-BASED MAIN MENU ROUTER =====
-if ((state === "idle" || state === "ready") && isSingleNumber) {
+if ((state === "idle" || state === "ready") && isSingleNumber && !state.startsWith("report_")) {
+
 
   const { role } = await getUserBranchContext(biz, providerId);
   const action = resolveMenuAction(role, trimmed);
@@ -1143,6 +1144,222 @@ if (state === "reports_menu" && isSingleNumber) {
 
   return sendTwimlText(res, "Invalid report option.");
 }
+
+/* ================= REPORT BY BRANCH ================= */
+
+if (state === "report_choose_branch" && isSingleNumber) {
+
+  // 0) Cancel
+  if (trimmed === "0") {
+    await resetSession(biz);
+    return sendMenuForUser(res, biz, providerId);
+  }
+
+  const branches = biz.sessionData.branches || [];
+  const idx = Number(trimmed) - 1;
+
+  if (!branches[idx]) {
+    return sendTwimlText(
+      res,
+      "Invalid branch selection. Reply with a number shown or 0 to cancel."
+    );
+  }
+
+  const branch = branches[idx];
+
+  // move to final report state
+  biz.sessionData.branchId = branch._id;
+  biz.sessionState = "report_branch_summary";
+  await saveBiz(biz);
+
+  // auto-trigger report immediately
+  return res.redirect(307, req.originalUrl);
+}
+
+
+if (state === "report_branch_summary") {
+
+  const branchId = biz.sessionData.branchId;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const query = {
+    businessId: biz._id,
+    branchId,
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  const invoices = await Invoice.find(query).lean();
+  const payments = await Payment.find(query).lean();
+  const expenses = await Expense.find(query).lean();
+
+  const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+  const branch = await Branch.findById(branchId);
+
+  await resetSession(biz);
+
+  return sendTwimlText(
+    res,
+`📍 Branch Report: ${branch?.name || "Branch"}
+
+Invoices: ${invoices.length}
+Sales: ${formatMoney(totalInvoiced)} ${biz.currency}
+Cash received: ${formatMoney(totalReceived)} ${biz.currency}
+Expenses: ${formatMoney(totalExpenses)} ${biz.currency}
+Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
+  );
+}
+
+if (state === "report_daily") {
+
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const query = {
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  if (role !== "owner" && branchId) {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query).lean();
+  const payments = await Payment.find(query).lean();
+  const expenses = await Expense.find(query).lean();
+
+  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const received = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+  await resetSession(biz);
+
+  return sendTwimlText(
+    res,
+`📊 Daily Report (${start.toISOString().slice(0,10)})
+
+Invoices: ${invoices.length}
+Sales: ${formatMoney(invoiced)} ${biz.currency}
+Cash received: ${formatMoney(received)} ${biz.currency}
+Expenses: ${formatMoney(spent)} ${biz.currency}
+Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
+  );
+}
+
+
+
+
+if (state === "report_weekly") {
+
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+  const start = new Date();
+  start.setDate(start.getDate() - 6);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const query = {
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  if (role !== "owner" && branchId) {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query).lean();
+  const payments = await Payment.find(query).lean();
+  const expenses = await Expense.find(query).lean();
+
+  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const received = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+  await resetSession(biz);
+
+  return sendTwimlText(
+    res,
+`📊 Weekly Report
+
+Invoices: ${invoices.length}
+Sales: ${formatMoney(invoiced)} ${biz.currency}
+Cash received: ${formatMoney(received)} ${biz.currency}
+Expenses: ${formatMoney(spent)} ${biz.currency}
+Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
+  );
+}
+
+
+
+
+
+if (state === "report_monthly") {
+
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const query = {
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  if (role !== "owner" && branchId) {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query).lean();
+  const payments = await Payment.find(query).lean();
+  const expenses = await Expense.find(query).lean();
+
+  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const received = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+  await resetSession(biz);
+
+  return sendTwimlText(
+    res,
+`📊 Monthly Report
+
+Invoices: ${invoices.length}
+Sales: ${formatMoney(invoiced)} ${biz.currency}
+Cash received: ${formatMoney(received)} ${biz.currency}
+Expenses: ${formatMoney(spent)} ${biz.currency}
+Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
+  );
+}
+
+
 
 
 

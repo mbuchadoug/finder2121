@@ -929,12 +929,12 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
     return sendTwimlText(res, "Enter client name:");
   }
 
-  if (action === "payment") {
-    // let your existing payment flow handle this
-    biz.sessionState = "payment_start";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Fetching unpaid invoices...");
-  }
+if (action === "payment") {
+  biz.sessionState = "payment_start";
+  await saveBiz(biz);
+  // ❗ DO NOT RETURN
+}
+
 
 
     if (action === "receipt") {
@@ -1008,9 +1008,14 @@ if (state === "payment_start") {
     balance: { $gt: 0 }
   };
 
-  if (role !== "owner") {
-    query.branchId = branchId;
-  }
+ if (role !== "owner" && branchId) {
+  query.$or = [
+    { branchId },
+    { branchId: { $exists: false } },
+    { branchId: null }
+  ];
+}
+
 
   const invoices = await Invoice.find(query)
     .sort({ createdAt: -1 })

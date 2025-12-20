@@ -629,20 +629,56 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   const publicUrl = site ? `${site}/docs/logos/${filename}` : `/docs/logos/${filename}`;
   return { filepath, filename, publicUrl };
 }
+function resolveMenuAction(role, choice) {
+  const maps = {
+    owner: {
+      "1": "create_business",
+      "2": "invoice",
+      "3": "receipt",
+      "4": "quote",
+      "5": "add_client",
+      "6": "upload_logo",
+      "7": "settings",
+      "8": "invite_user",
+      "9": "payment",
+      "10": "expense",
+      "11": "daily_report",
+      "12": "statement"
+    },
+    manager: {
+      "1": "invoice",
+      "2": "receipt",
+      "3": "quote",
+      "4": "add_client",
+      "5": "payment",
+      "6": "expense",
+      "7": "daily_report",
+      "8": "statement"
+    },
+    clerk: {
+      "1": "invoice",
+      "2": "payment",
+      "3": "expense",
+      "4": "daily_report"
+    }
+  };
+
+  return maps[role]?.[choice] || null;
+}
 
 async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return saveBiz(biz); }
 
 /* ---------- Role-based Menus ---------- */
-
-function ownerMenu(biz) {
+function ownerMenu() {
   return `ZimQuote — Owner Menu
-1) Create business account
+1) Create business
 2) New invoice
 3) New receipt
 4) New quotation
 5) Add client
 6) Upload logo
 7) Settings
+8) Invite user
 9) Record payment (IN)
 10) Record expense (OUT)
 11) Daily report
@@ -650,27 +686,29 @@ function ownerMenu(biz) {
 0) Menu`;
 }
 
-function managerMenu(biz) {
+function managerMenu() {
   return `ZimQuote — Manager Menu
-2) New invoice
-3) New receipt
-4) New quotation
-5) Add client
-9) Record payment (IN)
-10) Record expense (OUT)
-11) Daily report
-12) Client statement
+1) New invoice
+2) New receipt
+3) New quotation
+4) Add client
+5) Record payment (IN)
+6) Record expense (OUT)
+7) Daily report
+8) Client statement
 0) Menu`;
 }
 
-function clerkMenu(biz) {
+
+function clerkMenu() {
   return `ZimQuote — Clerk Menu
-2) New invoice
-9) Record payment (IN)
-10) Record expense (OUT)
-11) Daily summary
+1) New invoice
+2) Record payment (IN)
+3) Record expense (OUT)
+4) Daily summary
 0) Menu`;
 }
+
 
 /* ---------- Menu dispatcher ---------- */
 async function sendMenuForUser(res, biz, providerId) {
@@ -798,6 +836,32 @@ You are not linked to any business.
   return sendTwimlText(res, msg);
 }
 
+// ===== CREATE BUSINESS WHEN NO ACTIVE BUSINESS =====
+if (!biz && trimmed === "1") {
+  const newBiz = await Business.create({
+    name: null,
+    currency: "ZWL",
+    provider: "whatsapp"
+  });
+
+  // assign creator as OWNER
+  await UserRole.create({
+    businessId: newBiz._id,
+    phone: providerId,
+    role: "owner"
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: newBiz._id },
+    { upsert: true }
+  );
+
+  return sendTwimlText(
+    res,
+    "Business created.\nEnter business name:"
+  );
+}
 
 
 
@@ -812,6 +876,10 @@ const trimmed = text.trim();
 const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
+    const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role;
+
+
 
 
 
@@ -822,54 +890,67 @@ if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
   return sendMenuForUser(res, biz, providerId);
 }
 
-// ===== MAIN MENU OPTIONS (1–6) =====
+// ===== ROLE-BASED MAIN MENU ROUTER =====
 if ((state === "idle" || state === "ready") && isSingleNumber) {
 
-  // 1) Create business
-  if (trimmed === "1") {
-    if (biz.name) {
-      return sendTwimlText(res, `Business already exists: ${biz.name}\nReply 7 for settings.`);
-    }
+  const { role } = await getUserBranchContext(biz, providerId);
+  const action = resolveMenuAction(role, trimmed);
+
+  if (!action) {
+    return sendTwimlText(res, "Invalid selection. Reply 0 for menu.");
+  }
+
+  // ---- ROUTE BY ACTION ----
+
+  if (action === "create_business") {
     biz.sessionState = "awaiting_business_name";
     await saveBiz(biz);
     return sendTwimlText(res, "Enter business name:");
   }
 
-  // 2) New invoice
-  if (trimmed === "2") {
+  if (action === "invoice") {
     biz.sessionState = "creating_invoice_choose_client";
     biz.sessionData = { docType: "invoice", items: [] };
     await saveBiz(biz);
     return sendTwimlText(res, "Invoice:\n1) Use saved client\n2) New client\n3) Cancel");
   }
 
-  // 3) New receipt
-  if (trimmed === "3") {
-    return sendTwimlText(res, "Use option 9 to record payments and auto-generate receipts.");
-  }
-
-  // 4) New quotation
-  if (trimmed === "4") {
+  if (action === "quote") {
     biz.sessionState = "creating_invoice_choose_client";
     biz.sessionData = { docType: "quote", items: [] };
     await saveBiz(biz);
     return sendTwimlText(res, "Quotation:\n1) Use saved client\n2) New client\n3) Cancel");
   }
 
-  // 5) Add client
-  if (trimmed === "5") {
+  if (action === "add_client") {
     biz.sessionState = "adding_client_name";
     biz.sessionData = {};
     await saveBiz(biz);
     return sendTwimlText(res, "Enter client name:");
   }
 
-  // 6) Upload logo
-  if (trimmed === "6") {
-    biz.sessionState = "awaiting_logo_upload";
+  if (action === "payment") {
+    // let your existing payment flow handle this
+    biz.sessionState = "payment_start";
     await saveBiz(biz);
-    return sendTwimlText(res, "Send your logo image now.");
+    return sendTwimlText(res, "Fetching unpaid invoices...");
   }
+
+  if (action === "settings") {
+    biz.sessionState = "settings_menu";
+    await saveBiz(biz);
+    return sendTwimlText(res, `Settings:
+1) Currency
+2) Payment terms
+3) Invoice prefix
+4) Quote prefix
+5) Change logo
+6) View clients
+7) Receipt prefix
+8) Branches
+0) Menu`);
+  }
+
 }
 
 

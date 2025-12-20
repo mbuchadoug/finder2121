@@ -522,19 +522,6 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
   });
 }
 
-////////////////////////////////////////////////////////////////////////////
-async function sendWhatsAppMessage(toPhone, message) {
-  const client = twilio(
-    process.env.TWILIO_ACCOUNT_SID,
-    process.env.TWILIO_AUTH_TOKEN
-  );
-
-  return client.messages.create({
-    from: "whatsapp:" + process.env.TWILIO_WHATSAPP_NUMBER,
-    to: "whatsapp:" + toPhone,
-    body: message
-  });
-}
 
 /* ---------- Logo saving helpers ---------- */
 async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }
@@ -2066,7 +2053,6 @@ if (state === "assign_user_role" && isSingleNumber) {
   const branch = biz.sessionData.branch;
   const phone = biz.sessionData.userPhone;
 
-  // save role
   await UserRole.findOneAndUpdate(
     {
       businessId: biz._id,
@@ -2077,43 +2063,15 @@ if (state === "assign_user_role" && isSingleNumber) {
     { upsert: true }
   );
 
-  // 🔔 SEND INVITATION MESSAGE
-  const botNumber = process.env.TWILIO_WHATSAPP_NUMBER.replace(/\D+/g, "");
-  const joinLink = `https://wa.me/${botNumber}?text=JOIN`;
-
-  const inviteMsg =
-`👋 You’ve been invited to ${biz.name}
-
-📍 Branch: ${branch.name}
-🔑 Role: ${role}
-
-👉 Click to activate:
-${joinLink}
-
-Or reply *JOIN* to this message.`;
-
-  try {
-    await sendWhatsAppMessage(phone, inviteMsg);
-  } catch (e) {
-    console.error("Invite send failed:", e.message);
-  }
-
-  // reset session
   biz.sessionState = "branches_menu";
   biz.sessionData = {};
   await saveBiz(biz);
 
-  // confirm to owner
   return sendTwimlText(
     res,
-    `✅ Invitation sent
-
-👤 Phone: ${phone}
-📍 Branch: ${branch.name}
-🔑 Role: ${role}`
+    `✅ User assigned\n📍 Branch: ${branch.name}\n👤 Phone: ${phone}\n🔑 Role: ${role}`
   );
 }
-
 
 
     if (state === "settings_currency") {

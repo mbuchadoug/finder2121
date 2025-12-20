@@ -1060,7 +1060,7 @@ Outstanding: ${formatMoney(totalOutstanding)} ${biz.currency}`
 
 
 // SETTINGS MENU (7)
-if ((state === "idle" || state === "ready") && trimmed === "7") {
+/*if ((state === "idle" || state === "ready") && trimmed === "7") {
   biz.sessionState = "settings_menu";
   await saveBiz(biz);
 
@@ -1078,7 +1078,7 @@ if ((state === "idle" || state === "ready") && trimmed === "7") {
 0) Menu`
   );
 }
-
+*/
 
   // Settings menu blocks:
    // Settings menu blocks:

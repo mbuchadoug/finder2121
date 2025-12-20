@@ -932,7 +932,9 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
 if (action === "payment") {
   biz.sessionState = "payment_start";
   await saveBiz(biz);
-  return; // 🔥 IMPORTANT
+
+  // FORCE immediate response so Twilio doesn't get silence
+  return sendTwimlText(res, "Fetching unpaid invoices...");
 }
 
 

@@ -932,8 +932,9 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
 if (action === "payment") {
   biz.sessionState = "payment_start";
   await saveBiz(biz);
-  // ❗ DO NOT RETURN
+  return; // 🔥 IMPORTANT
 }
+
 
 
 

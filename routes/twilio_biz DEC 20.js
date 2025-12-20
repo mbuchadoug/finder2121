@@ -998,22 +998,6 @@ if (action === "statement") {
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 
 // DAILY REPORT (11)
-// REPORT MENU ENTRY (11)
-// REPORT MENU ENTRY
-if ((state === "idle" || state === "ready") && trimmed === "11") {
-  biz.sessionState = "report_menu";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-`📊 Reports
-1) Today
-2) By date
-3) By month
-4) By year
-0) Menu`
-  );
-}
 
 // REPORT MENU SELECTION
 if (state === "report_menu" && isSingleNumber) {

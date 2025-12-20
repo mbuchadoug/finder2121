@@ -994,26 +994,49 @@ if (action === "statement") {
 
 }
 
+// ================= PAYMENT START =================
+if (state === "payment_start") {
+
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+;
+
+  const query = {
+    businessId: biz._id,
+    balance: { $gt: 0 }
+  };
+
+  if (role !== "owner") {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query)
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!invoices.length) {
+    await resetSession(biz);
+    return sendTwimlText(res, "No unpaid invoices found.");
+  }
+
+  biz.sessionData.invoiceList = invoices;
+  biz.sessionState = "payment_choose_invoice";
+  await saveBiz(biz);
+
+  let msg = "Select invoice to record payment:\n";
+  invoices.forEach((inv, i) => {
+    msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
+  });
+  msg += "0) Cancel";
+
+  return sendTwimlText(res, msg);
+}
 
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 
-// DAILY REPORT (11)
-// REPORT MENU ENTRY (11)
-// REPORT MENU ENTRY
-if ((state === "idle" || state === "ready") && trimmed === "11") {
-  biz.sessionState = "report_menu";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-`📊 Reports
-1) Today
-2) By date
-3) By month
-4) By year
-0) Menu`
-  );
-}
 
 // REPORT MENU SELECTION
 if (state === "report_menu" && isSingleNumber) {
@@ -1244,12 +1267,7 @@ return sendMenuForUser(res, biz, providerId);
 
 /* ================= CLIENT STATEMENT ================= */
 
-// STEP 1: user chooses statement from menu
-if ((state === "idle" || state === "ready") && trimmed === "12") {
-  biz.sessionState = "statement_choose_client";
-  await saveBiz(biz);
-  return sendTwimlText(res, "Enter client name:");
-}
+
 
 // STEP 2: user enters client name
 if (state === "statement_choose_client") {
@@ -1317,46 +1335,7 @@ Balance: ${formatMoney(balance)} ${biz.currency}`
 /* ================= PAYMENT START ================= */
 
 // PAYMENT START: load unpaid invoices
-if (state === "payment_start") {
 
-  const ctx = await getUserBranchContext(biz, providerId);
-  const role = ctx?.role || "owner";
-  const branchId = ctx?.branchId || null;
-
-  const query = {
-    businessId: biz._id,
-    balance: { $gt: 0 }
-  };
-
-  // Managers & clerks only see their branch invoices
- if (role !== "owner" && branchId) {
-  query.branchId = branchId;
-}
-
-
-  const invoices = await Invoice.find(query)
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
-
-  if (!invoices.length) {
-    await resetSession(biz);
-    return sendTwimlText(res, "✅ No unpaid invoices found. Reply 0 for menu.");
-  }
-
-  // Save invoice list for next step
-  biz.sessionData.invoiceList = invoices;
-  biz.sessionState = "payment_choose_invoice";
-  await saveBiz(biz);
-
-  let msg = "Select invoice to record payment:\n";
-  invoices.forEach((inv, i) => {
-    msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
-  });
-  msg += "0) Cancel";
-
-  return sendTwimlText(res, msg);
-}
 
 // PAYMENT: choose invoice from recent unpaid list
 if (state === "payment_choose_invoice" && isSingleNumber) {

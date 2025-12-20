@@ -642,7 +642,7 @@ function resolveMenuAction(role, choice) {
       "8": "invite_user",
       "9": "payment",
       "10": "expense",
-      "11": "reports_menu",
+      "11": "daily_report",
       "12": "statement"
     },
     manager: {
@@ -652,14 +652,14 @@ function resolveMenuAction(role, choice) {
       "4": "add_client",
       "5": "payment",
       "6": "expense",
-      "7": "reports_menu",
+      "7": "daily_report",
       "8": "statement"
     },
     clerk: {
       "1": "invoice",
       "2": "payment",
       "3": "expense",
-      "4": "reports_menu"
+      "4": "daily_report"
     }
   };
 
@@ -681,7 +681,7 @@ function ownerMenu() {
 8) Invite user
 9) Record payment (IN)
 10) Record expense (OUT)
-11) Reports
+11) Daily report
 12) Client statement
 0) Menu`;
 }
@@ -694,7 +694,7 @@ function managerMenu() {
 4) Add client
 5) Record payment (IN)
 6) Record expense (OUT)
-7) Reports
+7) Daily report
 8) Client statement
 0) Menu`;
 }
@@ -902,8 +902,6 @@ if ((state === "idle" || state === "ready") && isSingleNumber) {
 
   // ---- ROUTE BY ACTION ----
 
-  
-
   if (action === "create_business") {
     biz.sessionState = "awaiting_business_name";
     await saveBiz(biz);
@@ -1012,24 +1010,49 @@ if (action === "payment") {
 0) Menu`);
   }
 
+if (action === "daily_report") {
 
-  if (action === "reports_menu") {
-  biz.sessionState = "reports_menu";
-  await saveBiz(biz);
+  const ctx = await getUserBranchContext(biz, providerId);
+  const role = ctx?.role || "owner";
+  const branchId = ctx?.branchId || null;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const query = {
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  if (role !== "owner" && branchId) {
+    query.branchId = branchId;
+  }
+
+  const invoices = await Invoice.find(query).lean();
+  const payments = await Payment.find(query).lean();
+  const expenses = await Expense.find(query).lean();
+
+  const totalInvoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const totalOutstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+  const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+  await resetSession(biz);
 
   return sendTwimlText(
     res,
-`📊 Reports
-1) Daily report
-2) Weekly report
-3) Monthly report
-4) By branch
-0) Back`
+`📊 Daily Report (${start.toISOString().slice(0,10)})
+
+Invoices issued: ${invoices.length}
+Sales (invoiced): ${formatMoney(totalInvoiced)} ${biz.currency}
+Cash received: ${formatMoney(totalReceived)} ${biz.currency}
+Expenses: ${formatMoney(totalExpenses)} ${biz.currency}
+Outstanding: ${formatMoney(totalOutstanding)} ${biz.currency}`
   );
 }
-
-
-
 
 
 if (action === "statement") {
@@ -1089,60 +1112,6 @@ if (state === "payment_start") {
 /* ================= REPORT COMMANDS (ADD HERE) ================= */
 
 
-/* ================= REPORTS MENU ================= */
-
-if (state === "reports_menu" && isSingleNumber) {
-
-  // 0) Back
-  if (trimmed === "0") {
-    await resetSession(biz);
-    return sendMenuForUser(res, biz, providerId);
-  }
-
-  if (trimmed === "1") {
-    biz.sessionState = "report_daily";
-    await saveBiz(biz);
-    return res.redirect(307, req.originalUrl);
-  }
-
-  if (trimmed === "2") {
-    biz.sessionState = "report_weekly";
-    await saveBiz(biz);
-    return res.redirect(307, req.originalUrl);
-  }
-
-  if (trimmed === "3") {
-    biz.sessionState = "report_monthly";
-    await saveBiz(biz);
-    return res.redirect(307, req.originalUrl);
-  }
-
-  if (trimmed === "4") {
-    const ok = await requireRole(biz, providerId, ["owner"]);
-    if (!ok) {
-      await resetSession(biz);
-      return sendTwimlText(res, "⛔ Branch reports are for owners only.");
-    }
-
-    const branches = await Branch.find({ businessId: biz._id }).lean();
-    if (!branches.length) {
-      await resetSession(biz);
-      return sendTwimlText(res, "No branches found.");
-    }
-
-    biz.sessionData.branches = branches;
-    biz.sessionState = "report_choose_branch";
-    await saveBiz(biz);
-
-    let msg = "Select branch:\n";
-    branches.forEach((b, i) => msg += `${i + 1}) ${b.name}\n`);
-    msg += "0) Cancel";
-
-    return sendTwimlText(res, msg);
-  }
-
-  return sendTwimlText(res, "Invalid report option.");
-}
 
 
 

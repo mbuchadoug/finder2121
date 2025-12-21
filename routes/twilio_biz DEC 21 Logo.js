@@ -662,27 +662,6 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   const publicUrl = site ? `${site}/docs/logos/${filename}` : `/docs/logos/${filename}`;
   return { filepath, filename, publicUrl };
 }
-
-function sendWhatsAppList(res, { text, buttonText, sections }) {
-  const twiml = new MessagingResponse();
-
-  twiml.message({
-    interactive: {
-      type: "list",
-      body: { text },
-      action: {
-        button: buttonText || "Choose",
-        sections
-      }
-    }
-  });
-
-  res.set("Content-Type", "text/xml");
-  return res.send(twiml.toString());
-}
-
-
-
 function resolveMenuAction(role, choice) {
   const maps = {
    owner: {
@@ -725,40 +704,22 @@ function resolveMenuAction(role, choice) {
 async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return saveBiz(biz); }
 
 /* ---------- Role-based Menus ---------- */
-async function sendOwnerMenu(res) {
-  return sendWhatsAppList(res, {
-    text: "📋 *ZimQuote – Owner Menu*",
-    buttonText: "Open menu",
-    sections: [
-      {
-        title: "Documents",
-        rows: [
-          { id: "invoice", title: "New Invoice" },
-          { id: "receipt", title: "New Receipt" },
-          { id: "quote", title: "New Quotation" }
-        ]
-      },
-      {
-        title: "Finance",
-        rows: [
-          { id: "payment", title: "Record Payment" },
-          { id: "expense", title: "Record Expense" }
-        ]
-      },
-      {
-        title: "Management",
-        rows: [
-          { id: "reports_menu", title: "Reports" },
-          { id: "statement", title: "Client Statement" },
-          { id: "invite_user", title: "Invite User" },
-          { id: "upload_logo", title: "Upload Logo" },
-          { id: "settings", title: "Settings" }
-        ]
-      }
-    ]
-  });
+function ownerMenu() {
+  return `ZimQuote | Owner Menu
+1) Create business
+2) New invoice
+3) New receipt
+4) New quotation
+5) Add client
+6) Record payment (IN)
+7) Record expense (OUT)
+8) Reports
+9) Client statement
+10) Invite user
+11) Upload logo
+12) Settings
+0) Menu`;
 }
-
 
 
 function managerMenu() {
@@ -797,7 +758,7 @@ async function sendMenuForUser(res, biz, providerId) {
   }
 
   if (roleRec.role === "owner") {
-    return sendTwimlText(res, sendOwnerMenu(res));
+    return sendTwimlText(res, ownerMenu(biz));
   }
 
   if (roleRec.role === "manager") {
@@ -808,7 +769,7 @@ async function sendMenuForUser(res, biz, providerId) {
     return sendTwimlText(res, clerkMenu(biz));
   }
 
-  return sendTwimlText(res, sendOwnerMenu(res)); // fallback
+  return sendTwimlText(res, ownerMenu(biz)); // fallback
 }
 
 
@@ -832,16 +793,6 @@ router.post("/webhook", async (req, res) => {
 
     const text = bodyRaw || "";
 const trimmed = text.trim();
-
-// ================= INTERACTIVE (TAP) INPUT =================
-const interactiveId =
-  params?.ListReply?.id ||
-  params?.ButtonReply?.id ||
-  null;
-
-// Unified input: tap OR typed text
-const input = interactiveId || trimmed;
-
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
     //const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
@@ -1034,8 +985,7 @@ You are not linked to any business.
 
 
 
-const isSingleNumber = /^\d+$/.test(input);
-
+const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
     const ctx = await getUserBranchContext(biz, providerId);
@@ -1054,8 +1004,7 @@ if ((state === "idle" || state === "ready") && isSingleNumber && !state.startsWi
 
 
   const { role } = await getUserBranchContext(biz, providerId);
-const action = resolveMenuAction(role, input) || input;
-
+  const action = resolveMenuAction(role, trimmed);
 
   if (!action) {
     return sendTwimlText(res, "Invalid selection. Reply 0 for menu.");
@@ -1286,40 +1235,33 @@ if (state === "payment_start") {
 
 /* ================= REPORTS MENU ================= */
 
-/* ================= REPORTS MENU ================= */
-
-if (state === "reports_menu") {
+if (state === "reports_menu" && isSingleNumber) {
 
   // 0) Back
-  if (input === "0") {
+  if (trimmed === "0") {
     await resetSession(biz);
     return sendMenuForUser(res, biz, providerId);
   }
 
-  // Daily
-  if (input === "1" || input === "report_daily") {
+  if (trimmed === "1") {
     biz.sessionState = "report_daily";
     await saveBiz(biz);
     return res.redirect(307, req.originalUrl);
   }
 
-  // Weekly
-  if (input === "2" || input === "report_weekly") {
+  if (trimmed === "2") {
     biz.sessionState = "report_weekly";
     await saveBiz(biz);
     return res.redirect(307, req.originalUrl);
   }
 
-  // Monthly
-  if (input === "3" || input === "report_monthly") {
+  if (trimmed === "3") {
     biz.sessionState = "report_monthly";
     await saveBiz(biz);
     return res.redirect(307, req.originalUrl);
   }
 
-  // By branch
-  if (input === "4" || input === "report_branch") {
-
+  if (trimmed === "4") {
     const ok = await requireRole(biz, providerId, ["owner"]);
     if (!ok) {
       await resetSession(biz);
@@ -1346,20 +1288,18 @@ if (state === "reports_menu") {
   return sendTwimlText(res, "Invalid report option.");
 }
 
-
 /* ================= REPORT BY BRANCH ================= */
 
-if (state === "report_choose_branch" && (isSingleNumber || input === "0")) {
+if (state === "report_choose_branch" && isSingleNumber) {
 
   // 0) Cancel
-if (input === "0") {
+  if (trimmed === "0") {
     await resetSession(biz);
     return sendMenuForUser(res, biz, providerId);
   }
 
   const branches = biz.sessionData.branches || [];
-  const idx = Number(input) - 1;
-
+  const idx = Number(trimmed) - 1;
 
   if (!branches[idx]) {
     return sendTwimlText(

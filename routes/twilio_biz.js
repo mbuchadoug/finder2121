@@ -877,6 +877,45 @@ if (biz) {
 // 🚨 No active business selected
 if (!biz) {
 
+// ===== CREATE BUSINESS WHEN NO ACTIVE BUSINESS =====
+if (trimmed === "1") {
+
+  const roles = await UserRole.find({ phone: providerId });
+
+  // Only allow create business if user truly has none
+  if (roles.length > 0) {
+    return sendTwimlText(
+      res,
+      "You already belong to a business. Reply *menu* to continue."
+    );
+  }
+
+  const newBiz = await Business.create({
+    name: null,
+    currency: "ZWL",
+    provider: "whatsapp"
+  });
+
+  await UserRole.create({
+    businessId: newBiz._id,
+    phone: providerId,
+    role: "owner"
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: newBiz._id },
+    { upsert: true }
+  );
+
+  return sendTwimlText(
+    res,
+    "Business created.\nEnter business name:"
+  );
+}
+
+
+
   const roles = await UserRole.find({ phone: providerId }).populate("businessId");
 
   // ✅ User belongs to ONE business → auto-link silently
@@ -919,43 +958,6 @@ You are not linked to any business.
   return sendTwimlText(res, msg);
 }
 
-
-// ===== CREATE BUSINESS WHEN NO ACTIVE BUSINESS =====
-if (trimmed === "1") {
-
-  const roles = await UserRole.find({ phone: providerId });
-
-  // Only allow create business if user truly has none
-  if (roles.length > 0) {
-    return sendTwimlText(
-      res,
-      "You already belong to a business. Reply *menu* to continue."
-    );
-  }
-
-  const newBiz = await Business.create({
-    name: null,
-    currency: "ZWL",
-    provider: "whatsapp"
-  });
-
-  await UserRole.create({
-    businessId: newBiz._id,
-    phone: providerId,
-    role: "owner"
-  });
-
-  await UserSession.findOneAndUpdate(
-    { phone: providerId },
-    { activeBusinessId: newBiz._id },
-    { upsert: true }
-  );
-
-  return sendTwimlText(
-    res,
-    "Business created.\nEnter business name:"
-  );
-}
 
 
 

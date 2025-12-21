@@ -833,6 +833,30 @@ if (/^join$/i.test(trimmed)) {
     { upsert: true }
   );
 
+  // 🔔 NOTIFY BUSINESS OWNER
+try {
+  const ownerRole = await UserRole.findOne({
+    businessId: invite.businessId._id,
+    role: "owner",
+    pending: false
+  });
+
+  if (ownerRole) {
+    const ownerMsg =
+`✅ User joined your business
+
+👤 Phone: ${phone}
+🏢 Business: ${invite.businessId.name}
+📍 Branch: ${invite.branchId.name}
+🔑 Role: ${invite.role}`;
+
+    await sendWhatsAppMessage(ownerRole.phone, ownerMsg);
+  }
+} catch (e) {
+  console.error("Owner notify failed:", e.message);
+}
+
+
   return sendTwimlText(
     res,
 `✅ Invitation accepted!

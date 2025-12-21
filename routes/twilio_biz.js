@@ -897,6 +897,43 @@ const isSingleNumber = /^\d+$/.test(trimmed);
 const role = ctx?.role;
 
 
+// ================= JOIN INVITATION HANDLER =================
+if (/^join$/i.test(trimmed)) {
+
+  // find user role assignment
+  const roleRec = await UserRole.findOne({ phone: providerId }).populate("businessId");
+
+  if (!roleRec) {
+    return sendTwimlText(
+      res,
+      "❌ No invitation found for this number."
+    );
+  }
+
+  // activate session
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: roleRec.businessId._id },
+    { upsert: true }
+  );
+
+  // reset any stale state
+  const biz = await Business.findById(roleRec.businessId._id);
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBiz(biz);
+
+  // welcome message + menu
+  return sendTwimlText(
+    res,
+`✅ You’ve joined *${biz.name}*
+
+👤 Role: ${roleRec.role}
+📍 Branch: ${roleRec.branchId ? "Assigned" : "Main"}
+
+Reply *menu* to continue.`
+  );
+}
 
 
 

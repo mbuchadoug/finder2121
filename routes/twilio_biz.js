@@ -81,10 +81,23 @@ function sendTwimlWithMedia(res, text, mediaUrls = []) {
 
 function formatMoney(n) { return Number(n || 0).toFixed(2); }
 
-function normalizePhone(p) {
-  if (!p) return "";
-  return String(p).replace(/^whatsapp:/i, "").replace(/\D+/g, "");
+function normalizePhone(input) {
+  if (!input) return null;
+
+  let phone = input.replace(/\D+/g, "");
+
+  // Zimbabwe normalization
+  if (phone.startsWith("0")) {
+    phone = "263" + phone.slice(1);
+  }
+
+  if (phone.startsWith("263") && phone.length === 12) {
+    return phone;
+  }
+
+  return null;
 }
+
 
 /* ---------- Role guard ---------- */
 async function requireRole(biz, providerId, allowed = []) {
@@ -901,10 +914,14 @@ const role = ctx?.role;
 
 if (/^join$/i.test(trimmed)) {
 
+  const phone = providerId.replace(/\D+/g, "");
+
+  console.log("JOIN attempt from:", phone);
+
   const invite = await UserRole.findOne({
-    phone: providerId,
+    phone,
     pending: true
-  }).populate("businessId");
+  }).populate("businessId branchId");
 
   if (!invite) {
     return sendTwimlText(
@@ -917,9 +934,9 @@ if (/^join$/i.test(trimmed)) {
   invite.pending = false;
   await invite.save();
 
-  // activate business session
+  // activate business context
   await UserSession.findOneAndUpdate(
-    { phone: providerId },
+    { phone },
     { activeBusinessId: invite.businessId._id },
     { upsert: true }
   );
@@ -929,7 +946,7 @@ if (/^join$/i.test(trimmed)) {
 `✅ Invitation accepted!
 
 🏢 Business: ${invite.businessId.name}
-📍 Branch assigned
+📍 Branch: ${invite.branchId.name}
 🔑 Role: ${invite.role}
 
 Reply *menu* to start.`

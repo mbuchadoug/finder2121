@@ -911,7 +911,6 @@ const role = ctx?.role;
 
 
 // ================= JOIN INVITATION HANDLER =================
-
 if (/^join$/i.test(trimmed)) {
 
   const phone = providerId.replace(/\D+/g, "");
@@ -952,6 +951,7 @@ if (/^join$/i.test(trimmed)) {
 Reply *menu* to start.`
   );
 }
+
 
 
 

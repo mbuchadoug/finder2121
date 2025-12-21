@@ -2708,7 +2708,13 @@ const invoiceDoc = await Invoice.create({
           const label = docType === "invoice" ? "Invoice" : docType === "quote" ? "Quotation" : "Receipt";
 
           // <-- CHANGED: send only the PDF media with no text body so the download text/link doesn't appear -->
-          return sendTwimlWithMedia(res, null, [url]);
+          //return sendTwimlWithMedia(res, null, [url]);
+          return sendTwimlWithMedia(
+  res,
+  "✅ Document created successfully.\n\n👉 Reply *menu* to continue.",
+  [url]
+);
+
         } catch (e) {
           console.error("document PDF failed", e && (e.stack || e.message) ? (e.stack || e.message) : e);
           return sendTwimlText(res, `Failed to generate ${docType} PDF; check server logs.`);

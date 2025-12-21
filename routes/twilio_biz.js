@@ -785,8 +785,14 @@ router.post("/webhook", async (req, res) => {
     const bodyRaw = String(params.Body || params.body || "").trim();
     const profileName = String(params.ProfileName || params.profileName || "");
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
-    const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
+    //const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
+        const providerIdRaw = rawFrom.replace(/^whatsapp:/i, "").trim();
+const providerId = normalizePhone(providerIdRaw);
+
+if (!providerId) {
+  return sendTwimlText(res, "Invalid WhatsApp number.");
+}
 
 
   

@@ -898,40 +898,41 @@ const role = ctx?.role;
 
 
 // ================= JOIN INVITATION HANDLER =================
+
 if (/^join$/i.test(trimmed)) {
 
-  // find user role assignment
-  const roleRec = await UserRole.findOne({ phone: providerId }).populate("businessId");
+  const invite = await UserRole.findOne({
+    phone: providerId,
+    pending: true
+  }).populate("businessId");
 
-  if (!roleRec) {
+  if (!invite) {
     return sendTwimlText(
       res,
-      "❌ No invitation found for this number."
+      "❌ No pending invitation found for this number."
     );
   }
 
-  // activate session
+  // activate user
+  invite.pending = false;
+  await invite.save();
+
+  // activate business session
   await UserSession.findOneAndUpdate(
     { phone: providerId },
-    { activeBusinessId: roleRec.businessId._id },
+    { activeBusinessId: invite.businessId._id },
     { upsert: true }
   );
 
-  // reset any stale state
-  const biz = await Business.findById(roleRec.businessId._id);
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBiz(biz);
-
-  // welcome message + menu
   return sendTwimlText(
     res,
-`✅ You’ve joined *${biz.name}*
+`✅ Invitation accepted!
 
-👤 Role: ${roleRec.role}
-📍 Branch: ${roleRec.branchId ? "Assigned" : "Main"}
+🏢 Business: ${invite.businessId.name}
+📍 Branch assigned
+🔑 Role: ${invite.role}
 
-Reply *menu* to continue.`
+Reply *menu* to start.`
   );
 }
 
@@ -2125,15 +2126,19 @@ if (state === "assign_user_role" && isSingleNumber) {
   const phone = biz.sessionData.userPhone;
 
   // save role
-  await UserRole.findOneAndUpdate(
-    {
-      businessId: biz._id,
-      branchId: branch._id,
-      phone
-    },
-    { role },
-    { upsert: true }
-  );
+await UserRole.findOneAndUpdate(
+  {
+    businessId: biz._id,
+    phone
+  },
+  {
+    role,
+    branchId: branch._id,
+    pending: true
+  },
+  { upsert: true }
+);
+
 
   // 🔔 SEND INVITATION MESSAGE
   const botNumber = process.env.TWILIO_WHATSAPP_NUMBER.replace(/\D+/g, "");

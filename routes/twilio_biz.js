@@ -796,9 +796,10 @@ async function sendMenuForUser(res, biz, providerId) {
     return sendTwimlText(res, "⛔ You are not assigned to this business.");
   }
 
-  if (roleRec.role === "owner") {
-    return sendTwimlText(res, sendOwnerMenu(res));
-  }
+ if (roleRec.role === "owner") {
+  return sendOwnerMenu(res);
+}
+
 
   if (roleRec.role === "manager") {
     return sendTwimlText(res, managerMenu(biz));
@@ -808,7 +809,8 @@ async function sendMenuForUser(res, biz, providerId) {
     return sendTwimlText(res, clerkMenu(biz));
   }
 
-  return sendTwimlText(res, sendOwnerMenu(res)); // fallback
+  return sendOwnerMenu(res); // fallback
+
 }
 
 

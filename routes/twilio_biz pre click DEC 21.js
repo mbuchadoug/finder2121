@@ -1167,20 +1167,6 @@ if (action === "invite_user") {
   );
 }
 
-if (action === "upload_logo") {
-  const ok = await requireRole(biz, providerId, ["owner"]);
-  if (!ok) {
-    return sendTwimlText(res, "⛔ Only the owner can upload a logo.");
-  }
-
-  biz.sessionState = "awaiting_logo_upload";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-    "📷 Upload logo\n\nPlease send your logo image now (PNG or JPG).\nReply 0 to cancel."
-  );
-}
 
 }
 
@@ -2055,44 +2041,20 @@ return sendWithMenuHint(res, "✅ Expense recorded successfully.");
 
     // Logo upload (media)
     const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
-if (state === "awaiting_logo_upload") {
-
-  // cancel
-  if (trimmed === "0") {
-    await resetSession(biz);
-    return sendMenuForUser(res, biz, providerId);
-  }
-
-  const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
-  if (!mediaCount) {
-    return sendTwimlText(
-      res,
-      "Please send an image file (PNG or JPG), or reply 0 to cancel."
-    );
-  }
-
-  const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
-
-  try {
-    const saved = await saveLogoFromTwilio(mediaUrl0, biz._id.toString());
-    biz.logoUrl = saved.publicUrl;
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBiz(biz);
-
-    return sendWithMenuHint(
-      res,
-      "✅ Logo uploaded successfully."
-    );
-  } catch (e) {
-    console.error("logo save failed", e);
-    return sendTwimlText(
-      res,
-      "❌ Could not save logo. Please send a PNG or JPG image, or reply 0 to cancel."
-    );
-  }
-}
-
+    if ((state === "awaiting_logo_upload" || state === "awaiting_logo_choice") && mediaCount > 0) {
+      const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
+      try {
+        const saved = await saveLogoFromTwilio(mediaUrl0, biz._id.toString());
+        biz.logoUrl = saved.publicUrl;
+        biz.sessionState = "awaiting_currency";
+        biz.sessionData = {};
+        await saveBiz(biz);
+        return sendTwimlText(res, `Logo received. Now reply with currency: ZWL / USD / ZAR`);
+      } catch (e) {
+        console.error("logo save failed", e);
+        return sendTwimlText(res, "Could not save logo | please send JPG/PNG or reply 1 to skip.");
+      }
+    }
 
   
 // BRANCHES → VIEW BRANCHES

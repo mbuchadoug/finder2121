@@ -891,16 +891,26 @@ if (trimmed === "1") {
   }
 
   const newBiz = await Business.create({
-    name: null,
-    currency: "ZWL",
-    provider: "whatsapp"
-  });
+  name: null,
+  currency: "ZWL",
+  provider: "whatsapp"
+});
 
-  await UserRole.create({
-    businessId: newBiz._id,
-    phone: providerId,
-    role: "owner"
-  });
+// 🔑 CREATE DEFAULT BRANCH
+const defaultBranch = await Branch.create({
+  businessId: newBiz._id,
+  name: "Main Branch",
+  isDefault: true
+});
+
+// 🔑 ASSIGN OWNER TO DEFAULT BRANCH
+await UserRole.create({
+  businessId: newBiz._id,
+  branchId: defaultBranch._id, // ✅ FIX
+  phone: providerId,
+  role: "owner",
+  pending: false
+});
 
   await UserSession.findOneAndUpdate(
     { phone: providerId },

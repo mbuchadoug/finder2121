@@ -6,11 +6,14 @@ const UserRoleSchema = new mongoose.Schema({
       ref: "Business",   // 👈 MUST MATCH MODEL NAME
       required: true
     },
-    branchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Branch",     // 👈 MUST MATCH MODEL NAME
-      required: true
-    },
+  branchId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Branch",
+  required: function () {
+    return this.role !== "owner";
+  }
+}
+,
   phone: { type: String, index: true },
   pending: { type: Boolean, default: true },
   role: {

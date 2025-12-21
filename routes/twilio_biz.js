@@ -1045,15 +1045,20 @@ const role = ctx?.role;
 
 
 
-// GLOBAL MENU HANDLER (works everywhere)
-if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
+
+// GLOBAL MENU HANDLER (text OR tap)
+if (input.toLowerCase() === "menu" || input === "0") {
   await resetSession(biz);
   return sendMenuForUser(res, biz, providerId);
 }
 
-// ===== ROLE-BASED MAIN MENU ROUTER =====
-if ((state === "idle" || state === "ready") && isSingleNumber && !state.startsWith("report_")) {
 
+// ===== ROLE-BASED MAIN MENU ROUTER =====
+if (
+  (state === "idle" || state === "ready") &&
+  (isSingleNumber || typeof input === "string") &&
+  !state.startsWith("report_")
+) {
 
   const { role } = await getUserBranchContext(biz, providerId);
 const action = resolveMenuAction(role, input) || input;
@@ -1599,9 +1604,9 @@ Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
 */
 
   // Settings menu blocks:
-   // Settings menu blocks:
 if (state === "settings_menu" && isSingleNumber) {
-  const choice = trimmed;
+  const choice = input;
+
 
   // 0) Back to menu
   if (choice === "0") { 

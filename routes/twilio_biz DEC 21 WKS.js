@@ -62,12 +62,6 @@ function sendTwimlText(res, text) {
   }
 }
 
-
-function sendWithMenuHint(res, text) {
-  const suffix = "\n\n👉 Reply *menu* to continue.";
-  return sendTwimlText(res, (text || "") + suffix);
-}
-
 function sendTwimlWithMedia(res, text, mediaUrls = []) {
   try {
     const twiml = new MessagingResponse();
@@ -705,7 +699,7 @@ async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}
 
 /* ---------- Role-based Menus ---------- */
 function ownerMenu() {
-  return `ZimQuote | Owner Menu
+  return `ZimQuote — Owner Menu
 1) Create business
 2) New invoice
 3) New receipt
@@ -723,7 +717,7 @@ function ownerMenu() {
 
 
 function managerMenu() {
-  return `ZimQuote | Manager Menu
+  return `ZimQuote — Manager Menu
 1) New invoice
 2) New receipt
 3) New quotation
@@ -737,7 +731,7 @@ function managerMenu() {
 
 
 function clerkMenu() {
-  return `ZimQuote | Clerk Menu
+  return `ZimQuote — Clerk Menu
 1) New invoice
 2) Record payment (IN)
 3) Record expense (OUT)
@@ -1335,8 +1329,8 @@ if (state === "report_branch_summary") {
 
   await resetSession(biz);
 
- return sendWithMenuHint(
-  res,
+  return sendTwimlText(
+    res,
 `📍 Branch Report: ${branch?.name || "Branch"}
 
 Invoices: ${invoices.length}
@@ -1344,8 +1338,7 @@ Sales: ${formatMoney(totalInvoiced)} ${biz.currency}
 Cash received: ${formatMoney(totalReceived)} ${biz.currency}
 Expenses: ${formatMoney(totalExpenses)} ${biz.currency}
 Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
-);
-
+  );
 }
 
 if (state === "report_daily") {
@@ -1380,8 +1373,8 @@ if (state === "report_daily") {
 
   await resetSession(biz);
 
-return sendWithMenuHint(
-  res,
+  return sendTwimlText(
+    res,
 `📊 Daily Report (${start.toISOString().slice(0,10)})
 
 Invoices: ${invoices.length}
@@ -1389,8 +1382,7 @@ Sales: ${formatMoney(invoiced)} ${biz.currency}
 Cash received: ${formatMoney(received)} ${biz.currency}
 Expenses: ${formatMoney(spent)} ${biz.currency}
 Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
-);
-
+  );
 }
 
 
@@ -1429,8 +1421,8 @@ if (state === "report_weekly") {
 
   await resetSession(biz);
 
- return sendWithMenuHint(
-  res,
+  return sendTwimlText(
+    res,
 `📊 Weekly Report
 
 Invoices: ${invoices.length}
@@ -1438,8 +1430,7 @@ Sales: ${formatMoney(invoiced)} ${biz.currency}
 Cash received: ${formatMoney(received)} ${biz.currency}
 Expenses: ${formatMoney(spent)} ${biz.currency}
 Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
-);
-
+  );
 }
 
 
@@ -1479,8 +1470,8 @@ if (state === "report_monthly") {
 
   await resetSession(biz);
 
-return sendWithMenuHint(
-  res,
+  return sendTwimlText(
+    res,
 `📊 Monthly Report
 
 Invoices: ${invoices.length}
@@ -1488,8 +1479,7 @@ Sales: ${formatMoney(invoiced)} ${biz.currency}
 Cash received: ${formatMoney(received)} ${biz.currency}
 Expenses: ${formatMoney(spent)} ${biz.currency}
 Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
-);
-
+  );
 }
 
 
@@ -1689,16 +1679,15 @@ const invoices = await Invoice.find(invQuery);
 
   await resetSession(biz);
 
-return sendWithMenuHint(
-  res,
+  return sendTwimlText(
+    res,
 `📄 Statement: ${client.name}
 
 Invoices: ${invoices.length}
 Total billed: ${formatMoney(totalBilled)} ${biz.currency}
 Paid: ${formatMoney(totalPaid)} ${biz.currency}
 Balance: ${formatMoney(balance)} ${biz.currency}`
-);
-
+  );
 }
 
 /* ================= PAYMENTS ================= */
@@ -1903,12 +1892,11 @@ const client = await Client.findById(invoice.clientId);
 
   await resetSession(biz);
 
- return sendTwimlWithMedia(
-  res,
-  "✅ Payment recorded. Receipt attached.\n\n👉 Reply *menu* to continue.",
-  [url]
-);
-
+  return sendTwimlWithMedia(
+    res,
+    "✅ Payment recorded. Receipt attached.",
+    [url]
+  );
 }
 
 /* ================= END PAYMENT FLOW STATES ================= */
@@ -2005,8 +1993,7 @@ const branchId = ctx?.branchId || null;
 
   await resetSession(biz);
 
-return sendWithMenuHint(res, "✅ Expense recorded successfully.");
-
+  return sendTwimlText(res, "✅ Expense recorded successfully.");
 }
 
 /* ================= END EXPENSE FLOW STATES ================= */

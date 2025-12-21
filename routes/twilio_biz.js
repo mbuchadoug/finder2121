@@ -784,6 +784,9 @@ router.post("/webhook", async (req, res) => {
     const rawFrom = String(params.From || params.from || "").trim();
     const bodyRaw = String(params.Body || params.body || "").trim();
     const profileName = String(params.ProfileName || params.profileName || "");
+
+    const text = bodyRaw || "";
+const trimmed = text.trim();
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
     //const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
@@ -962,8 +965,7 @@ if (trimmed === "1") {
       await saveBiz(biz).catch(() => {});
     }
 
-const text = bodyRaw || "";
-const trimmed = text.trim();
+
 
 const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";

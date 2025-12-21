@@ -794,128 +794,6 @@ if (!providerId) {
   return sendTwimlText(res, "Invalid WhatsApp number.");
 }
 
-
-  
-
-const session = await UserSession.findOne({ phone: providerId });
-
-let biz = null;
-if (session?.activeBusinessId) {
-  biz = await Business.findById(session.activeBusinessId);
-}
-
-
-// Ensure sessionData defaults for vat/discount when starting a document
- // ✅ SAFE: only initialize when biz exists
-if (biz) {
-  if (!biz.sessionData) biz.sessionData = {};
-
-  biz.sessionData.discountPercent =
-    typeof biz.sessionData.discountPercent === "undefined"
-      ? 0
-      : biz.sessionData.discountPercent;
-
-  if (typeof biz.sessionData.vatPercent === "undefined") {
-    biz.sessionData.vatPercent = Number(biz.taxRate || 0);
-  }
-
-  if (typeof biz.sessionData.applyVat === "undefined") {
-    biz.sessionData.applyVat = true;
-  }
-}
-
-  
-
-// 🚨 No active business selected
-if (!biz) {
-  const roles = await UserRole.find({ phone: providerId }).populate("businessId");
-
-  // User belongs to NO businesses
-  if (!roles.length) {
-    return sendTwimlText(
-      res,
-`Welcome to ZimQuote 👋
-You are not linked to any business.
-
-1) Create new business`
-    );
-  }
-
-  // User belongs to ONE business → auto-select
-  if (roles.length === 1) {
-    await UserSession.findOneAndUpdate(
-      { phone: providerId },
-      { activeBusinessId: roles[0].businessId._id },
-      { upsert: true }
-    );
-
-    return sendTwimlText(
-      res,
-      `Switched to ${roles[0].businessId.name}\nReply 'menu' to continue.`
-    );
-  }
-
-  // User belongs to MULTIPLE businesses
-  let msg = "Select a business:\n";
-  roles.forEach((r, i) => {
-    msg += `${i + 1}) ${r.businessId.name} (${r.role})\n`;
-  });
-  msg += `${roles.length + 1}) ➕ Create new business`;
-
-  // store for selection
-  await UserSession.findOneAndUpdate(
-    { phone: providerId },
-    { activeBusinessId: null, pendingChoices: roles.map(r => r.businessId._id) },
-    { upsert: true }
-  );
-
-  return sendTwimlText(res, msg);
-}
-
-// ===== CREATE BUSINESS WHEN NO ACTIVE BUSINESS =====
-if (!biz && trimmed === "1") {
-  const newBiz = await Business.create({
-    name: null,
-    currency: "ZWL",
-    provider: "whatsapp"
-  });
-
-  // assign creator as OWNER
-  await UserRole.create({
-    businessId: newBiz._id,
-    phone: providerId,
-    role: "owner"
-  });
-
-  await UserSession.findOneAndUpdate(
-    { phone: providerId },
-    { activeBusinessId: newBiz._id },
-    { upsert: true }
-  );
-
-  return sendTwimlText(
-    res,
-    "Business created.\nEnter business name:"
-  );
-}
-
-
-
-    if (profileName && !biz.name) {
-      biz.name = biz.name || profileName;
-      await saveBiz(biz).catch(() => {});
-    }
-
-const text = bodyRaw || "";
-const trimmed = text.trim();
-
-const isSingleNumber = /^\d+$/.test(trimmed);
-    const state = biz.sessionState || "idle";
-
-    const ctx = await getUserBranchContext(biz, providerId);
-const role = ctx?.role;
-
-
 // ================= JOIN INVITATION HANDLER =================
 if (/^join$/i.test(trimmed)) {
 
@@ -959,6 +837,139 @@ Reply *menu* to start.`
 }
 
 
+
+
+
+  
+
+const session = await UserSession.findOne({ phone: providerId });
+
+let biz = null;
+if (session?.activeBusinessId) {
+  biz = await Business.findById(session.activeBusinessId);
+}
+
+
+// Ensure sessionData defaults for vat/discount when starting a document
+ // ✅ SAFE: only initialize when biz exists
+if (biz) {
+  if (!biz.sessionData) biz.sessionData = {};
+
+  biz.sessionData.discountPercent =
+    typeof biz.sessionData.discountPercent === "undefined"
+      ? 0
+      : biz.sessionData.discountPercent;
+
+  if (typeof biz.sessionData.vatPercent === "undefined") {
+    biz.sessionData.vatPercent = Number(biz.taxRate || 0);
+  }
+
+  if (typeof biz.sessionData.applyVat === "undefined") {
+    biz.sessionData.applyVat = true;
+  }
+}
+
+  
+
+// 🚨 No active business selected
+if (!biz) {
+
+  const roles = await UserRole.find({ phone: providerId }).populate("businessId");
+
+  // ✅ User belongs to ONE business → auto-link silently
+  if (roles.length === 1) {
+    await UserSession.findOneAndUpdate(
+      { phone: providerId },
+      { activeBusinessId: roles[0].businessId._id },
+      { upsert: true }
+    );
+
+    return sendTwimlText(
+      res,
+      `Switched to ${roles[0].businessId.name}\nReply *menu* to continue.`
+    );
+  }
+
+  // ❌ User belongs to NO businesses
+  if (!roles.length) {
+    return sendTwimlText(
+      res,
+`Welcome to ZimQuote 👋
+You are not linked to any business.
+
+1) Create new business`
+    );
+  }
+
+  // 🔁 User belongs to MULTIPLE businesses
+  let msg = "Select a business:\n";
+  roles.forEach((r, i) => {
+    msg += `${i + 1}) ${r.businessId.name} (${r.role})\n`;
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: null, pendingChoices: roles.map(r => r.businessId._id) },
+    { upsert: true }
+  );
+
+  return sendTwimlText(res, msg);
+}
+
+
+// ===== CREATE BUSINESS WHEN NO ACTIVE BUSINESS =====
+if (trimmed === "1") {
+
+  const roles = await UserRole.find({ phone: providerId });
+
+  // Only allow create business if user truly has none
+  if (roles.length > 0) {
+    return sendTwimlText(
+      res,
+      "You already belong to a business. Reply *menu* to continue."
+    );
+  }
+
+  const newBiz = await Business.create({
+    name: null,
+    currency: "ZWL",
+    provider: "whatsapp"
+  });
+
+  await UserRole.create({
+    businessId: newBiz._id,
+    phone: providerId,
+    role: "owner"
+  });
+
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: newBiz._id },
+    { upsert: true }
+  );
+
+  return sendTwimlText(
+    res,
+    "Business created.\nEnter business name:"
+  );
+}
+
+
+
+
+    if (profileName && !biz.name) {
+      biz.name = biz.name || profileName;
+      await saveBiz(biz).catch(() => {});
+    }
+
+const text = bodyRaw || "";
+const trimmed = text.trim();
+
+const isSingleNumber = /^\d+$/.test(trimmed);
+    const state = biz.sessionState || "idle";
+
+    const ctx = await getUserBranchContext(biz, providerId);
+const role = ctx?.role;
 
 
 

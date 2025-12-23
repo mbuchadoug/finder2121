@@ -18,32 +18,6 @@ import Expense from "../models/expense.js";
 
 import UserSession from "../models/userSession.js";
 
-import { PACKAGES } from "../config/packages.js";
-
-function checkMonthlyLimit(biz) {
-  const pkg = PACKAGES[biz.package || "bronze"];
-  const monthKey = new Date().toISOString().slice(0, 7);
-
-  if (biz.documentCountMonthKey !== monthKey) {
-    biz.documentCountMonth = 0;
-    biz.documentCountMonthKey = monthKey;
-  }
-
-  if (biz.documentCountMonth >= pkg.documentsPerMonth) {
-    return {
-      allowed: false,
-      limit: pkg.documentsPerMonth
-    };
-  }
-
-  return { allowed: true };
-}
-
-function canAccessAdvancedReports(biz) {
-  const pkgKey = biz.package || "bronze";
-  // Only Gold and above get advanced reports
-  return ["gold", "enterprise"].includes(pkgKey);
-}
 
 let PDFDocument;
 try {
@@ -1049,33 +1023,6 @@ if (trimmed.toLowerCase() === "menu" || trimmed === "0") {
   return sendMenuForUser(res, biz, providerId);
 }
 
-
-// ================= UPGRADE COMMAND =================
-if (trimmed.toLowerCase() === "upgrade") {
-
-  const currentPkg = PACKAGES[biz.package || "bronze"];
-
-  biz.sessionState = "upgrade_choose_package";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-`🚀 Upgrade your plan
-
-Current package: *${currentPkg.label}*
-Monthly limit: ${currentPkg.documentsPerMonth} documents
-
-Choose a new package:
-
-1) Silver - ${PACKAGES.silver.documentsPerMonth} docs / month
-2) Gold - ${PACKAGES.gold.documentsPerMonth} docs / month
-3) Enterprise — Unlimited
-
-0) Cancel`
-  );
-}
-
-
 // ===== ROLE-BASED MAIN MENU ROUTER =====
 if ((state === "idle" || state === "ready") && isSingleNumber && !state.startsWith("report_")) {
 
@@ -1200,23 +1147,10 @@ if (action === "payment") {
   }
 
 
-if (action === "reports_menu") {
+  if (action === "reports_menu") {
   biz.sessionState = "reports_menu";
   await saveBiz(biz);
 
-  // Bronze / Silver → Daily only
-  if (!canAccessAdvancedReports(biz)) {
-    return sendTwimlText(
-      res,
-`📊 Reports
-1) Daily report
-0) Back
-
-🔒 Upgrade to Gold to unlock weekly & monthly reports.`
-    );
-  }
-
-  // Gold / Enterprise → Full menu
   return sendTwimlText(
     res,
 `📊 Reports
@@ -1331,17 +1265,6 @@ if (state === "reports_menu" && isSingleNumber) {
   if (trimmed === "0") {
     await resetSession(biz);
     return sendMenuForUser(res, biz, providerId);
-  }
-
-  // 🚫 Block advanced reports for non-Gold
-  if (!canAccessAdvancedReports(biz) && trimmed !== "1") {
-    await resetSession(biz);
-    return sendTwimlText(
-      res,
-`🔒 This report is available on *Gold* and above.
-
-Reply *upgrade* to unlock advanced reports.`
-    );
   }
 
   if (trimmed === "1") {
@@ -1636,43 +1559,6 @@ Outstanding: ${formatMoney(outstanding)} ${biz.currency}`
   );
 }
 */
-
-
-// ================= UPGRADE: CHOOSE PACKAGE =================
-if (state === "upgrade_choose_package" && isSingleNumber) {
-
-  if (trimmed === "0") {
-    await resetSession(biz);
-    return sendMenuForUser(res, biz, providerId);
-  }
-
-  const map = {
-    "1": "silver",
-    "2": "gold",
-    "3": "enterprise"
-  };
-
-  const chosen = map[trimmed];
-
-  if (!chosen) {
-    return sendTwimlText(res, "Invalid option. Choose 1, 2, 3 or 0.");
-  }
-
-  biz.package = chosen;
-  biz.subscriptionStatus = "active";
-
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-`✅ Package upgraded successfully!
-
-New package: *${PACKAGES[chosen].label}*
-Monthly documents: ${PACKAGES[chosen].documentsPerMonth}
-
-Reply *menu* to continue.`
-  );
-}
 
   // Settings menu blocks:
    // Settings menu blocks:
@@ -2362,27 +2248,6 @@ if (state === "assign_user_role" && isSingleNumber) {
   const branch = biz.sessionData.branch;
   const phone = biz.sessionData.userPhone;
 
-
-
-  const pkg = PACKAGES[biz.package || "bronze"];
-
-const activeUsers = await UserRole.countDocuments({
-  businessId: biz._id,
-  pending: false
-});
-
-if (activeUsers >= pkg.users) {
-  return sendTwimlText(
-    res,
-`🚫 User limit reached
-
-Package: ${pkg.label}
-Allowed users: ${pkg.users}
-
-Upgrade your package to add more users.`
-  );
-}
-
   // save role
 await UserRole.findOneAndUpdate(
   {
@@ -2811,29 +2676,8 @@ Or reply *JOIN* to this message.`;
         await saveBiz(biz);
         return sendTwimlText(res, `Send VAT percent (e.g. 15 or 15%). Send 0 to clear VAT. Current: ${Number(biz.sessionData.vatPercent||0)}%`);
       }
-  if (choice === "2") {
-
-  // 🔒 SUBSCRIPTION MONTHLY LIMIT CHECK (STEP 2)
-  const limitCheck = checkMonthlyLimit(biz);
-
-  if (!limitCheck.allowed) {
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-`🚫 Monthly document limit reached
-
-Package: ${limitCheck.package}
-Limit: ${limitCheck.limit} documents per month
-
-Reply *upgrade* to unlock more.`
-    );
-  }
-
-  // ✅ allowed → consume one document
-  biz.documentCountMonth += 1;
-
-  const items = biz.sessionData.items || [];
-
+      if (choice === "2") {
+        const items = biz.sessionData.items || [];
         const client = biz.sessionData.client;
         const docType = (biz.sessionData.docType || "invoice"); // "invoice" | "quote" | "receipt"
 

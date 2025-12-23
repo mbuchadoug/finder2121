@@ -13,6 +13,21 @@ const BusinessSchema = new mongoose.Schema({
   quotePrefix: { type: String, default: "QT" },
   counters: { invoice: { type: Number, default: 0 }, quote: { type: Number, default: 0 }, receipt: { type: Number, default: 0 } },
   sessionState: { type: String, default: null },
+
+
+  package: {
+  type: String,
+  enum: ["bronze", "silver", "gold", "enterprise"],
+  default: "bronze"
+},
+subscriptionStatus: {
+  type: String,
+  enum: ["active", "expired", "trial"],
+  default: "trial"
+},
+documentCountMonth: { type: Number, default: 0 },
+documentCountMonthKey: { type: String }, // YYYY-MM
+
   sessionData: { type: mongoose.Schema.Types.Mixed, default: {} },
 }, { timestamps: true });
 

@@ -997,12 +997,12 @@ const newBiz = await Business.create({
   currency: "ZWL",
   provider: "whatsapp",
 
-  // ✅ TRIAL SETUP (FIX 3 PART A)
   package: "trial",
-  subscriptionStatus: "trial",
+  subscriptionStatus: "active", // ✅ VALID ENUM
   trialStartedAt: now,
-  trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 1 day
+  trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
 });
+
 
 
 // 🔑 CREATE DEFAULT BRANCH

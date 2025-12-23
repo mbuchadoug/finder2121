@@ -24,11 +24,12 @@ const BusinessSchema = new mongoose.Schema({
   sessionState: { type: String, default: null },
 
   // ✅ PACKAGES
-  package: {
-    type: String,
-    enum: ["trial", "bronze", "silver", "gold"],
-    default: "trial"
-  },
+package: {
+  type: String,
+  enum: ["trial", "bronze", "silver", "gold", "enterprise"],
+  default: "trial"
+},
+
 
   subscriptionStatus: {
     type: String,

@@ -23,16 +23,18 @@ import UserSession from "../models/userSession.js";
 import PACKAGES from "../config/packages.js";
 
 function isTrial(biz) {
-  return biz.subscriptionStatus === "trial";
+  return biz?.subscriptionStatus === "trial";
 }
 
 function isTrialExpired(biz) {
   if (!biz) return false;
-  if (biz.package !== "trial") return false;
+  if (biz.subscriptionStatus !== "trial") return false;
   if (!biz.trialEndsAt) return false;
 
-  return new Date() > new Date(biz.trialEndsAt);
+  return Date.now() > new Date(biz.trialEndsAt).getTime();
 }
+
+
 
 function checkMonthlyLimit(biz) {
   const pkg = PACKAGES[biz.package || "bronze"];
@@ -949,19 +951,6 @@ Reply *upgrade* to see plans.`
 }
 
 
-// 🚫 TRIAL EXPIRY CHECK (GLOBAL BLOCK)
-if (isTrialExpired(biz)) {
-  return sendTwimlText(
-    res,
-    `⏰ Trial expired
-
-Your 1-day trial has ended.
-
-Upgrade to *Bronze* to continue using ZimQuote.
-
-Reply *upgrade* to see plans.`
-  );
-}
 
 
 // Ensure sessionData defaults for vat/discount when starting a document
@@ -1001,11 +990,20 @@ if (trimmed === "1") {
     );
   }
 
-  const newBiz = await Business.create({
+ const now = new Date();
+
+const newBiz = await Business.create({
   name: null,
   currency: "ZWL",
-  provider: "whatsapp"
+  provider: "whatsapp",
+
+  // ✅ TRIAL SETUP (FIX 3 PART A)
+  package: "trial",
+  subscriptionStatus: "trial",
+  trialStartedAt: now,
+  trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 1 day
 });
+
 
 // 🔑 CREATE DEFAULT BRANCH
 const defaultBranch = await Branch.create({
@@ -1758,7 +1756,12 @@ if (state === "upgrade_choose_package" && isSingleNumber) {
   }
 
   biz.package = chosen;
-  biz.subscriptionStatus = "active";
+
+// ✅ FIX 3 PART B — TRIAL ENDS HERE
+biz.subscriptionStatus = "active";
+biz.trialEndsAt = null;
+biz.trialStartedAt = null;
+
 
   await saveBiz(biz);
 

@@ -1,4 +1,16 @@
 const PACKAGES = {
+   trial: {
+    label: "Trial",
+    users: 1,
+    branches: 1,
+    documentsPerMonth: 3,
+    features: {
+      logo: false,
+      reports: [],
+      inviteUsers: false,
+      branchReports: false
+    }
+  },
   bronze: {
     label: "Bronze",
     documentsPerMonth: 20,

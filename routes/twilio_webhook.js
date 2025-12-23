@@ -388,14 +388,14 @@ return send(
 `💳 *Subscription Required*
 
 To activate your tutor profile:
-• Fee: *$5 USD per month*
+• Fee: *$2 USD per month*
 • Payment method: *EcoCash*
 
 📲 Steps:
 1️⃣ Dial *151#
 2️⃣ Select *Send Money*
 3️⃣ Enter number: 0771446827
-4️⃣ Amount: 5
+4️⃣ Amount: 2
 5️⃣ Reference: C. Musasa
 
 After payment, reply:

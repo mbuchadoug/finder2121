@@ -999,12 +999,33 @@ await UserRole.create({
   const roles = await UserRole.find({ phone: providerId }).populate("businessId");
 
   // ✅ User belongs to ONE business → auto-link silently
-  if (roles.length === 1) {
-    await UserSession.findOneAndUpdate(
-      { phone: providerId },
-      { activeBusinessId: roles[0].businessId._id },
-      { upsert: true }
+if (roles.length === 1) {
+  const roleRec = roles[0];
+
+  // 🚨 SAFETY CHECK
+  if (!roleRec.businessId) {
+    console.error(
+      "UserRole has null businessId",
+      { roleId: roleRec._id, phone: providerId }
     );
+
+    // Clean up broken role
+    await UserRole.deleteOne({ _id: roleRec._id });
+
+    return sendTwimlText(
+      res,
+      "⚠️ Your business link was invalid and has been reset.\nReply *menu* to continue."
+    );
+  }
+
+  await UserSession.findOneAndUpdate(
+    { phone: providerId },
+    { activeBusinessId: roleRec.businessId._id },
+    { upsert: true }
+  );
+
+
+
 
     return sendTwimlText(
       res,

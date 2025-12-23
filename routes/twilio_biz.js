@@ -696,22 +696,22 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
 }
 function resolveMenuAction(role, choice) {
   const maps = {
-   owner: {
+  owner: {
   "1": "create_business",
   "2": "invoice",
   "3": "receipt",
   "4": "quote",
   "5": "add_client",
-
   "6": "payment",
   "7": "expense",
   "8": "reports_menu",
   "9": "statement",
-
   "10": "invite_user",
   "11": "upload_logo",
-  "12": "settings"
+  "12": "settings",
+  "13": "upgrade_plan" // ✅ NEW
 },
+
     manager: {
       "1": "invoice",
       "2": "receipt",
@@ -750,10 +750,11 @@ function ownerMenu(biz) {
 10) Invite user
 11) Upload logo
 12) Settings
+13) 🚀 Upgrade plan
 `;
 
   if (isTrial(biz)) {
-    menu += `🚀 Upgrade plan\n`;
+    menu += `🕒 Trial mode\n`;
   }
 
   menu += `0) Menu`;
@@ -1217,6 +1218,29 @@ if (action === "payment") {
     await saveBiz(biz);
     return sendTwimlText(res, "Enter expense amount:");
   }
+
+  if (action === "upgrade_plan") {
+  const currentPkg = PACKAGES[biz.package || "bronze"];
+
+  biz.sessionState = "upgrade_choose_package";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`🚀 Upgrade your plan
+
+Current package: *${currentPkg.label}*
+Monthly limit: ${currentPkg.documentsPerMonth} documents
+
+Choose a new package:
+
+1) Silver — ${PACKAGES.silver.documentsPerMonth} docs / month
+2) Gold — Unlimited
+3) Enterprise — Custom
+
+0) Cancel`
+  );
+}
 
 
   if (action === "settings") {

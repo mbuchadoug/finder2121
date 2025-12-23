@@ -26,6 +26,14 @@ function isTrial(biz) {
   return biz.subscriptionStatus === "trial";
 }
 
+function isTrialExpired(biz) {
+  if (!biz) return false;
+  if (biz.package !== "trial") return false;
+  if (!biz.trialEndsAt) return false;
+
+  return new Date() > new Date(biz.trialEndsAt);
+}
+
 function checkMonthlyLimit(biz) {
   const pkg = PACKAGES[biz.package || "bronze"];
   const monthKey = new Date().toISOString().slice(0, 7);
@@ -921,6 +929,38 @@ const session = await UserSession.findOne({ phone: providerId });
 let biz = null;
 if (session?.activeBusinessId) {
   biz = await Business.findById(session.activeBusinessId);
+}
+
+
+// 🚫 TRIAL EXPIRY CHECK (ALLOW MENU + UPGRADE ONLY)
+if (isTrialExpired(biz)) {
+  const cmd = trimmed.toLowerCase();
+
+  if (cmd !== "upgrade" && cmd !== "menu") {
+    return sendTwimlText(
+      res,
+      `⏰ Trial expired
+
+Upgrade to *Bronze* to continue.
+
+Reply *upgrade* to see plans.`
+    );
+  }
+}
+
+
+// 🚫 TRIAL EXPIRY CHECK (GLOBAL BLOCK)
+if (isTrialExpired(biz)) {
+  return sendTwimlText(
+    res,
+    `⏰ Trial expired
+
+Your 1-day trial has ended.
+
+Upgrade to *Bronze* to continue using ZimQuote.
+
+Reply *upgrade* to see plans.`
+  );
 }
 
 

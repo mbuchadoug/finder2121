@@ -1,0 +1,46 @@
+import mongoose from "mongoose";
+
+const BusinessSchema = new mongoose.Schema({
+  provider: { type: String, default: "whatsapp" },
+  providerId: { type: String, index: true }, // whatsapp phone
+  name: String,
+  email: String,
+  address: String,
+  currency: { type: String, default: "ZWL" },
+  paymentTermsDays: { type: Number, default: 30 },
+  logoUrl: String, // public URL
+  invoicePrefix: { type: String, default: "INV" },
+  quotePrefix: { type: String, default: "QT" },
+  counters: { invoice: { type: Number, default: 0 }, quote: { type: Number, default: 0 }, receipt: { type: Number, default: 0 } },
+  sessionState: { type: String, default: null },
+
+
+ package: {
+  type: String,
+  enum: ["trial", "bronze", "silver", "gold"],
+  default: "trial"
+},
+
+subscriptionStatus: {
+  type: String,
+  enum: ["active", "expired"],
+  default: "active"
+},
+
+trialStartedAt: {
+  type: Date,
+  default: Date.now
+},
+
+trialEndsAt: {
+  type: Date,
+  default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) // +1 day
+},
+
+documentCountMonth: { type: Number, default: 0 },
+documentCountMonthKey: { type: String }, // YYYY-MM
+
+  sessionData: { type: mongoose.Schema.Types.Mixed, default: {} },
+}, { timestamps: true });
+
+export default mongoose.models.Business || mongoose.model("Business", BusinessSchema);

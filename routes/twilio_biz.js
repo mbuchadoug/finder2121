@@ -21,6 +21,23 @@ import UserSession from "../models/userSession.js";
 //import { PACKAGES } from "../config/packages.js";
 
 import PACKAGES from "../config/packages.js";
+import { PACKAGE_FEATURES } from "../config/packageFeatures.js";
+
+function canUseFeature(biz, featureKey) {
+  const pkg = biz?.package || "trial";
+  return !!PACKAGE_FEATURES[pkg]?.[featureKey];
+}
+function blockedMessage(res) {
+  return sendTwimlText(
+    res,
+`🔒 Feature locked
+
+Upgrade to *Gold* to unlock weekly & monthly reports.
+
+Reply *upgrade* to see plans.`
+  );
+}
+
 
 function isTrial(biz) {
   return biz?.subscriptionStatus === "trial";
@@ -1239,15 +1256,21 @@ if (action === "payment") {
 
 
 
-    if (action === "receipt") {
-    biz.sessionState = "creating_invoice_choose_client";
-    biz.sessionData = { docType: "receipt", items: [] };
-    await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      "Receipt:\n1) Use saved client\n2) New client\n3) Cancel"
-    );
+ if (action === "receipt") {
+
+  if (!canUseFeature(biz, "receipt")) {
+    return blockedMessage(res);
   }
+
+  biz.sessionState = "creating_invoice_choose_client";
+  biz.sessionData = { docType: "receipt", items: [] };
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+    "Receipt:\n1) Use saved client\n2) New client\n3) Cancel"
+  );
+}
 
 
     if (action === "expense") {
@@ -1336,6 +1359,10 @@ if (action === "statement") {
 }
 
 if (action === "invite_user") {
+ if (!canUseFeature(biz, "invite_user")) {
+    return blockedMessage(res);
+  }
+
   const ok = await requireRole(biz, providerId, ["owner"]);
   if (!ok) {
     return sendTwimlText(res, "⛔ Only the owner can invite users.");
@@ -1355,6 +1382,10 @@ if (action === "invite_user") {
 }
 
 if (action === "upload_logo") {
+
+  if (!canUseFeature(biz, "upload_logo")) {
+    return blockedMessage(res);
+  }
   const ok = await requireRole(biz, providerId, ["owner"]);
   if (!ok) {
     return sendTwimlText(res, "⛔ Only the owner can upload a logo.");
@@ -1431,15 +1462,11 @@ if (state === "reports_menu" && isSingleNumber) {
   }
 
   // 🚫 Block advanced reports for non-Gold
-  if (!canAccessAdvancedReports(biz) && trimmed !== "1") {
-    await resetSession(biz);
-    return sendTwimlText(
-      res,
-`🔒 This report is available on *Gold* and above.
+  if (!canUseFeature(biz, "reports_advanced") && trimmed !== "1") {
+  await resetSession(biz);
+  return blockedMessage(res);
+}
 
-Reply *upgrade* to unlock advanced reports.`
-    );
-  }
 
   if (trimmed === "1") {
     biz.sessionState = "report_daily";

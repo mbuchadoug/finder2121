@@ -22,6 +22,9 @@ import UserSession from "../models/userSession.js";
 
 import PACKAGES from "../config/packages.js";
 
+function isTrial(biz) {
+  return biz.subscriptionStatus === "trial";
+}
 
 function checkMonthlyLimit(biz) {
   const pkg = PACKAGES[biz.package || "bronze"];
@@ -733,8 +736,8 @@ function resolveMenuAction(role, choice) {
 async function resetSession(biz) { biz.sessionState = null; biz.sessionData = {}; return saveBiz(biz); }
 
 /* ---------- Role-based Menus ---------- */
-function ownerMenu() {
-  return `ZimQuote | Owner Menu
+function ownerMenu(biz) {
+  let menu = `ZimQuote | Owner Menu
 1) Create business
 2) New invoice
 3) New receipt
@@ -747,8 +750,16 @@ function ownerMenu() {
 10) Invite user
 11) Upload logo
 12) Settings
-0) Menu`;
+`;
+
+  if (isTrial(biz)) {
+    menu += `🚀 Upgrade plan\n`;
+  }
+
+  menu += `0) Menu`;
+  return menu;
 }
+
 
 
 function managerMenu() {

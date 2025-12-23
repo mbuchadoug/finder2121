@@ -18,7 +18,10 @@ import Expense from "../models/expense.js";
 
 import UserSession from "../models/userSession.js";
 
-import { PACKAGES } from "../config/packages.js";
+//import { PACKAGES } from "../config/packages.js";
+
+import PACKAGES from "../config/packages.js";
+
 
 function checkMonthlyLimit(biz) {
   const pkg = PACKAGES[biz.package || "bronze"];

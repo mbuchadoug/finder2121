@@ -1280,27 +1280,56 @@ if (action === "payment") {
     return sendTwimlText(res, "Enter expense amount:");
   }
 
+
   if (action === "upgrade_plan") {
-  const currentPkg = PACKAGES[biz.package || "bronze"];
+  const currentKey = biz.package || "trial";
+  const currentPkg = PACKAGES[currentKey];
 
   biz.sessionState = "upgrade_choose_package";
   await saveBiz(biz);
 
-  return sendTwimlText(
-    res,
-`🚀 Upgrade your plan
+  let options = [];
+  let menu = `🚀 Upgrade your plan
 
 Current package: *${currentPkg.label}*
 Monthly limit: ${currentPkg.documentsPerMonth} documents
 
-Choose a new package:
+Choose a new package:\n\n`;
 
-1) Silver — ${PACKAGES.silver.documentsPerMonth} docs / month
-2) Gold — Unlimited
-3) Enterprise — Custom
+  // Trial → Bronze, Silver, Gold
+  if (currentKey === "trial") {
+    options = ["bronze", "silver", "gold"];
+  }
 
-0) Cancel`
-  );
+  // Bronze → Silver, Gold
+  else if (currentKey === "bronze") {
+    options = ["silver", "gold"];
+  }
+
+  // Silver → Gold
+  else if (currentKey === "silver") {
+    options = ["gold"];
+  }
+
+  // Gold → no upgrade
+  else if (currentKey === "gold") {
+    return sendTwimlText(
+      res,
+`✅ You are already on the *Gold* plan.
+
+You have access to all features.
+
+Reply *menu* to continue.`
+    );
+  }
+
+  options.forEach((pkg, i) => {
+    menu += `${i + 1}) ${PACKAGES[pkg].label} — ${PACKAGES[pkg].documentsPerMonth} docs / month\n`;
+  });
+
+  menu += `\n0) Cancel`;
+
+  return sendTwimlText(res, menu);
 }
 
 
@@ -1770,25 +1799,30 @@ if (state === "upgrade_choose_package" && isSingleNumber) {
     return sendMenuForUser(res, biz, providerId);
   }
 
-  const map = {
-    "1": "silver",
-    "2": "gold",
-    "3": "enterprise"
-  };
+  const currentKey = biz.package || "trial";
 
-  const chosen = map[trimmed];
+  let allowedUpgrades = [];
 
-  if (!chosen) {
-    return sendTwimlText(res, "Invalid option. Choose 1, 2, 3 or 0.");
+  if (currentKey === "trial") {
+    allowedUpgrades = ["bronze", "silver", "gold"];
+  } else if (currentKey === "bronze") {
+    allowedUpgrades = ["silver", "gold"];
+  } else if (currentKey === "silver") {
+    allowedUpgrades = ["gold"];
   }
 
+  const idx = Number(trimmed) - 1;
+  const chosen = allowedUpgrades[idx];
+
+  if (!chosen) {
+    return sendTwimlText(res, "Invalid option. Choose a number from the list or 0 to cancel.");
+  }
+
+  // ✅ APPLY UPGRADE
   biz.package = chosen;
-
-// ✅ FIX 3 PART B — TRIAL ENDS HERE
-biz.subscriptionStatus = "active";
-biz.trialEndsAt = null;
-biz.trialStartedAt = null;
-
+  biz.subscriptionStatus = "active";
+  biz.trialEndsAt = null;
+  biz.trialStartedAt = null;
 
   await saveBiz(biz);
 
@@ -1802,6 +1836,7 @@ Monthly documents: ${PACKAGES[chosen].documentsPerMonth}
 Reply *menu* to continue.`
   );
 }
+
 
   // Settings menu blocks:
    // Settings menu blocks:

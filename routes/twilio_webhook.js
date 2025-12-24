@@ -233,11 +233,8 @@ Reply with a number:
       const twiml = new MessagingResponse();
       let pinned = false;
 
-      for (const s of schools.slice(0, 5)) {
-        twiml.message(`🏫 ${s.name}\n${s.website || ""}`);
-        if (/st[\s-]*eurit/i.test(s.name)) pinned = true;
-      }
-/*
+
+      /*
   if (pinned) {
   // Message 1: image
   const imgMsg = twiml.message(
@@ -254,32 +251,36 @@ Reply with a number:
   const pdf2 = twiml.message("📄 Enrollment Requirements");
   pdf2.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
 }*/
+      for (const s of schools.slice(0, 5)) {
+        twiml.message(`🏫 ${s.name}\n${s.website || ""}`);
+        if (/st[\s-]*eurit/i.test(s.name)) pinned = true;
+      }
 
 
+
+// 2️⃣ Send ALL pinned school media
 if (pinned) {
-  // Message 1: First image
   const img1 = twiml.message(
 `⭐ *Pinned School: St Eurit International School*
 👉 https://skoolfinder.net/register/st-eurit-international-school`
   );
   img1.media(`${site}/docs/st-eurit.jpg`);
 
-  // Message 2: Second image
   const img2 = twiml.message("📸 School Life at St Eurit");
   img2.media(`${site}/docs/st-eurit-pic2.jpg`);
 
-  // Message 3: Registration form PDF
   const pdf1 = twiml.message("📄 Registration Form");
   pdf1.media(`${site}/docs/st-eurit-registration.pdf`);
 
-  // Message 4: School profile PDF
   const pdf2 = twiml.message("📘 Enrollment Requirements");
   pdf2.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
 }
 
-
-      twiml.message("\n0️⃣ Back to menu\nType *hi*");
-
+// 3️⃣ ONLY AFTER ALL MEDIA — add back to menu
+twiml.message(
+`0️⃣ Back to menu
+Type *hi*`
+);
       res.set("Content-Type", "text/xml");
       return res.send(twiml.toString());
     }

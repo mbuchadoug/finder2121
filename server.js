@@ -35,8 +35,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-//if (PROD) app.set("trust proxy", 1);
-app.set("trust proxy", true);
+if (PROD) app.set("trust proxy", 1);
+
 // simple request logger (temporary — useful for diagnosing webhook reachability)
 app.use((req, res, next) => {
   console.log("REQ ->", req.method, req.originalUrl, "host:", req.get("host"), "proto:", req.get("x-forwarded-proto") || req.protocol, "ip:", req.ip || req.connection?.remoteAddress);

@@ -238,23 +238,15 @@ Reply with a number:
         if (/st[\s-]*eurit/i.test(s.name)) pinned = true;
       }
 
-   if (pinned) {
-  const m = twiml.message(
+      if (pinned) {
+        const m = twiml.message(
 `⭐ *Pinned School: St Eurit International School*
-👉 https://skoolfinder.net/register/st-eurit-international-school
-
-📄 School documents below:`
-  );
-
-  // Image first (best UX)
-  m.media(`${site}/docs/st-eurit.jpg`);
-
-  // PDFs (must be public + HTTPS)
-  m.media(`${site}/docs/st-eurit-profile.pdf`);
-  m.media(`${site}/docs/st-eurit-registration.pdf`);
-  m.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
-}
-
+👉 https://skoolfinder.net/register/st-eurit-international-school`
+        );
+        m.media(`${site}/docs/st-eurit.jpg`);
+        m.media(`${site}/docs/st-eurit-registration.pdf`);
+        m.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
+      }
 
       twiml.message("\n0️⃣ Back to menu\nType *hi*");
 
@@ -396,14 +388,14 @@ return send(
 `💳 *Subscription Required*
 
 To activate your tutor profile:
-• Fee: *$2 USD per month*
+• Fee: *$5 USD per month*
 • Payment method: *EcoCash*
 
 📲 Steps:
 1️⃣ Dial *151#
 2️⃣ Select *Send Money*
 3️⃣ Enter number: 0771446827
-4️⃣ Amount: 2
+4️⃣ Amount: 5
 5️⃣ Reference: C. Musasa
 
 After payment, reply:

@@ -196,12 +196,10 @@ app.use(
   "/docs",
   express.static(DOCS_DIR, {
     setHeaders: (res, filePath) => {
-   if (filePath.endsWith(".pdf")) {
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", "inline"); // ← ADD THIS
-  res.setHeader("Cache-Control", "public, max-age=86400");
-}
-
+      if (filePath && filePath.endsWith(".pdf")) {
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+      }
     },
   })
 );

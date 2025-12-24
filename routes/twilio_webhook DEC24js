@@ -238,23 +238,15 @@ Reply with a number:
         if (/st[\s-]*eurit/i.test(s.name)) pinned = true;
       }
 
-  if (pinned) {
-  // Message 1: image
-  const imgMsg = twiml.message(
+      if (pinned) {
+        const m = twiml.message(
 `⭐ *Pinned School: St Eurit International School*
 👉 https://skoolfinder.net/register/st-eurit-international-school`
-  );
-  imgMsg.media(`${site}/docs/st-eurit.jpg`);
-
-  // Message 2: registration PDF
-  const pdf1 = twiml.message("📄 Registration Form");
-  pdf1.media(`${site}/docs/st-eurit-registration.pdf`);
-
-  // Message 3: enrollment PDF
-  const pdf2 = twiml.message("📄 Enrollment Requirements");
-  pdf2.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
-}
-
+        );
+        m.media(`${site}/docs/st-eurit.jpg`);
+        m.media(`${site}/docs/st-eurit-registration.pdf`);
+        m.media(`${site}/docs/st-eurit-enrollment-requirements.pdf`);
+      }
 
       twiml.message("\n0️⃣ Back to menu\nType *hi*");
 

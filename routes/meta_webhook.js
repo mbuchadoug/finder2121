@@ -19,6 +19,7 @@ router.get("/whatsapp", (req, res) => {
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
+  console.log(mode,token,challenge,'yhwh')
   if (
     mode === "subscribe" &&
     token === process.env.WHATSAPP_VERIFY_TOKEN

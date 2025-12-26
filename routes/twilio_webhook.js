@@ -263,7 +263,7 @@ Reply with a number:
 if (pinned) {
   const img1 = twiml.message(
 `⭐ *Pinned School: St Eurit International School*
-👉 https://skoolfinder.net/register/st-eurit-international-school`
+ 👉 Register Online: https://skoolfinder.net/register/st-eurit-international-school`
   );
   img1.media(`${site}/docs/st-eurit.jpg`);
 

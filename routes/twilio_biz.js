@@ -1160,7 +1160,7 @@ Choose a new package:
 
 1) Silver - ${PACKAGES.silver.documentsPerMonth} docs / month
 2) Gold - ${PACKAGES.gold.documentsPerMonth} docs / month
-3) Enterprise — Unlimited
+3) Enterprise - Unlimited
 
 0) Cancel`
   );
@@ -1324,7 +1324,7 @@ Reply *menu* to continue.`
   }
 
   options.forEach((pkg, i) => {
-    menu += `${i + 1}) ${PACKAGES[pkg].label} — ${PACKAGES[pkg].documentsPerMonth} docs / month\n`;
+    menu += `${i + 1}) ${PACKAGES[pkg].label} - ${PACKAGES[pkg].documentsPerMonth} docs / month\n`;
   });
 
   menu += `\n0) Cancel`;

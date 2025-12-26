@@ -118,6 +118,7 @@ router.post("/webhook", async (req, res) => {
       return send(
         res,
 `👋 *Welcome to ZimEduFinder*
+     Reply with a number:
 
 1️⃣ Find Schools
 2️⃣ Find Private Tutors

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API = `https://graph.facebook.com/v19.0/${process.env.META_PHONE_NUMBER_ID}/messages`;
+const API = `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`;
 const headers = {
   Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
   "Content-Type": "application/json"

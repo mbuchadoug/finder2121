@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export async function sendMetaMessage({ to, text }) {
-  const url = `https://graph.facebook.com/v19.0/${process.env.WABA_PHONE_NUMBER_ID}/messages`;
+  const url = `https://graph.facebook.com/v19.0/${process.env.WABA_ID}/messages`;
 
   return axios.post(
     url,
@@ -12,7 +12,7 @@ export async function sendMetaMessage({ to, text }) {
     },
     {
       headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
         "Content-Type": "application/json"
       }
     }

@@ -1,29 +1,16 @@
-import { sendText, sendButtons, sendList } from "./metaSender.js";
+// services/menuRenderer.js
+import { sendText } from "./metaSender.js";
 
-export async function renderMenu({ channel, to, menu }) {
-  if (channel === "meta") {
-    // Buttons (max 3)
-    if (menu.items.length <= 3) {
-      return sendButtons(to, {
-        text: menu.title,
-        buttons: menu.items
-      });
-    }
+export async function renderMenu({ to, menu }) {
+  let text = menu.title + "\n\n";
 
-    // List (more than 3)
-    return sendList(to, {
-      title: menu.title,
-      button: "Choose",
-      items: menu.items
-    });
+  menu.items.forEach(item => {
+    text += `${item.key}) ${item.label}\n`;
+  });
+
+  if (menu.footer) {
+    text += `\n${menu.footer}`;
   }
 
-  // Twilio fallback (TEXT)
-  let msg = `${menu.title}\n`;
-  menu.items.forEach((i, idx) => {
-    msg += `${idx + 1}) ${i.label}\n`;
-  });
-  msg += `0) Menu`;
-
-  return sendText(to, msg);
+  return sendText(to, text);
 }

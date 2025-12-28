@@ -26,3 +26,49 @@ export async function sendMetaMessage({ to, text }) {
     }
   );
 }
+// services/metaSender.js
+
+export async function sendButtons(to, bodyText, buttons) {
+  return axios.post(
+    API,
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: bodyText },
+        action: {
+          buttons: buttons.map(b => ({
+            type: "reply",
+            reply: {
+              id: b.id,
+              title: b.title
+            }
+          }))
+        }
+      }
+    },
+    { headers }
+  );
+}
+
+export async function sendList(to, bodyText, buttonText, sections) {
+  return axios.post(
+    API,
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: { text: bodyText },
+        action: {
+          button: buttonText,
+          sections
+        }
+      }
+    },
+    { headers }
+  );
+}

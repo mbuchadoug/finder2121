@@ -1,34 +1,11 @@
-
-//import { resolveUserState } from "./sessionResolver.js"; // YOUR EXISTING LOGIC
-
 import dotenv from "dotenv";
 dotenv.config();
+
 import { resolveUserState } from "./sessionResolver.js";
-
-
-import { sendText } from "./metaSender.js";
+import { sendMainMenu } from "./metaSender.js"; // ✅ FIXED
 
 export async function handleIncomingMessage({ from, text }) {
   console.log("[CHATBOT] incoming:", from, text);
 
-  await sendText(
-    from,
-    `👋 Hi! I received: "${text}"`
-  );
+  await sendMainMenu(from); // ✅ now works
 }
-
-
-/*export async function handleIncomingMessage({ from, text }) {
-  const biz = await Business.findOne({ phone: from });
-
-  if (!biz) {
-    return sendText(from, "❌ You are not registered.");
-  }
-
-  // Your existing logic
-  await resolveUserState({
-    providerId: from,
-    message: text,
-    business: biz
-  });
-}*/

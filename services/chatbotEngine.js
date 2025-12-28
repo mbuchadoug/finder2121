@@ -1,6 +1,9 @@
 import Business from "../models/business.js";
 import { sendText, sendMainMenu, sendOwnerMenu } from "./metaSender.js";
-import { resolveUserState } from "./sessionResolver.js"; // YOUR EXISTING LOGIC
+//import { resolveUserState } from "./sessionResolver.js"; // YOUR EXISTING LOGIC
+
+
+import { resolveUserState } from "./sessionResolver.js";
 
 export async function handleIncomingMessage({ from, text }) {
   const biz = await Business.findOne({ phone: from });

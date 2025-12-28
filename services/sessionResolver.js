@@ -1,14 +1,20 @@
 // services/sessionResolver.js
 
-export function resolveSession({ text, interactive }) {
-  // Handles both button replies & text fallback
+/**
+ * Normalizes user input from Meta UI (buttons, lists) or text
+ * Returns a single string you can feed into your existing state machine
+ */
+export function resolveUserState({ text, interactive }) {
+  // Button reply
   if (interactive?.button_reply?.id) {
     return interactive.button_reply.id;
   }
 
+  // List reply
   if (interactive?.list_reply?.id) {
     return interactive.list_reply.id;
   }
 
-  return text?.trim().toLowerCase() || "";
+  // Fallback to text
+  return text?.trim() || "";
 }

@@ -4,8 +4,8 @@ import axios from "axios";
 const router = express.Router();
 
 /**
- * Register WhatsApp business phone number
- * Sets the 6-digit two-step verification PIN
+ * Register WhatsApp Business phone number
+ * REQUIRED to move number from "pending" → "active"
  */
 router.post("/register", async (req, res) => {
   try {
@@ -26,9 +26,13 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    // ✅ CORRECT ENDPOINT
     const response = await axios.post(
-      `https://graph.facebook.com/v24.0/${phoneNumberId}`,
-      { pin },
+      `https://graph.facebook.com/v24.0/${phoneNumberId}/register`,
+      {
+        messaging_product: "whatsapp", // ✅ REQUIRED
+        pin
+      },
       {
         headers: {
           Authorization: `Bearer ${token}`,

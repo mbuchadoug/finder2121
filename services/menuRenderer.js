@@ -1,14 +1,21 @@
-import { sendText, sendList } from "./metaSender.js";
+export function renderMenuText(menu) {
+  let index = 1;
+  let map = {};
 
-export async function renderMenu({ to, menu }) {
-  if (!menu || !menu.title || !Array.isArray(menu.items)) {
-    console.error("❌ Invalid menu structure:", menu);
-    return sendText(to, "Menu unavailable. Please try again.");
+  let text = "📋 Main Menu\n\n";
+
+  for (const section of menu) {
+    text += `${section.section}\n`;
+    for (const item of section.items) {
+      const label = item.locked ? `🔒 ${item.label}` : item.label;
+      text += `${index}) ${label}\n`;
+      map[index] = item;
+      index++;
+    }
+    text += "\n";
   }
 
-  return sendList({
-    to,
-    header: menu.title,
-    items: menu.items
-  });
+  text += "0) Menu";
+
+  return { text, map };
 }

@@ -1,45 +1,81 @@
-export const MENUS = {
-  OWNER_MAIN: {
-    title: "ZimQuote | Owner Menu",
-    type: "list",
-    items: [
-      { id: "1", title: "Create business" },
-      { id: "2", title: "New invoice" },
-      { id: "3", title: "New receipt" },
-      { id: "4", title: "New quotation" },
-      { id: "5", title: "Add client" },
-      { id: "6", title: "Record payment" },
-      { id: "7", title: "Record expense" },
-      { id: "8", title: "Reports" },
-      { id: "9", title: "Client statement" },
-      { id: "10", title: "Invite user" },
-      { id: "11", title: "Upload logo" },
-      { id: "12", title: "Settings" },
-      { id: "13", title: "🚀 Upgrade plan" }
-    ]
-  },
+export const MENU_SCHEMA = {
+  owner: [
+    {
+      section: "🧾 Documents",
+      items: [
+        { id: "invoice:new", label: "New Invoice" },
+        { id: "receipt:new", label: "New Receipt", feature: "receipt" },
+        { id: "quote:new", label: "New Quotation" }
+      ]
+    },
+    {
+      section: "💰 Money",
+      items: [
+        { id: "payment:new", label: "Record Payment (IN)" },
+        { id: "expense:new", label: "Record Expense (OUT)" }
+      ]
+    },
+    {
+      section: "📊 Reports",
+      items: [
+        { id: "reports", label: "Reports & Statements" }
+      ]
+    },
+    {
+      section: "⚙️ Business",
+      items: [
+        { id: "clients", label: "Clients" },
+        { id: "branches", label: "Branches" },
+        { id: "users", label: "Users", feature: "invite_user" },
+        { id: "settings", label: "Settings" },
+        { id: "upgrade", label: "🚀 Upgrade Plan" }
+      ]
+    }
+  ],
 
-  MANAGER_MAIN: {
-    title: "ZimQuote | Manager Menu",
-    type: "list",
-    items: [
-      { id: "1", title: "New invoice" },
-      { id: "2", title: "New receipt" },
-      { id: "3", title: "New quotation" },
-      { id: "4", title: "Add client" },
-      { id: "5", title: "Record payment" },
-      { id: "6", title: "Record expense" },
-      { id: "7", title: "Reports" }
-    ]
-  },
+  manager: [
+    {
+      section: "🧾 Documents",
+      items: [
+        { id: "invoice:new", label: "New Invoice" },
+        { id: "receipt:new", label: "New Receipt", feature: "receipt" },
+        { id: "quote:new", label: "New Quotation" }
+      ]
+    },
+    {
+      section: "💰 Money",
+      items: [
+        { id: "payment:new", label: "Record Payment (IN)" },
+        { id: "expense:new", label: "Record Expense (OUT)" }
+      ]
+    },
+    {
+      section: "📊 Reports",
+      items: [
+        { id: "reports", label: "Reports & Statements" }
+      ]
+    }
+  ],
 
-  CLERK_MAIN: {
-    title: "ZimQuote | Clerk Menu",
-    type: "list",
-    items: [
-      { id: "1", title: "New invoice" },
-      { id: "2", title: "Record payment" },
-      { id: "3", title: "Record expense" }
-    ]
-  }
+  clerk: [
+    {
+      section: "🧾 Documents",
+      items: [
+        { id: "invoice:new", label: "New Invoice" }
+      ]
+    },
+    {
+      section: "💰 Money",
+      items: [
+        { id: "payment:new", label: "Record Payment (IN)" },
+        { id: "expense:new", label: "Record Expense (OUT)" }
+      ]
+    },
+    {
+      section: "📊 Reports",
+      items: [
+        { id: "reports:daily", label: "Daily Summary" }
+      ]
+    }
+  ]
 };

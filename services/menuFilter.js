@@ -1,25 +1,18 @@
-// services/menuFilter.js
+import { PACKAGE_FEATURES } from "../config/packageFeatures.js";
 
-/**
- * Filters menu items based on business state, role, package, etc.
- * 
- * IMPORTANT:
- * - For now, we do NOT hide locked features
- * - We only return the menu unchanged
- * - Later we will add feature-lock logic here
- */
-export function filterMenu(menu, biz, role, options = {}) {
-  const { hideLocked = false } = options;
+export function filterMenuByPackage(menu, biz) {
+  const pkg = biz?.package || "trial";
 
-  // 🚨 For now, do NOTHING
-  // We want ALL menu items visible
-  if (!hideLocked) {
-    return menu;
-  }
+  return menu.map(section => ({
+    ...section,
+    items: section.items.map(item => {
+      if (!item.feature) return item;
 
-  // 🔒 FUTURE: hide locked items here
-  // Example (not active yet):
-  // return menu.filter(item => canUseFeature(biz, item.featureKey))
-
-  return menu;
+      const allowed = PACKAGE_FEATURES[pkg]?.[item.feature];
+      return {
+        ...item,
+        locked: !allowed
+      };
+    })
+  }));
 }

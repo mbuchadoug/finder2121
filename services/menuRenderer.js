@@ -1,16 +1,14 @@
-// services/menuRenderer.js
-import { sendText } from "./metaSender.js";
+import { sendText, sendList } from "./metaSender.js";
 
 export async function renderMenu({ to, menu }) {
-  let text = menu.title + "\n\n";
-
-  menu.items.forEach(item => {
-    text += `${item.key}) ${item.label}\n`;
-  });
-
-  if (menu.footer) {
-    text += `\n${menu.footer}`;
+  if (!menu || !menu.title || !Array.isArray(menu.items)) {
+    console.error("❌ Invalid menu structure:", menu);
+    return sendText(to, "Menu unavailable. Please try again.");
   }
 
-  return sendText(to, text);
+  return sendList({
+    to,
+    header: menu.title,
+    items: menu.items
+  });
 }

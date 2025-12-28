@@ -1,42 +1,29 @@
-// services/chatbotEngine.js
-
 import { MENUS } from "./menuSchema.js";
-import { filterMenu } from "./menuFilter.js";
 import { renderMenu } from "./menuRenderer.js";
 
 /**
- * Send main menu based on role
- * IMPORTANT:
- * - We are NOT auto-hiding locked features yet
- * - filterMenu will only remove items if YOU tell it to
+ * MAIN ENTRY POINT FOR META WEBHOOK
+ * This is what meta_webhook.js is calling
+ */
+export async function handleIncomingMessage({ from, text, raw }) {
+  // For now: ALWAYS show main menu
+  // We will add routing later
+  const biz = raw?.biz || null;   // safe placeholder
+  const role = "owner";           // default for now
+
+  return sendMainMenu({ to: from, biz, role });
+}
+
+/**
+ * Sends role-based main menu
  */
 export async function sendMainMenu({ to, biz, role }) {
-  let baseMenu;
+  const baseMenu =
+    role === "owner"
+      ? MENUS.OWNER_MAIN
+      : role === "manager"
+      ? MENUS.MANAGER_MAIN
+      : MENUS.CLERK_MAIN;
 
-  switch (role) {
-    case "owner":
-      baseMenu = MENUS.OWNER_MAIN;
-      break;
-    case "manager":
-      baseMenu = MENUS.MANAGER_MAIN;
-      break;
-    case "clerk":
-      baseMenu = MENUS.CLERK_MAIN;
-      break;
-    default:
-      baseMenu = MENUS.OWNER_MAIN;
-  }
-
-  /**
-   * 🔓 DO NOT hide locked features yet
-   * This ensures Upgrade, Special Audit, etc. ALWAYS show
-   */
-  const menu = filterMenu(baseMenu, biz, role, {
-    hideLocked: false
-  });
-
-  return renderMenu({
-    to,
-    menu
-  });
+  return renderMenu({ to, menu: baseMenu });
 }

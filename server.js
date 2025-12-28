@@ -19,6 +19,10 @@ import twilioBizRoutes from "./routes/twilio_biz.js";
 import whatsappSend from "./routes/whatsappSend.js";
 import adminTutorRoutes from "./routes/admin_tutors.js";
 import metaWebhookRoutes from "./routes/meta_webhook.js";
+import whatsappRegister from "./routes/whatsappRegister.js";
+
+
+
 
 
 
@@ -361,6 +365,7 @@ app.use("/admin", adminRoutes);
 app.use("/register", registerRoutes);
 app.use("/meta", metaWebhookRoutes);
 app.use("/api/whatsapp", whatsappSend);
+app.use("/api/whatsapp", whatsappRegister);
 app.use(adminTutorRoutes);
 // Mount Twilio routes under /twilio
 // Note: the twilioWebhookRoutes file expects router.post("/webhook") internally,

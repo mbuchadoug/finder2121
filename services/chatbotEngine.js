@@ -10,7 +10,6 @@ import { sendText } from "./metaSender.js";
 export async function handleIncomingMessage({ from, text }) {
   console.log("[CHATBOT] incoming:", from, text);
 
-  // TEMP TEST RESPONSE
   await sendText(
     from,
     `👋 Hi! I received: "${text}"`

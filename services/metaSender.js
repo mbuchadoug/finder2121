@@ -1,5 +1,6 @@
 import axios from "axios";
-
+import dotenv from "dotenv";
+dotenv.config();
 const API = `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`;
 const headers = {
   Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,

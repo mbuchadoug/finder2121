@@ -1,6 +1,7 @@
 import express from "express";
 import { handleIncomingMessage } from "../services/chatbotEngine.js";
-
+import dotenv from "dotenv";
+dotenv.config();
 const router = express.Router();
 
 /**

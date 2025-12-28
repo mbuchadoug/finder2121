@@ -1,7 +1,8 @@
 
 //import { resolveUserState } from "./sessionResolver.js"; // YOUR EXISTING LOGIC
 
-
+import dotenv from "dotenv";
+dotenv.config();
 import { resolveUserState } from "./sessionResolver.js";
 
 

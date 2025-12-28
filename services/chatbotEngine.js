@@ -1,23 +1,21 @@
-import Business from "../models/business.js";
-import { sendText, sendMainMenu, sendOwnerMenu } from "./metaSender.js";
+
 //import { resolveUserState } from "./sessionResolver.js"; // YOUR EXISTING LOGIC
 
 
 import { resolveUserState } from "./sessionResolver.js";
 
 
-import { sendMetaMessage } from "./metaSend.js";
+import { sendText } from "./metaSender.js";
 
 export async function handleIncomingMessage({ from, text }) {
   console.log("[CHATBOT] incoming:", from, text);
 
   // TEMP TEST RESPONSE
-  await sendMetaMessage(
+  await sendText(
     from,
     `👋 Hi! I received: "${text}"`
   );
 }
-
 
 
 /*export async function handleIncomingMessage({ from, text }) {

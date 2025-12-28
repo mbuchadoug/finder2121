@@ -6,7 +6,7 @@ const router = express.Router();
 /**
  * Meta webhook verification
  */
-router.get("/webhook", (req, res) => {
+router.get("/whatsapp", (req, res) => {
   const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN;
 
   const mode = req.query["hub.mode"];
@@ -23,7 +23,7 @@ router.get("/webhook", (req, res) => {
 /**
  * Meta webhook messages
  */
-router.post("/webhook", async (req, res) => {
+router.post("/whatsapp", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
@@ -32,7 +32,7 @@ router.post("/webhook", async (req, res) => {
 
     if (!msg) return res.sendStatus(200);
 
-    const from = msg.from; // WhatsApp number
+    const from = msg.from;
     let text = "";
 
     if (msg.type === "text") {
@@ -45,11 +45,7 @@ router.post("/webhook", async (req, res) => {
         msg.interactive?.list_reply?.id;
     }
 
-    await handleIncomingMessage({
-      from,
-      text,
-      raw: msg
-    });
+    await handleIncomingMessage({ from, text });
 
     res.sendStatus(200);
   } catch (e) {

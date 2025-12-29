@@ -1,16 +1,12 @@
 import express from "express";
+import dotenv from "dotenv";
 import { handleIncomingMessage } from "../services/chatbotEngine.js";
 
-import { MENU_SCHEMA } from "../services/menuSchema.js";
-import { filterMenuByPackage } from "../services/menuFilter.js";
-import { renderMenuText } from "../services/menuRenderer.js";
-
-import dotenv from "dotenv";
 dotenv.config();
 const router = express.Router();
 
 /**
- * Meta webhook verification
+ * ✅ Meta webhook verification
  */
 router.get("/whatsapp", (req, res) => {
   const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN;
@@ -27,7 +23,7 @@ router.get("/whatsapp", (req, res) => {
 });
 
 /**
- * Meta webhook messages
+ * ✅ Incoming messages from WhatsApp
  */
 router.post("/whatsapp", async (req, res) => {
   try {
@@ -39,19 +35,23 @@ router.post("/whatsapp", async (req, res) => {
     if (!msg) return res.sendStatus(200);
 
     const from = msg.from;
-    let text = "";
+
+    let action = "";
 
     if (msg.type === "text") {
-      text = msg.text.body.trim();
+      action = msg.text.body.trim().toLowerCase();
     }
 
     if (msg.type === "interactive") {
-      text =
+      action =
         msg.interactive?.button_reply?.id ||
         msg.interactive?.list_reply?.id;
     }
 
-    await handleIncomingMessage({ from, text });
+    await handleIncomingMessage({
+      from,
+      action
+    });
 
     res.sendStatus(200);
   } catch (e) {

@@ -1,8 +1,26 @@
-import { sendMainMenu } from "./metaSender.js";
+import { sendOwnerMainMenu } from "./metaMenus.js";
 
-export async function handleIncomingMessage({ from, text }) {
-  console.log("[META CHATBOT]", from, text);
+export async function handleIncomingMessage({ from, action }) {
+  console.log("[CHATBOT]", from, action);
 
-  // TEMP: always show menu (we’ll add routing after)
-  await sendMainMenu(from);
+  // Entry points
+  if (
+    action === "hi" ||
+    action === "hello" ||
+    action === "menu" ||
+    action === ""
+  ) {
+    return sendOwnerMainMenu(from);
+  }
+
+  // Navigation (for now just log)
+  switch (action) {
+    case "documents":
+    case "payments":
+    case "business":
+      return sendOwnerMainMenu(from);
+
+    default:
+      return sendOwnerMainMenu(from);
+  }
 }

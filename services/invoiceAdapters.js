@@ -21,24 +21,27 @@ export async function handleChooseSavedClient(to) {
 
   if (!clients.length) {
     biz.sessionState = "creating_invoice_new_client";
-    biz.sessionData = {};
+    biz.sessionData = biz.sessionData || {};
+    biz.markModified("sessionData");
     await biz.save();
     return sendText(to, "No saved clients. Enter client name:");
   }
 
   biz.sessionState = "creating_invoice_choose_client_index";
   biz.sessionData.recentClients = clients;
+  biz.markModified("sessionData");
   await biz.save();
 
   return sendList(
     to,
     "Select client",
     clients.map(c => ({
-      id: `CLIENT_${c._id}`,
+      id: `client_${c._id}`,   // ✅ FIXED
       title: c.name || c.phone
     }))
   );
 }
+
 
 /**
  * Meta: New client from invoice

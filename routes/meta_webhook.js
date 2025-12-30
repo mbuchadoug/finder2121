@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import { handleIncomingMessage } from "../services/chatbotEngine.js";
+import { handleMetaMessage } from "../services/unifiedWhatsAppEngine.js";
 
 dotenv.config();
 const router = express.Router();
@@ -25,39 +26,40 @@ router.get("/whatsapp", (req, res) => {
 /**
  * ✅ Incoming messages from WhatsApp
  */
-router.post("/whatsapp", async (req, res) => {
+router.post("/meta/whatsapp", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const value = change?.value;
-    const msg = value?.messages?.[0];
 
-    if (!msg) return res.sendStatus(200);
+    const message = value?.messages?.[0];
+    if (!message) return res.sendStatus(200);
 
-    const from = msg.from;
+    const phone = message.from;
+    const text =
+      message.text?.body ||
+      message.button?.text ||
+      message.interactive?.button_reply?.id ||
+      message.interactive?.list_reply?.id ||
+      "";
 
-    let action = "";
+    const mediaUrls = [];
 
-    if (msg.type === "text") {
-      action = msg.text.body.trim().toLowerCase();
+    if (message.image?.id) {
+      // you can expand this later
     }
 
-    if (msg.type === "interactive") {
-      action =
-        msg.interactive?.button_reply?.id ||
-        msg.interactive?.list_reply?.id;
-    }
+    return handleMetaMessage(
+      { phone, text, mediaUrls },
+      req,
+      res
+    );
 
-    await handleIncomingMessage({
-      from,
-      action
-    });
-
-    res.sendStatus(200);
-  } catch (e) {
-    console.error("[META WEBHOOK ERROR]", e);
+  } catch (err) {
+    console.error("[META ERROR]", err);
     res.sendStatus(500);
   }
 });
+
 
 export default router;

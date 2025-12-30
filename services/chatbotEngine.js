@@ -10,7 +10,6 @@ import {
   handleClientPicked
 } from "./invoiceAdapters.js";
 
-
 import {
   sendMainMenu,
   sendSalesMenu,
@@ -20,84 +19,92 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
+// helpers you already use elsewhere
+import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
+import { sendText } from "./metaSender.js";
+
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
-const al = a.toLowerCase();
+  const al = a.toLowerCase();
 
-
-  // Entry
-  if (!a || ["hi", "hello", "menu"].includes(a)) {
+  /* =========================
+     ENTRY
+  ========================= */
+  if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
   }
 
-  // Meta-only action mapping to existing Twilio flow
-if (a === "inv_use_client") {
-  return handleChooseSavedClient(from);
-}
+  /* =========================
+     META LIST / BUTTON ACTIONS
+     (MUST HARD RETURN)
+  ========================= */
 
-if (a === "inv_new_client") {
-  return handleNewClientFromInvoice(from);
-}
+  if (al === "inv_use_client") {
+    await handleChooseSavedClient(from);
+    return;
+  }
 
-if (a === "inv_cancel") {
-  return sendMainMenu(from);
-}
+  if (al === "inv_new_client") {
+    await handleNewClientFromInvoice(from);
+    return;
+  }
 
-if (a.startsWith("client_")) {
-  return handleClientPicked(from, a.replace("client_", ""));
-}
+  if (al.startsWith("client_")) {
+    await handleClientPicked(from, al.replace("client_", ""));
+    return;
+  }
 
-// ===== PASS TEXT INPUT TO TWILIO ENGINE =====
-// ===== PASS TEXT INPUT TO TWILIO ENGINE =====
-const isMetaAction =
-  a.startsWith("inv_") ||
-  a.startsWith("client_") ||
-  Object.values(ACTIONS).includes(a);
+  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = "creating_invoice_add_items";
+    await saveBizSafe(biz);
+    return sendText(from, "Send item description:");
+  }
 
-if (action && !isMetaAction) {
-  const handled = await continueTwilioFlow({
-    from,
-    text: action
-  });
+  if (a === ACTIONS.INV_ENTER_PRICES) {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = "creating_invoice_enter_prices";
+    biz.sessionData.priceIndex = 0;
+    await saveBizSafe(biz);
 
-  if (handled) return;
-}
+    const item = biz.sessionData.items[0];
+    return sendText(
+      from,
+      `Enter price for:\n${item.item} x${item.qty}`
+    );
+  }
 
-if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "creating_invoice_add_items";
-  await saveBizSafe(biz);
+  if (al === "inv_cancel") {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = null;
+    biz.sessionData = {};
+    biz.markModified("sessionData");
+    await biz.save();
+    return sendMainMenu(from);
+  }
 
-  return sendText(from, "Send item description:");
-}
+  /* =========================
+     TEXT → TWILIO FLOW
+  ========================= */
 
-if (a === ACTIONS.INV_ENTER_PRICES) {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "creating_invoice_enter_prices";
-  biz.sessionData.priceIndex = 0;
-  await saveBizSafe(biz);
+  const isMetaAction =
+    al.startsWith("inv_") ||
+    al.startsWith("client_") ||
+    Object.values(ACTIONS).includes(a);
 
-  const item = biz.sessionData.items[0];
-  return sendText(
-    from,
-    `Enter price for:\n${item.item} x${item.qty}`
-  );
-}
+  if (!isMetaAction) {
+    const handled = await continueTwilioFlow({
+      from,
+      text: action
+    });
+    if (handled) return;
+  }
 
-if (a === ACTIONS.INV_CANCEL) {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = null;
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return sendMainMenu(from);
-}
-
-
+  /* =========================
+     MENUS
+  ========================= */
 
   switch (a) {
-
-    /* MAIN */
     case ACTIONS.SALES_MENU:
       return sendSalesMenu(from);
 
@@ -116,22 +123,14 @@ if (a === ACTIONS.INV_CANCEL) {
     case ACTIONS.BACK:
       return sendMainMenu(from);
 
-    /* SALES FLOWS */
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
-
-    case ACTIONS.NEW_QUOTE:
-      return startQuoteFlow(from);
 
     case ACTIONS.NEW_RECEIPT:
       return startReceiptFlow(from);
 
-    /* CLIENT FLOWS */
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
-
-    case ACTIONS.CLIENT_STATEMENT:
-      return startClientStatementFlow(from);
 
     default:
       return sendMainMenu(from);

@@ -1,6 +1,7 @@
 import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
+import { sendText } from "./metaSender.js";
 
 /**
  * Continue Twilio-style state machine for Meta text input
@@ -46,31 +47,50 @@ export async function continueTwilioFlow({ from, text }) {
   /* ===========================
      ITEM ADDING (THIS WAS MISSING)
   ============================ */
-  if (state === "creating_invoice_add_items") {
-    // expecting description
-    if (!biz.sessionData.awaitingItemDesc) {
-      biz.sessionData.lastItem = { description: trimmed };
-      biz.sessionData.awaitingItemDesc = true;
-      await biz.save();
-      return true;
-    }
+ if (state === "creating_invoice_add_items") {
 
-    // expecting qty
-    const qty = Number(trimmed);
-    if (isNaN(qty) || qty <= 0) return true;
-
-    biz.sessionData.items.push({
-      item: biz.sessionData.lastItem.description,
-      qty,
-      unit: 0
-    });
-
-    biz.sessionData.lastItem = null;
-    biz.sessionData.awaitingItemDesc = false;
-    biz.sessionState = "creating_invoice_confirm";
+  // STEP 1: item description
+  if (!biz.sessionData.awaitingItemDesc) {
+    biz.sessionData.lastItem = { description: trimmed };
+    biz.sessionData.awaitingItemDesc = true;
     await biz.save();
+
+    await sendText(from, "Enter quantity (e.g. 1):");
     return true;
   }
+
+  // STEP 2: quantity
+  const qty = Number(trimmed);
+  if (isNaN(qty) || qty <= 0) {
+    await sendText(from, "Invalid quantity. Enter a number like 1:");
+    return true;
+  }
+
+  biz.sessionData.items = biz.sessionData.items || [];
+  biz.sessionData.items.push({
+    item: biz.sessionData.lastItem.description,
+    qty,
+    unit: 0
+  });
+
+  biz.sessionData.lastItem = null;
+  biz.sessionData.awaitingItemDesc = false;
+
+  biz.sessionState = "creating_invoice_confirm";
+  await biz.save();
+
+  await sendText(
+    from,
+    `Item added ✅
+
+1️⃣ Add another item
+2️⃣ Enter prices
+3️⃣ Cancel`
+  );
+
+  return true;
+}
+
 
   /* ===========================
      CONFIRMATION → PDF

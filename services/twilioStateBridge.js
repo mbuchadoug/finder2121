@@ -2,6 +2,10 @@ import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
 import { sendText } from "./metaSender.js";
+import { sendInvoiceConfirmMenu } from "./metaMenus.js";
+
+// ...
+
 
  import { sendButtons } from "./metaSender.js";
 import { ACTIONS } from "./actions.js";
@@ -116,6 +120,50 @@ await sendButtons(from, "Item added ✅", [
 }
 
 
+/* ===========================
+   PRICE ENTRY
+=========================== */
+if (state === "creating_invoice_enter_prices") {
+
+  const price = Number(trimmed);
+
+  if (isNaN(price) || price < 0) {
+    await sendText(from, "Invalid price. Enter a number (e.g. 500):");
+    return true;
+  }
+
+  biz.sessionData.priceIndex = biz.sessionData.priceIndex || 0;
+
+  biz.sessionData.items[biz.sessionData.priceIndex].unit = price;
+  biz.sessionData.priceIndex++;
+
+  // More items need prices
+  if (biz.sessionData.priceIndex < biz.sessionData.items.length) {
+    await saveBizSafe(biz);
+    return sendText(
+      from,
+      `Enter price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
+    );
+  }
+
+  // ✅ All prices captured
+  biz.sessionState = "creating_invoice_confirm";
+  biz.sessionData.priceIndex = 0;
+  await saveBizSafe(biz);
+
+  // Build summary text
+  const summary = biz.sessionData.items
+    .map(
+      (i, idx) =>
+        `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
+    )
+    .join("\n");
+
+  return sendInvoiceConfirmMenu(
+    from,
+    `🧾 Invoice Summary\n\n${summary}`
+  );
+}
 
   /* ===========================
      CONFIRMATION → PDF

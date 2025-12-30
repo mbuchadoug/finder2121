@@ -2,6 +2,12 @@ import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
 import { startReceiptFlow } from "./receiptFlow.js";
 import { startClientFlow } from "./clientFlow.js";
+import {
+  handleChooseSavedClient,
+  handleNewClientFromInvoice,
+  handleClientPicked
+} from "./invoiceAdapters.js";
+
 
 import {
   sendMainMenu,
@@ -31,6 +37,10 @@ if (a === "inv_new_client") {
 
 if (a === "inv_cancel") {
   return sendMainMenu(from);
+}
+
+if (a.startsWith("client_")) {
+  return handleClientPicked(from, a.replace("client_", ""));
 }
 
 

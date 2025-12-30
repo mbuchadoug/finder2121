@@ -44,6 +44,47 @@ export async function handleIncomingMessage({ from, action }) {
     return;
   }
 
+  // ===============================
+// INVOICE CONFIRM ACTIONS (META)
+// ===============================
+
+// Generate PDF
+if (a === "inv_generate_pdf") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // mimic "2" in Twilio confirm menu
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "2"
+  });
+}
+
+// Add VAT
+if (a === "inv_add_vat") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_set_vat";
+  await saveBizSafe(biz);
+
+  return sendText(from, "Send VAT percent (e.g. 15)");
+}
+
+// Add Discount
+if (a === "inv_add_discount") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_set_discount";
+  await saveBizSafe(biz);
+
+  return sendText(from, "Send discount percent (e.g. 10)");
+}
+
   if (al === "inv_new_client") {
     await handleNewClientFromInvoice(from);
     return;

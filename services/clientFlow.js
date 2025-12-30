@@ -1,37 +1,46 @@
+import Client from "../models/client.js";
 import { getSession, setSession } from "./sessionStore.js";
-import { sendText } from "./metaSender.js";
+import { sendText, sendButtons } from "./metaSender.js";
 
-export async function startClientFlow(to) {
-  const session = getSession(to);
+export async function startClientFlow(from) {
+  const session = getSession(from);
   session.step = "client_name";
-  setSession(to, session);
+  setSession(from, session);
 
-  return sendText(to, "👤 New Client\n\nEnter client name:");
+  return sendText(from, "Enter client name:");
 }
 
-export async function handleClientName(to, name) {
-  const session = getSession(to);
-  session.newClient = { name };
+export async function handleClientName(from, name) {
+  const session = getSession(from);
+  session.clientName = name;
   session.step = "client_phone";
-  setSession(to, session);
+  setSession(from, session);
 
-  return sendText(to, "📞 Enter client phone number:");
+  return sendText(from, "Enter client phone number:");
 }
 
-export async function handleClientPhone(to, phone) {
-  const session = getSession(to);
-  session.newClient.phone = phone;
+export async function handleClientPhone(from, phone) {
+  const session = getSession(from);
 
-  // TEMP: push into session client list
-  session.clients = session.clients || [];
-  session.clients.push(session.newClient);
+  const client = await Client.create({
+    businessId: session.businessId,
+    name: session.clientName,
+    phone
+  });
 
-  delete session.newClient;
-  session.step = "choose_client";
-  setSession(to, session);
+  // 🔑 CRITICAL PART
+  session.clientId = client._id;
+  session.step = "add_item";
 
-  return sendText(
-    to,
-    "✅ Client added!\nNow continue creating your invoice."
-  );
+  delete session.clientName;
+  setSession(from, session);
+
+  return sendButtons(from, {
+    body: `Client *${client.name}* added.\nAdd an item:`,
+    buttons: [
+      { id: "item_service", title: "Service" },
+      { id: "item_product", title: "Product" },
+      { id: "cancel", title: "Cancel" }
+    ]
+  });
 }

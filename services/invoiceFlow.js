@@ -1,132 +1,87 @@
 import { getSession, setSession, clearSession } from "./sessionStore.js";
 import { sendText, sendButtons, sendList } from "./metaSender.js";
 
-/**
- * STEP 1 — Choose client
- */
-export async function startInvoiceFlow(to) {
-  const session = getSession(to) || {};
-  session.step = "choose_client";
+import { createDraftInvoice } from "./core/createDraftInvoice.js";
+import { addInvoiceItem } from "./core/addInvoiceItem.js";
+import { finalizeInvoice as finalize } from "./core/finalizeInvoice.js";
+
+/* STEP 1 — start */
+export async function startInvoiceFlow(from) {
+  const session = getSession(from);
+
   session.items = [];
+  session.step = "choose_client";
 
-  setSession(to, session);
+  setSession(from, session);
 
-  return sendList(
-    to,
-    "📄 *New Invoice*\nSelect a client:",
-    "Choose client",
-    [
-      {
-        title: "Clients",
-        rows: [
-          { id: "client_1", title: "John Doe" },
-          { id: "client_2", title: "Acme Corp" },
-          { id: "client_new", title: "➕ New client" }
-        ]
-      }
+  return sendList(from, {
+    body: "📄 New Invoice\nSelect a client:",
+    button: "Clients",
+    rows: [
+      { id: "client_1", title: "John Doe" },
+      { id: "client_2", title: "Acme Corp" },
+      { id: "client_new", title: "➕ New Client" }
     ]
-  );
+  });
 }
 
-/**
- * STEP 2 — Client selected
- */
-export async function handleClientSelection(to, clientId) {
-  const session = getSession(to);
 
-  session.client = clientId;
+/* STEP 2 — client selected */
+export async function handleClientSelection(from, clientId) {
+  const session = getSession(from);
+
+  session.clientId = clientId;
   session.step = "add_item";
+  setSession(from, session);
 
-  setSession(to, session);
-
-  return sendButtons(
-    to,
-    "✅ Client selected\nAdd an item:",
-    [
-      { id: "item_service", title: "🛠 Service" },
-      { id: "item_product", title: "📦 Product" },
-      { id: "cancel", title: "❌ Cancel" }
+  return sendButtons(from, {
+    body: "Add item",
+    buttons: [
+      { id: "item_service", title: "Service" },
+      { id: "item_product", title: "Product" }
     ]
-  );
+  });
 }
 
-/**
- * STEP 3 — Add item type
- */
-export async function handleAddItem(to, itemType) {
-  const session = getSession(to);
-
-  session.currentItem = {
-    type: itemType,
-    qty: 1,
-    price: 0
-  };
-
-  session.step = "enter_qty";
-  setSession(to, session);
-
-  return sendButtons(
-    to,
-    "Quantity?",
-    [
-      { id: "qty_1", title: "1" },
-      { id: "qty_2", title: "2" },
-      { id: "qty_5", title: "5" }
-    ]
-  );
-}
-
-/**
- * STEP 4 — Quantity chosen
- */
-export async function handleQty(to, qty) {
-  const session = getSession(to);
+/* STEP 3 — qty */
+export async function handleQty(from, qty) {
+  const session = getSession(from);
 
   session.currentItem.qty = qty;
   session.step = "enter_price";
+  setSession(from, session);
 
-  setSession(to, session);
-
-  return sendText(to, "Enter unit price (numbers only):");
+  return sendText(from, "Enter price:");
 }
 
-/**
- * STEP 5 — Price entered
- */
-export async function handlePrice(to, price) {
-  const session = getSession(to);
+/* STEP 4 — price */
+export async function handlePrice(from, price) {
+  const session = getSession(from);
 
-  session.currentItem.price = price;
-  session.items.push(session.currentItem);
+  await addInvoiceItem(session.invoiceId, {
+    ...session.currentItem,
+    price
+  });
 
-  delete session.currentItem;
   session.step = "confirm";
+  delete session.currentItem;
+  setSession(from, session);
 
-  setSession(to, session);
-
-  const summary = session.items
-    .map((i, idx) => `${idx + 1}) ${i.type} × ${i.qty} @ ${i.price}`)
-    .join("\n");
-
-  return sendButtons(
-    to,
-    `🧾 *Invoice summary*\n\n${summary}`,
-    [
+  return sendButtons(from, {
+    body: "Item added",
+    buttons: [
       { id: "add_more", title: "➕ Add item" },
-      { id: "send_invoice", title: "✅ Send invoice" },
-      { id: "cancel", title: "❌ Cancel" }
+      { id: "send_invoice", title: "✅ Send invoice" }
     ]
-  );
+  });
 }
 
-/**
- * FINAL — Send invoice
- */
-export async function finalizeInvoice(to) {
-  clearSession(to);
+/* FINAL */
+export async function finalizeInvoice(from) {
+  const session = getSession(from);
 
-  return sendText(
-    to,
-    "✅ Invoice created successfully.\nReply *menu* to continue."
-  );
+  const { pdfUrl } = await finalize(session.invoiceId);
+  clearSession(from);
+
+  return sendText(from, `✅ Invoice sent\n${pdfUrl}`);
 }

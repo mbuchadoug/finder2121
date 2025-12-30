@@ -43,6 +43,12 @@ export async function handleIncomingMessage({ from, action }) {
     return handlePrice(from, Number(normalizedAction));
   }
 
+  // Resume invoice flow after client creation
+if (session?.step === "add_item" && normalizedAction.startsWith("item_")) {
+  return handleAddItem(from, normalizedAction.replace("item_", ""));
+}
+
+
   /* ===== ENTRY ===== */
   if (!normalizedAction || ["hi", "hello", "menu"].includes(normalizedAction)) {
     return sendOwnerMainMenu(from);

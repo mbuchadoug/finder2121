@@ -1,6 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
-import { handleIncomingMessage } from "../services/chatbotEngine.js";
+//import { handleIncomingMessage } from "../services/chatbotEngine.js";
 import { handleMetaMessage } from "../services/unifiedWhatsAppEngine.js";
 
 dotenv.config();

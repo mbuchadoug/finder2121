@@ -31,6 +31,57 @@ export async function continueTwilioFlow({ from, text }) {
   const state = biz.sessionState;
 
   /* ===========================
+   META BUTTON ACTION HANDLER
+   (THIS WAS MISSING)
+=========================== */
+if (text && Object.values(ACTIONS).includes(text)) {
+
+  switch (text) {
+
+    case ACTIONS.INV_ADD_ANOTHER_ITEM:
+      biz.sessionState = "creating_invoice_add_items";
+      await saveBizSafe(biz);
+      await sendText(from, "Send item description:");
+      return true;
+
+    case ACTIONS.INV_ENTER_PRICES:
+      biz.sessionState = "creating_invoice_enter_prices";
+      biz.sessionData.priceIndex = 0;
+      await saveBizSafe(biz);
+      await sendText(
+        from,
+        `Enter price for:\n${biz.sessionData.items?.[0]?.item}`
+      );
+      return true;
+
+    case ACTIONS.INV_SET_DISCOUNT:
+      biz.sessionState = "creating_invoice_set_discount";
+      await saveBizSafe(biz);
+      await sendText(from, "Enter discount % (e.g. 10):");
+      return true;
+
+    case ACTIONS.INV_SET_VAT:
+      biz.sessionState = "creating_invoice_set_vat";
+      await saveBizSafe(biz);
+      await sendText(from, "Enter VAT % (e.g. 15):");
+      return true;
+
+    case ACTIONS.INV_GENERATE_PDF:
+      biz.sessionState = "creating_invoice_confirm";
+      await saveBizSafe(biz);
+      return true;
+
+    case ACTIONS.INV_CANCEL:
+      biz.sessionState = "ready";
+      biz.sessionData = {};
+      await saveBizSafe(biz);
+      await sendText(from, "❌ Cancelled. Reply *menu* to continue.");
+      return true;
+  }
+}
+
+
+  /* ===========================
      CLIENT CREATION (INVOICE)
   ============================ */
   if (state === "creating_invoice_new_client") {

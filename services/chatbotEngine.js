@@ -47,7 +47,12 @@ if (a.startsWith("client_")) {
 
 // ===== PASS TEXT INPUT TO TWILIO ENGINE =====
 // ===== PASS TEXT INPUT TO TWILIO ENGINE =====
-if (a && !a.startsWith("inv_") && !a.startsWith("client_")) {
+const isMetaAction =
+  a.startsWith("inv_") ||
+  a.startsWith("client_") ||
+  Object.values(ACTIONS).includes(a);
+
+if (action && !isMetaAction) {
   const handled = await continueTwilioFlow({
     from,
     text: action
@@ -55,6 +60,7 @@ if (a && !a.startsWith("inv_") && !a.startsWith("client_")) {
 
   if (handled) return;
 }
+
 
 
   switch (a) {

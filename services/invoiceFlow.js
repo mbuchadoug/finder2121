@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getSession, setSession, clearSession } from "./sessionStore.js";
-import { API, headers } from "./metaSender.js";
+import { sendText, sendButtons } from "./metaSender.js";
+
 
 /**
  * STEP 1 — Choose client

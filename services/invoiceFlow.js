@@ -1,41 +1,31 @@
-import axios from "axios";
 import { getSession, setSession, clearSession } from "./sessionStore.js";
-import { sendText, sendButtons } from "./metaSender.js";
-
+import { sendText, sendButtons, sendList } from "./metaSender.js";
 
 /**
  * STEP 1 — Choose client
  */
 export async function startInvoiceFlow(to) {
-  const session = getSession(to);
-
+  const session = getSession(to) || {};
   session.step = "choose_client";
   session.items = [];
 
   setSession(to, session);
 
-  return axios.post(API, {
-    messaging_product: "whatsapp",
+  return sendList(
     to,
-    type: "interactive",
-    interactive: {
-      type: "list",
-      body: { text: "📄 New Invoice\nSelect a client:" },
-      action: {
-        button: "Choose client",
-        sections: [
-          {
-            title: "Clients",
-            rows: [
-              { id: "client_1", title: "John Doe" },
-              { id: "client_2", title: "Acme Corp" },
-              { id: "client_new", title: "➕ New client" }
-            ]
-          }
+    "📄 *New Invoice*\nSelect a client:",
+    "Choose client",
+    [
+      {
+        title: "Clients",
+        rows: [
+          { id: "client_1", title: "John Doe" },
+          { id: "client_2", title: "Acme Corp" },
+          { id: "client_new", title: "➕ New client" }
         ]
       }
-    }
-  }, { headers });
+    ]
+  );
 }
 
 /**
@@ -49,26 +39,19 @@ export async function handleClientSelection(to, clientId) {
 
   setSession(to, session);
 
-  return axios.post(API, {
-    messaging_product: "whatsapp",
+  return sendButtons(
     to,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: { text: "Client selected ✅\nAdd an item:" },
-      action: {
-        buttons: [
-          { type: "reply", reply: { id: "item_service", title: "Service" } },
-          { type: "reply", reply: { id: "item_product", title: "Product" } },
-          { type: "reply", reply: { id: "cancel", title: "Cancel" } }
-        ]
-      }
-    }
-  }, { headers });
+    "✅ Client selected\nAdd an item:",
+    [
+      { id: "item_service", title: "🛠 Service" },
+      { id: "item_product", title: "📦 Product" },
+      { id: "cancel", title: "❌ Cancel" }
+    ]
+  );
 }
 
 /**
- * STEP 3 — Add predefined item
+ * STEP 3 — Add item type
  */
 export async function handleAddItem(to, itemType) {
   const session = getSession(to);
@@ -82,22 +65,15 @@ export async function handleAddItem(to, itemType) {
   session.step = "enter_qty";
   setSession(to, session);
 
-  return axios.post(API, {
-    messaging_product: "whatsapp",
+  return sendButtons(
     to,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: { text: "Quantity?" },
-      action: {
-        buttons: [
-          { type: "reply", reply: { id: "qty_1", title: "1" } },
-          { type: "reply", reply: { id: "qty_2", title: "2" } },
-          { type: "reply", reply: { id: "qty_5", title: "5" } }
-        ]
-      }
-    }
-  }, { headers });
+    "Quantity?",
+    [
+      { id: "qty_1", title: "1" },
+      { id: "qty_2", title: "2" },
+      { id: "qty_5", title: "5" }
+    ]
+  );
 }
 
 /**
@@ -111,14 +87,7 @@ export async function handleQty(to, qty) {
 
   setSession(to, session);
 
-  return axios.post(API, {
-    messaging_product: "whatsapp",
-    to,
-    type: "text",
-    text: {
-      body: "Enter unit price (number only):"
-    }
-  }, { headers });
+  return sendText(to, "Enter unit price (numbers only):");
 }
 
 /**
@@ -136,29 +105,18 @@ export async function handlePrice(to, price) {
   setSession(to, session);
 
   const summary = session.items
-    .map((i, idx) =>
-      `${idx + 1}) ${i.type} x${i.qty} @ ${i.price}`
-    )
+    .map((i, idx) => `${idx + 1}) ${i.type} × ${i.qty} @ ${i.price}`)
     .join("\n");
 
-  return axios.post(API, {
-    messaging_product: "whatsapp",
+  return sendButtons(
     to,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: {
-        text: `Invoice summary:\n${summary}`
-      },
-      action: {
-        buttons: [
-          { type: "reply", reply: { id: "add_more", title: "➕ Add item" } },
-          { type: "reply", reply: { id: "send_invoice", title: "✅ Send invoice" } },
-          { type: "reply", reply: { id: "cancel", title: "Cancel" } }
-        ]
-      }
-    }
-  }, { headers });
+    `🧾 *Invoice summary*\n\n${summary}`,
+    [
+      { id: "add_more", title: "➕ Add item" },
+      { id: "send_invoice", title: "✅ Send invoice" },
+      { id: "cancel", title: "❌ Cancel" }
+    ]
+  );
 }
 
 /**
@@ -167,12 +125,8 @@ export async function handlePrice(to, price) {
 export async function finalizeInvoice(to) {
   clearSession(to);
 
-  return axios.post(API, {
-    messaging_product: "whatsapp",
+  return sendText(
     to,
-    type: "text",
-    text: {
-      body: "✅ Invoice created successfully.\nReply *menu* to continue."
-    }
-  }, { headers });
+    "✅ Invoice created successfully.\nReply *menu* to continue."
+  );
 }

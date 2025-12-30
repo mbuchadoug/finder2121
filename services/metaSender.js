@@ -56,7 +56,7 @@ export async function sendButtons(to, bodyText, buttons) {
 /* =========================
    LIST (THIS WAS MISSING 🔥)
 ========================= */
-export async function sendList(to, bodyText, buttonText, sections) {
+/*export async function sendList(to, bodyText, buttonText, sections) {
   return axios.post(
     API,
     {
@@ -74,7 +74,7 @@ export async function sendList(to, bodyText, buttonText, sections) {
     },
     { headers }
   );
-}
+}*/
 
 
 // services/metaSender.js

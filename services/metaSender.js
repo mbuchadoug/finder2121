@@ -107,3 +107,25 @@ export async function sendItemPicker(to, items) {
     }
   }, { headers });
 }
+
+
+export async function sendButtons(to, bodyText, buttons) {
+  return axios.post(API, {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: bodyText },
+      action: {
+        buttons: buttons.map(b => ({
+          type: "reply",
+          reply: {
+            id: b.id,
+            title: b.title
+          }
+        }))
+      }
+    }
+  }, { headers });
+}

@@ -1,6 +1,8 @@
 import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
 import { startReceiptFlow } from "./receiptFlow.js";
+import { continueTwilioFlow } from "./twilioStateBridge.js";
+
 import { startClientFlow } from "./clientFlow.js";
 import {
   handleChooseSavedClient,
@@ -41,6 +43,17 @@ if (a === "inv_cancel") {
 
 if (a.startsWith("client_")) {
   return handleClientPicked(from, a.replace("client_", ""));
+}
+
+// ===== PASS TEXT INPUT TO TWILIO ENGINE =====
+// ===== PASS TEXT INPUT TO TWILIO ENGINE =====
+if (a && !a.startsWith("inv_") && !a.startsWith("client_")) {
+  const handled = await continueTwilioFlow({
+    from,
+    text: action
+  });
+
+  if (handled) return;
 }
 
 

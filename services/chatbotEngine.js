@@ -1,75 +1,60 @@
-// services/chatbotEngine.js
-
+import { ACTIONS } from "./actions.js";
 import {
-  startClientFlow,
-  handleClientName,
-  handleClientPhone
-} from "./clientFlow.js";
-
-import {
-  startInvoiceFlow,
-  handleClientSelection,
-  handleAddItem,
-  handleQty,
-  handlePrice,
-  finalizeInvoice
-} from "./invoiceFlow.js";
-
-import { getSession } from "./sessionStore.js";
-import { sendOwnerMainMenu } from "./metaMenus.js";
+  sendMainMenu,
+  sendSalesMenu,
+  sendClientsMenu,
+  sendPaymentsMenu,
+  sendBusinessMenu,
+  sendSettingsMenu
+} from "./metaMenus.js";
 
 export async function handleIncomingMessage({ from, action }) {
-  const normalized =
-    typeof action === "string" ? action.trim().toLowerCase() : "";
+  const a = (action || "").toLowerCase();
 
-  const session = getSession(from);
-
-  /* ===== FORMS FIRST (VERY IMPORTANT) ===== */
-  if (session?.step === "client_name") {
-    return handleClientName(from, action);
+  // Entry
+  if (!a || ["hi", "hello", "menu"].includes(a)) {
+    return sendMainMenu(from);
   }
 
-  if (session?.step === "client_phone") {
-    return handleClientPhone(from, action);
-  }
+  switch (a) {
 
-  if (session?.step === "enter_price" && /^\d+$/.test(normalized)) {
-    return handlePrice(from, Number(normalized));
-  }
+    /* MAIN */
+    case ACTIONS.SALES_MENU:
+      return sendSalesMenu(from);
 
-  /* ===== ENTRY ===== */
-  if (!normalized || ["hi", "hello", "menu"].includes(normalized)) {
-    return sendOwnerMainMenu(from);
-  }
+    case ACTIONS.CLIENTS_MENU:
+      return sendClientsMenu(from);
 
-  switch (normalized) {
-    case "new_invoice":
+    case ACTIONS.PAYMENTS_MENU:
+      return sendPaymentsMenu(from);
+
+    case ACTIONS.BUSINESS_MENU:
+      return sendBusinessMenu(from);
+
+    case ACTIONS.SETTINGS_MENU:
+      return sendSettingsMenu(from);
+
+    case ACTIONS.BACK:
+      return sendMainMenu(from);
+
+    /* SALES FLOWS */
+    case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
 
-    case "client_new":
+    case ACTIONS.NEW_QUOTE:
+      return startQuoteFlow(from);
+
+    case ACTIONS.NEW_RECEIPT:
+      return startReceiptFlow(from);
+
+    /* CLIENT FLOWS */
+    case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
 
-    case "client_1":
-    case "client_2":
-      return handleClientSelection(from, normalized);
-
-    case "service":
-    case "product":
-      return handleAddItem(from, normalized);
-
-    case "qty_1":
-    case "qty_2":
-    case "qty_5":
-      return handleQty(from, Number(normalized.replace("qty_", "")));
-
-    case "send":
-      return finalizeInvoice(from);
-
-    case "cancel":
-      return sendOwnerMainMenu(from);
+    case ACTIONS.CLIENT_STATEMENT:
+      return startClientStatementFlow(from);
 
     default:
-      console.warn("[CHATBOT] Unhandled:", normalized);
-      return sendOwnerMainMenu(from);
+      return sendMainMenu(from);
   }
 }

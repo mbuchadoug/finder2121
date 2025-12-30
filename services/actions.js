@@ -1,28 +1,27 @@
-// services/actions.js
-
 export const ACTIONS = {
-  // main
-  MENU: "menu",
+  // MAIN
+  MAIN_MENU: "menu",
 
-  // documents
-  NEW_INVOICE: "invoice",
-  NEW_QUOTE: "quote",
-  NEW_RECEIPT: "receipt",
-
-  // clients
-  ADD_CLIENT: "add_client",
-
-  // payments
-  RECORD_PAYMENT: "payment",
-
-  // reports
+  SALES_MENU: "sales_menu",
+  CLIENTS_MENU: "clients_menu",
+  PAYMENTS_MENU: "payments_menu",
   REPORTS_MENU: "reports_menu",
+  BUSINESS_MENU: "business_menu",
+  SETTINGS_MENU: "settings_menu",
 
-  // business
-  SETTINGS: "settings",
-  UPGRADE: "upgrade_plan",
+  // SALES
+  NEW_INVOICE: "new_invoice",
+  NEW_QUOTE: "new_quote",
+  NEW_RECEIPT: "new_receipt",
 
-  // navigation
-  BACK: "back",
-  CANCEL: "cancel"
+  // CLIENTS
+  ADD_CLIENT: "add_client",
+  CLIENT_STATEMENT: "client_statement",
+
+  // PAYMENTS
+  RECORD_PAYMENT: "record_payment",
+  RECORD_EXPENSE: "record_expense",
+
+  // NAV
+  BACK: "back"
 };

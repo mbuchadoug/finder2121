@@ -20,6 +20,20 @@ export async function handleIncomingMessage({ from, action }) {
     return sendMainMenu(from);
   }
 
+  // Meta-only action mapping to existing Twilio flow
+if (a === "inv_use_client") {
+  return handleChooseSavedClient(from);
+}
+
+if (a === "inv_new_client") {
+  return handleNewClientFromInvoice(from);
+}
+
+if (a === "inv_cancel") {
+  return sendMainMenu(from);
+}
+
+
   switch (a) {
 
     /* MAIN */

@@ -33,30 +33,41 @@ router.get("/whatsapp", (req, res) => {
 
 
 router.post("/whatsapp", async (req, res) => {
-  const entry = req.body.entry?.[0];
-  const msg = entry?.changes?.[0]?.value?.messages?.[0];
-  if (!msg) return res.sendStatus(200);
+  try {
+    const entry = req.body.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value;
+    const msg = value?.messages?.[0];
 
-  const providerId = msg.from;
-  const action =
-    msg.interactive?.button_reply?.id ||
-    msg.interactive?.list_reply?.id ||
-    ACTIONS.MENU;
+    // ✅ Always ACK Meta immediately
+    res.sendStatus(200);
 
-  const { biz, helpers } = await getBizContext(req, res, providerId);
-  if (!biz) return res.sendStatus(200);
+    // Nothing to process
+    if (!msg) return;
 
-  await dispatchAction({
-    action,
-    biz,
-    providerId,
-    req,
-    res,
-    helpers
-  });
+    const from = msg.from;
+    let action = "";
 
-  return res.sendStatus(200);
+    if (msg.type === "text") {
+      action = msg.text.body.trim();
+    }
+
+    if (msg.type === "interactive") {
+      action =
+        msg.interactive?.button_reply?.id ||
+        msg.interactive?.list_reply?.id ||
+        "";
+    }
+
+    // 🔥 IMPORTANT: NO res usage below this line
+    await handleIncomingMessage({ from, action });
+
+  } catch (e) {
+    console.error("[META WEBHOOK ERROR]", e);
+    // ❌ DO NOT res.send here — Meta already got 200
+  }
 });
+
 
 export default router;
 

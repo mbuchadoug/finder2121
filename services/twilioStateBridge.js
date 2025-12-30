@@ -50,10 +50,18 @@ export async function continueTwilioFlow({ from, text }) {
 if (state === "creating_invoice_add_items") {
 
   // =========================
-  // STEP 1: EXPECT DESCRIPTION
+  // EXPECTING DESCRIPTION
   // =========================
-  if (!biz.sessionData.lastItem) {
+  if (!biz.sessionData.expectingQty) {
+
+    // 🚫 numeric input here is INVALID
+    if (!isNaN(Number(trimmed))) {
+      await sendText(from, "Please send an item description (not a number).");
+      return true;
+    }
+
     biz.sessionData.lastItem = { description: trimmed };
+    biz.sessionData.expectingQty = true;
     await biz.save();
 
     await sendText(from, "Enter quantity (e.g. 1):");
@@ -61,7 +69,7 @@ if (state === "creating_invoice_add_items") {
   }
 
   // =========================
-  // STEP 2: EXPECT QUANTITY
+  // EXPECTING QUANTITY
   // =========================
   const qty = Number(trimmed);
 
@@ -77,16 +85,16 @@ if (state === "creating_invoice_add_items") {
     unit: 0
   });
 
-  // ✅ CLEAR lastItem so next message is a NEW item
+  // ✅ CLEAR FLAGS
   biz.sessionData.lastItem = null;
+  biz.sessionData.expectingQty = false;
 
-  // move forward
   biz.sessionState = "creating_invoice_confirm";
   await biz.save();
 
   await sendText(
     from,
-    `Item added ✅
+`Item added ✅
 
 1️⃣ Add another item
 2️⃣ Enter prices

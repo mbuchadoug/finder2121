@@ -75,3 +75,28 @@ export async function sendList(to, bodyText, buttonText, sections) {
     { headers }
   );
 }
+
+
+// services/metaSender.js
+
+export async function sendList(to, header, buttonText, rows) {
+  return axios.post(API, {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      header: { type: "text", text: header },
+      body: { text: "Choose an option:" },
+      action: {
+        button: buttonText,
+        sections: [
+          {
+            title: header,
+            rows
+          }
+        ]
+      }
+    }
+  }, { headers });
+}

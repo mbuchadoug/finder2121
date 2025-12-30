@@ -1,33 +1,71 @@
-import { sendList } from "./metaSender.js";
+// services/metaMenus.js
+import { ACTIONS } from "./actions.js";
+import { sendButtons, sendList } from "./metaSender.js";
 
-export function sendMainMenu(to) {
-  return sendList(to, "📋 ZimQuote Menu", "Choose action", [
-    {
-      title: "🧾 Sales",
-      rows: [
-        { id: "invoice", title: "New Invoice" },
-        { id: "receipt", title: "New Receipt" },
-        { id: "quote", title: "New Quotation" }
-      ]
-    },
-    {
-      title: "👥 Clients & Payments",
-      rows: [
-        { id: "add_client", title: "Add Client" },
-        { id: "payment", title: "Record Payment" },
-        { id: "expense", title: "Record Expense" },
-        { id: "statement", title: "Client Statement" }
-      ]
-    },
-    {
-      title: "🏢 Business & System",
-      rows: [
-        { id: "reports_menu", title: "Reports" },
-        { id: "invite_user", title: "Invite User" },
-        { id: "upload_logo", title: "Upload Logo" },
-        { id: "settings", title: "Settings" },
-        { id: "upgrade_plan", title: "Upgrade Plan" }
-      ]
-    }
+/* =========================
+   MAIN MENU (LIST)
+   ========================= */
+export async function sendMainMenu(to) {
+  return sendList(to, "📊 Main Menu", [
+    { id: ACTIONS.SALES_MENU, title: "🧾 Sales" },
+    { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients" },
+    { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments" },
+    { id: ACTIONS.REPORTS_MENU, title: "📈 Reports" },
+    { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users" },
+    { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings" }
+  ]);
+}
+
+/* =========================
+   SALES
+   ========================= */
+export async function sendSalesMenu(to) {
+  return sendButtons(to, "🧾 Sales", [
+    { id: ACTIONS.NEW_INVOICE, title: "New Invoice" },
+    { id: ACTIONS.NEW_QUOTE, title: "New Quotation" },
+    { id: ACTIONS.NEW_RECEIPT, title: "New Receipt" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
+
+/* =========================
+   CLIENTS
+   ========================= */
+export async function sendClientsMenu(to) {
+  return sendButtons(to, "👥 Clients", [
+    { id: ACTIONS.ADD_CLIENT, title: "➕ Add Client" },
+    { id: ACTIONS.CLIENT_STATEMENT, title: "📄 Client Statement" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
+
+/* =========================
+   PAYMENTS
+   ========================= */
+export async function sendPaymentsMenu(to) {
+  return sendButtons(to, "💰 Payments", [
+    { id: ACTIONS.RECORD_PAYMENT, title: "Record Payment" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
+
+/* =========================
+   BUSINESS
+   ========================= */
+export async function sendBusinessMenu(to) {
+  return sendButtons(to, "🏢 Business & Users", [
+    { id: ACTIONS.BUSINESS_PROFILE, title: "Business Profile" },
+    { id: ACTIONS.USERS, title: "Users" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
+
+/* =========================
+   SETTINGS
+   ========================= */
+export async function sendSettingsMenu(to) {
+  return sendButtons(to, "⚙ Settings", [
+    { id: ACTIONS.UPGRADE, title: "🚀 Upgrade Plan" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }

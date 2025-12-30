@@ -3,6 +3,9 @@ import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
 import { sendText } from "./metaSender.js";
 
+ import { sendButtons } from "./metaSender.js";
+import { ACTIONS } from "./actions.js";
+
 async function saveBizSafe(biz) {
   if (!biz) return;
   biz.markModified("sessionData");
@@ -99,14 +102,15 @@ if (state === "creating_invoice_add_items") {
   biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
 
-  await sendText(
-    from,
-`Item added ✅
 
-1️⃣ Add another item
-2️⃣ Enter prices
-3️⃣ Cancel`
-  );
+
+await sendButtons(from, "Item added ✅", [
+  { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" },
+  { id: ACTIONS.INV_ENTER_PRICES, title: "💰 Enter prices" },
+  { id: ACTIONS.INV_CANCEL, title: "❌ Cancel" }
+]);
+
+
 
   return true;
 }

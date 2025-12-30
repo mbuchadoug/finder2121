@@ -21,7 +21,9 @@ import {
 } from "./metaMenus.js";
 
 export async function handleIncomingMessage({ from, action }) {
-  const a = (action || "").toLowerCase();
+  const a = action || "";
+const al = a.toLowerCase();
+
 
   // Entry
   if (!a || ["hi", "hello", "menu"].includes(a)) {
@@ -59,6 +61,36 @@ if (action && !isMetaAction) {
   });
 
   if (handled) return;
+}
+
+if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "creating_invoice_add_items";
+  await saveBizSafe(biz);
+
+  return sendText(from, "Send item description:");
+}
+
+if (a === ACTIONS.INV_ENTER_PRICES) {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "creating_invoice_enter_prices";
+  biz.sessionData.priceIndex = 0;
+  await saveBizSafe(biz);
+
+  const item = biz.sessionData.items[0];
+  return sendText(
+    from,
+    `Enter price for:\n${item.item} x${item.qty}`
+  );
+}
+
+if (a === ACTIONS.INV_CANCEL) {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = null;
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendMainMenu(from);
 }
 
 

@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import axios from "axios";
 import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
-
+import { dispatchAction } from "../services/actionDispatcher.js";
 import Business from "../models/business.js";
 import Client from "../models/client.js";
 
@@ -1172,11 +1172,22 @@ if ((state === "idle" || state === "ready") && isSingleNumber && !state.startsWi
 
 
   const { role } = await getUserBranchContext(biz, providerId);
-  const action = resolveMenuAction(role, trimmed);
+ const action = resolveMenuAction(role, trimmed);
+if (!action) return sendTwimlText(res, "Invalid selection.");
 
-  if (!action) {
-    return sendTwimlText(res, "Invalid selection. Reply 0 for menu.");
+return dispatchAction({
+  action,
+  biz,
+  providerId,
+  req,
+  res,
+  helpers: {
+    saveBiz,
+    resetSession,
+    sendMenuForUser,
+    sendTwimlText
   }
+});
 
   // ---- ROUTE BY ACTION ----
 

@@ -1,8 +1,9 @@
 import express from "express";
-import dotenv from "dotenv";
-//import { handleIncomingMessage } from "../services/chatbotEngine.js";
-import { handleMetaMessage } from "../services/unifiedWhatsAppEngine.js";
-import { sendMainMenu } from "../services/metaMenus.js";
+import { dispatchAction } from "../services/actionDispatcher.js";
+import { ACTIONS } from "../services/actions.js";
+import { getBizContext } from "../services/getBizContext.js";
+
+
 
 dotenv.config();
 const router = express.Router();
@@ -29,44 +30,37 @@ router.get("/whatsapp", (req, res) => {
  */
 
 
-router.post("/meta/whatsapp", async (req, res) => {
-  try {
-    const entry = req.body.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
-    const msg = value?.messages?.[0];
 
-    if (!msg) return res.sendStatus(200);
 
-    const from = msg.from;
+router.post("/whatsapp", async (req, res) => {
+  const entry = req.body.entry?.[0];
+  const msg = entry?.changes?.[0]?.value?.messages?.[0];
+  if (!msg) return res.sendStatus(200);
 
-    // 🔥 DIRECT SEND (NO MENU, NO ENGINE)
-    const axios = (await import("axios")).default;
+  const providerId = msg.from;
+  const action =
+    msg.interactive?.button_reply?.id ||
+    msg.interactive?.list_reply?.id ||
+    ACTIONS.MENU;
 
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: from,
-        type: "text",
-        text: { body: "✅ Webhook is working" }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+  const { biz, helpers } = await getBizContext(req, res, providerId);
+  if (!biz) return res.sendStatus(200);
 
-    return res.sendStatus(200);
+  await dispatchAction({
+    action,
+    biz,
+    providerId,
+    req,
+    res,
+    helpers
+  });
 
-  } catch (e) {
-    console.error("META SEND ERROR:", e.response?.data || e.message);
-    return res.sendStatus(500);
-  }
+  return res.sendStatus(200);
 });
 
-
-
 export default router;
+
+
+
+
+

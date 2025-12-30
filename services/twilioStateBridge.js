@@ -3,6 +3,12 @@ import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
 import { sendText } from "./metaSender.js";
 
+async function saveBizSafe(biz) {
+  if (!biz) return;
+  biz.markModified("sessionData");
+  return biz.save();
+}
+
 /**
  * Continue Twilio-style state machine for Meta text input
  */
@@ -49,12 +55,12 @@ export async function continueTwilioFlow({ from, text }) {
   ============================ */
 if (state === "creating_invoice_add_items") {
 
-  // =========================
-  // EXPECTING DESCRIPTION
-  // =========================
+  // ======================
+  // EXPECT DESCRIPTION
+  // ======================
   if (!biz.sessionData.expectingQty) {
 
-    // 🚫 numeric input here is INVALID
+    // reject numbers as descriptions
     if (!isNaN(Number(trimmed))) {
       await sendText(from, "Please send an item description (not a number).");
       return true;
@@ -62,15 +68,16 @@ if (state === "creating_invoice_add_items") {
 
     biz.sessionData.lastItem = { description: trimmed };
     biz.sessionData.expectingQty = true;
-    await biz.save();
+
+    await saveBizSafe(biz);
 
     await sendText(from, "Enter quantity (e.g. 1):");
     return true;
   }
 
-  // =========================
-  // EXPECTING QUANTITY
-  // =========================
+  // ======================
+  // EXPECT QUANTITY
+  // ======================
   const qty = Number(trimmed);
 
   if (isNaN(qty) || qty <= 0) {
@@ -90,7 +97,7 @@ if (state === "creating_invoice_add_items") {
   biz.sessionData.expectingQty = false;
 
   biz.sessionState = "creating_invoice_confirm";
-  await biz.save();
+  await saveBizSafe(biz);
 
   await sendText(
     from,

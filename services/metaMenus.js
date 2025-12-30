@@ -1,10 +1,6 @@
-// services/metaMenus.js
 import { ACTIONS } from "./actions.js";
-import { sendButtons, sendList } from "./metaSender.js";
+import { sendList, sendButtons } from "./metaSender.js";
 
-/* =========================
-   MAIN MENU (LIST)
-   ========================= */
 export async function sendMainMenu(to) {
   return sendList(to, "📊 Main Menu", [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales" },

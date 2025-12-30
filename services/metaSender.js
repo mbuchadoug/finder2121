@@ -79,24 +79,27 @@ export async function sendButtons(to, bodyText, buttons) {
 
 // services/metaSender.js
 
-export async function sendList(to, header, buttonText, rows) {
+export async function sendList(to, title, items) {
   return axios.post(API, {
     messaging_product: "whatsapp",
     to,
     type: "interactive",
     interactive: {
       type: "list",
-      header: { type: "text", text: header },
-      body: { text: "Choose an option:" },
+      body: { text: title },
       action: {
-        button: buttonText,
+        button: "Select",
         sections: [
           {
-            title: header,
-            rows
+            title: "Options",
+            rows: items.map(i => ({
+              id: i.id,
+              title: i.title
+            }))
           }
         ]
       }
     }
   }, { headers });
 }
+

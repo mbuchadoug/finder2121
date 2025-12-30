@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 //import { handleIncomingMessage } from "../services/chatbotEngine.js";
 import { handleMetaMessage } from "../services/unifiedWhatsAppEngine.js";
+import { sendMainMenu } from "../services/metaMenus.js";
 
 dotenv.config();
 const router = express.Router();
@@ -26,31 +27,43 @@ router.get("/whatsapp", (req, res) => {
 /**
  * ✅ Incoming messages from WhatsApp
  */
+
+
 router.post("/meta/whatsapp", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const value = change?.value;
+    const msg = value?.messages?.[0];
 
-    const message = value?.messages?.[0];
-    if (!message) return res.sendStatus(200);
+    if (!msg) return res.sendStatus(200);
 
-    const phone = message.from;
-    const text =
-      message.text?.body ||
-      message.button?.text ||
-      message.interactive?.button_reply?.id ||
-      message.interactive?.list_reply?.id ||
-      "";
+    const phone = msg.from;
 
-    const mediaUrls = [];
+    let text = "";
 
-    if (message.image?.id) {
-      // you can expand this later
+    // TEXT MESSAGE
+    if (msg.type === "text") {
+      text = msg.text.body.trim();
     }
 
+    // BUTTON / LIST CLICK
+    if (msg.type === "interactive") {
+      text =
+        msg.interactive?.button_reply?.id ||
+        msg.interactive?.list_reply?.id ||
+        "";
+    }
+
+    // ENTRY MENU TRIGGER
+    if (!text || ["hi", "hello", "menu"].includes(text.toLowerCase())) {
+      await sendMainMenu(phone);
+      return res.sendStatus(200);
+    }
+
+    // 🔁 Feed into Twilio engine
     return handleMetaMessage(
-      { phone, text, mediaUrls },
+      { phone, text },
       req,
       res
     );
@@ -60,6 +73,7 @@ router.post("/meta/whatsapp", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
 
 
 export default router;

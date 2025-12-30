@@ -1,4 +1,4 @@
-import Invoice from ".../models/invoice.js";
+import Invoice from "../models/invoice.js";
 
 export async function createDraftInvoice({ businessId, createdBy }) {
   return Invoice.create({

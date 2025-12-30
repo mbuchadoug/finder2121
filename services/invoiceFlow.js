@@ -1,109 +1,30 @@
-// services/invoiceFlow.js
-import { getSession, setSession, clearSession } from "./sessionStore.js";
+import Business from "../models/business.js";
+import UserSession from "../models/userSession.js";
 import { sendText } from "./metaSender.js";
-import { sendOwnerMainMenu } from "./metaMenus.js";
 
 /**
- * START INVOICE FLOW
+ * Meta → Start invoice
+ * Reuses Twilio logic by setting the SAME sessionState
  */
 export async function startInvoiceFlow(to) {
-  const session = getSession(to);
+  const phone = to.replace(/\D+/g, "");
 
-  session.step = "choose_client";
-  session.invoice = {
-    client: null,
-    items: []
-  };
+  const session = await UserSession.findOne({ phone });
+  if (!session?.activeBusinessId) {
+    return sendText(to, "❌ No active business. Reply *menu*.");
+  }
 
-  setSession(to, session);
+  const biz = await Business.findById(session.activeBusinessId);
+  if (!biz) {
+    return sendText(to, "❌ Business not found.");
+  }
 
-  return sendText(
-    to,
-    "📄 New Invoice\n\nChoose a client:\n\n1️⃣ John Doe\n2️⃣ Acme Corp\n➕ Type *new* to add client"
-  );
-}
-
-/**
- * CLIENT SELECTED
- */
-export async function handleClientSelection(to, clientId) {
-  const session = getSession(to);
-
-  session.invoice.client = clientId;
-  session.step = "add_item";
-
-  setSession(to, session);
+  biz.sessionState = "creating_invoice_choose_client";
+  biz.sessionData = { docType: "invoice", items: [] };
+  await biz.save();
 
   return sendText(
     to,
-    "✅ Client selected\n\nType *service* or *product* to add item"
+    "📄 New Invoice\n\n1️⃣ Use saved client\n2️⃣ New client\n3️⃣ Cancel"
   );
-}
-
-/**
- * ADD ITEM
- */
-export async function handleAddItem(to, type) {
-  const session = getSession(to);
-
-  session.currentItem = { type, qty: 1, price: 0 };
-  session.step = "enter_qty";
-
-  setSession(to, session);
-
-  return sendText(to, "Enter quantity (number):");
-}
-
-/**
- * HANDLE QTY
- */
-export async function handleQty(to, qty) {
-  const session = getSession(to);
-
-  session.currentItem.qty = qty;
-  session.step = "enter_price";
-
-  setSession(to, session);
-
-  return sendText(to, "Enter unit price:");
-}
-
-/**
- * HANDLE PRICE
- */
-export async function handlePrice(to, price) {
-  const session = getSession(to);
-
-  session.currentItem.price = price;
-  session.invoice.items.push(session.currentItem);
-
-  delete session.currentItem;
-  session.step = "confirm";
-
-  setSession(to, session);
-
-  const summary = session.invoice.items
-    .map(
-      (i, idx) =>
-        `${idx + 1}) ${i.type} x${i.qty} @ ${i.price}`
-    )
-    .join("\n");
-
-  return sendText(
-    to,
-    `🧾 Invoice Summary\n\n${summary}\n\nType *send* to finish or *add* to add item`
-  );
-}
-
-/**
- * FINALIZE
- */
-export async function finalizeInvoice(to) {
-  const session = getSession(to);
-
-  console.log("[INVOICE CREATED]", session.invoice);
-
-  clearSession(to);
-
-  return sendOwnerMainMenu(to);
 }

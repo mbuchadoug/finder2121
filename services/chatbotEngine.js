@@ -1,4 +1,8 @@
 import { ACTIONS } from "./actions.js";
+import { startInvoiceFlow } from "./invoiceFlow.js";
+import { startReceiptFlow } from "./receiptFlow.js";
+import { startClientFlow } from "./clientFlow.js";
+
 import {
   sendMainMenu,
   sendSalesMenu,

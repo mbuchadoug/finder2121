@@ -1,4 +1,12 @@
 import {
+  startClientFlow,
+  handleClientName,
+  handleClientPhone
+} from "./clientFlow.js";
+
+
+
+import {
   startInvoiceFlow,
   handleClientSelection,
   handleAddItem,
@@ -17,47 +25,39 @@ import {
 } from "./metaMenus.js";
 
 export async function handleIncomingMessage({ from, action }) {
-  console.log("[CHATBOT]", from, action);
-
   const normalizedAction =
     typeof action === "string" ? action.trim().toLowerCase() : "";
 
-  // 🔑 HANDLE NUMERIC INPUT FOR FORMS (price entry)
   const session = getSession(from);
+
+  /* ===== FORMS FIRST ===== */
+  if (session?.step === "client_name") {
+    return handleClientName(from, action);
+  }
+
+  if (session?.step === "client_phone") {
+    return handleClientPhone(from, action);
+  }
+
   if (session?.step === "enter_price" && /^\d+$/.test(normalizedAction)) {
     return handlePrice(from, Number(normalizedAction));
   }
 
-  // Entry points
-  if (
-    !normalizedAction ||
-    normalizedAction === "hi" ||
-    normalizedAction === "hello" ||
-    normalizedAction === "menu"
-  ) {
+  /* ===== ENTRY ===== */
+  if (!normalizedAction || ["hi", "hello", "menu"].includes(normalizedAction)) {
     return sendOwnerMainMenu(from);
   }
 
   switch (normalizedAction) {
-
-    /* ===== MAIN MENUS ===== */
     case "documents":
       return sendDocumentsMenu(from);
 
-    case "payments":
-      return sendPaymentsMenu(from);
-
-    case "business":
-      return sendBusinessMenu(from);
-
-    case "back":
-      return sendOwnerMainMenu(from);
-
-    /* ===== DOCUMENTS ===== */
     case "new_invoice":
       return startInvoiceFlow(from);
 
-    /* ===== INVOICE FLOW ===== */
+    case "client_new":
+      return startClientFlow(from);
+
     case "client_1":
     case "client_2":
       return handleClientSelection(from, normalizedAction);
@@ -71,18 +71,14 @@ export async function handleIncomingMessage({ from, action }) {
     case "qty_5":
       return handleQty(from, Number(normalizedAction.replace("qty_", "")));
 
-    case "add_more":
-      return handleAddItem(from, "service");
-
     case "send_invoice":
       return finalizeInvoice(from);
 
     case "cancel":
       return sendOwnerMainMenu(from);
 
-    /* ===== FALLBACK ===== */
     default:
-      console.warn("[CHATBOT] Unhandled action:", normalizedAction);
+      console.warn("[CHATBOT] Unhandled:", normalizedAction);
       return sendOwnerMainMenu(from);
   }
 }

@@ -38,39 +38,32 @@ router.post("/meta/whatsapp", async (req, res) => {
 
     if (!msg) return res.sendStatus(200);
 
-    const phone = msg.from;
+    const from = msg.from;
 
-    let text = "";
+    // 🔥 DIRECT SEND (NO MENU, NO ENGINE)
+    const axios = (await import("axios")).default;
 
-    // TEXT MESSAGE
-    if (msg.type === "text") {
-      text = msg.text.body.trim();
-    }
-
-    // BUTTON / LIST CLICK
-    if (msg.type === "interactive") {
-      text =
-        msg.interactive?.button_reply?.id ||
-        msg.interactive?.list_reply?.id ||
-        "";
-    }
-
-    // ENTRY MENU TRIGGER
-    if (!text || ["hi", "hello", "menu"].includes(text.toLowerCase())) {
-      await sendMainMenu(phone);
-      return res.sendStatus(200);
-    }
-
-    // 🔁 Feed into Twilio engine
-    return handleMetaMessage(
-      { phone, text },
-      req,
-      res
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: from,
+        type: "text",
+        text: { body: "✅ Webhook is working" }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
     );
 
-  } catch (err) {
-    console.error("[META ERROR]", err);
-    res.sendStatus(500);
+    return res.sendStatus(200);
+
+  } catch (e) {
+    console.error("META SEND ERROR:", e.response?.data || e.message);
+    return res.sendStatus(500);
   }
 });
 

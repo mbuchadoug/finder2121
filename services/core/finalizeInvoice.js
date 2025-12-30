@@ -1,4 +1,4 @@
-import Invoice from "../models/invoice.js";
+import Invoice from "../../models/invoice.js";
 import { generateInvoicePdf } from "./generatePdf.js";
 
 export async function finalizeInvoice(invoiceId) {

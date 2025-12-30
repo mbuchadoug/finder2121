@@ -1,5 +1,5 @@
 // services/core/createClient.js
-import Client from "../models/client.js";
+import Client from "../../models/client.js";
 
 export async function createClient({ businessId, name, phone }) {
   return Client.findOneAndUpdate(

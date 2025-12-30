@@ -47,20 +47,24 @@ export async function continueTwilioFlow({ from, text }) {
   /* ===========================
      ITEM ADDING (THIS WAS MISSING)
   ============================ */
- if (state === "creating_invoice_add_items") {
+if (state === "creating_invoice_add_items") {
 
-  // STEP 1: item description
-  if (!biz.sessionData.awaitingItemDesc) {
+  // =========================
+  // STEP 1: EXPECT DESCRIPTION
+  // =========================
+  if (!biz.sessionData.lastItem) {
     biz.sessionData.lastItem = { description: trimmed };
-    biz.sessionData.awaitingItemDesc = true;
     await biz.save();
 
     await sendText(from, "Enter quantity (e.g. 1):");
     return true;
   }
 
-  // STEP 2: quantity
+  // =========================
+  // STEP 2: EXPECT QUANTITY
+  // =========================
   const qty = Number(trimmed);
+
   if (isNaN(qty) || qty <= 0) {
     await sendText(from, "Invalid quantity. Enter a number like 1:");
     return true;
@@ -73,9 +77,10 @@ export async function continueTwilioFlow({ from, text }) {
     unit: 0
   });
 
+  // ✅ CLEAR lastItem so next message is a NEW item
   biz.sessionData.lastItem = null;
-  biz.sessionData.awaitingItemDesc = false;
 
+  // move forward
   biz.sessionState = "creating_invoice_confirm";
   await biz.save();
 
@@ -90,6 +95,7 @@ export async function continueTwilioFlow({ from, text }) {
 
   return true;
 }
+
 
 
   /* ===========================

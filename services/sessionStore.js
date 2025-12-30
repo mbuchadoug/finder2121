@@ -1,16 +1,17 @@
+// services/sessionStore.js
 const sessions = new Map();
 
-export function getSession(phone) {
-  if (!sessions.has(phone)) {
-    sessions.set(phone, {});
+export function getSession(key) {
+  if (!sessions.has(key)) {
+    sessions.set(key, {});
   }
-  return sessions.get(phone);
+  return sessions.get(key);
 }
 
-export function setSession(phone, data) {
-  sessions.set(phone, data);
+export function setSession(key, value) {
+  sessions.set(key, value);
 }
 
-export function clearSession(phone) {
-  sessions.delete(phone);
+export function clearSession(key) {
+  sessions.delete(key);
 }

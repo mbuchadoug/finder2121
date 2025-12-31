@@ -2678,6 +2678,7 @@ Or reply *JOIN* to this message.`;
         if (clients.length === 1) {
           const client = clients[0];
           biz.sessionData.client = client;
+            biz.sessionData.clientId = client._id; // ✅ REQUIRED
           biz.sessionState = "creating_invoice_add_items";
           biz.sessionData.items = biz.sessionData.items || [];
           biz.sessionData.awaitingItemDesc = false;
@@ -2715,6 +2716,7 @@ Or reply *JOIN* to this message.`;
       if (idx === clients.length + 1) { biz.sessionState = "creating_invoice_new_client"; biz.sessionData = {}; await saveBiz(biz); return sendTwimlText(res, "Client name?"); }
       const client = clients[idx-1];
       biz.sessionData.client = client;
+      biz.sessionData.clientId = client._id; // ✅ REQUIRED
       biz.sessionState = "creating_invoice_add_items";
       biz.sessionData.items = biz.sessionData.items || [];
       biz.sessionData.awaitingItemDesc = false;

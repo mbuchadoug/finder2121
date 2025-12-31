@@ -19,12 +19,10 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
-/**
- * Meta webhook dispatcher
- * IMPORTANT:
- * - Meta does NOT control invoice logic
- * - Meta only routes menus and forwards input to Twilio engine
- */
+// helpers you already use elsewhere
+import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
+import { sendText } from "./metaSender.js";
+
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
@@ -37,38 +35,137 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     META-ONLY ROUTING
-     (NO INVOICE STATE MUTATION)
+     META LIST / BUTTON ACTIONS
+     (MUST HARD RETURN)
   ========================= */
 
-  // Invoice: use saved client
   if (al === "inv_use_client") {
     await handleChooseSavedClient(from);
     return;
   }
 
-  // Invoice: add new client
+  // ===============================
+// INVOICE CONFIRM ACTIONS (META)
+// ===============================
+
+// Generate PDF
+// ===============================
+// META → TWILIO CONFIRM DELEGATION
+// ===============================
+
+if (al === "inv_add_item") {
+  return continueTwilioFlow({ from, text: "1" });
+}
+
+// ===============================
+// INVOICE CONFIRM ACTIONS (META)
+// ===============================
+
+// ✅ Generate PDF → simulate "2"
+if (a === "inv_generate_pdf") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // build summary text
+  const summary = biz.sessionData.items
+    .map(
+      (i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
+    )
+    .join("\n");
+
+  // 🔥 SEND SOMETHING BACK TO META
+  await sendText(
+    from,
+    `📄 Generating invoice PDF...\n\n${summary}`
+  );
+
+  // now let Twilio logic generate + send PDF
+  await continueTwilioFlow({
+    from,
+    text: "2"
+  });
+
+  return;
+}
+
+// ✅ Set Discount → simulate "4"
+if (a === "inv_set_discount") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "4"
+  });
+}
+
+// ✅ Set VAT → simulate "5"
+if (a === "inv_set_vat") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "5"
+  });
+}
+
+
   if (al === "inv_new_client") {
     await handleNewClientFromInvoice(from);
     return;
   }
 
-  // Invoice: client selected from list
   if (al.startsWith("client_")) {
     await handleClientPicked(from, al.replace("client_", ""));
     return;
   }
 
+  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = "creating_invoice_add_items";
+    await saveBizSafe(biz);
+    return sendText(from, "Send item description:");
+  }
+
+  if (a === ACTIONS.INV_ENTER_PRICES) {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = "creating_invoice_enter_prices";
+    biz.sessionData.priceIndex = 0;
+    await saveBizSafe(biz);
+
+    const item = biz.sessionData.items[0];
+    return sendText(
+      from,
+      `Enter price for:\n${item.item} x${item.qty}`
+    );
+  }
+
+  if (al === "inv_cancel") {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = null;
+    biz.sessionData = {};
+    biz.markModified("sessionData");
+    await biz.save();
+    return sendMainMenu(from);
+  }
+
   /* =========================
-     PASS EVERYTHING ELSE
-     TO TWILIO STATE MACHINE
+     TEXT → TWILIO FLOW
   ========================= */
 
-  const isMetaMenuAction =
-    Object.values(ACTIONS).includes(a) ||
-    al.startsWith("client_");
+  const isMetaAction =
+    al.startsWith("inv_") ||
+    al.startsWith("client_") ||
+    Object.values(ACTIONS).includes(a);
 
-  if (!isMetaMenuAction) {
+  if (!isMetaAction) {
     const handled = await continueTwilioFlow({
       from,
       text: action
@@ -77,7 +174,7 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     MAIN MENUS
+     MENUS
   ========================= */
 
   switch (a) {
@@ -98,10 +195,6 @@ export async function handleIncomingMessage({ from, action }) {
 
     case ACTIONS.BACK:
       return sendMainMenu(from);
-
-    /* =========================
-       START FLOWS
-    ========================= */
 
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);

@@ -49,38 +49,30 @@ export async function handleIncomingMessage({ from, action }) {
 // ===============================
 
 // Generate PDF
-if (a === "inv_generate_pdf") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
+// ===============================
+// META → TWILIO CONFIRM DELEGATION
+// ===============================
 
-  // mimic "2" in Twilio confirm menu
-  biz.sessionState = "creating_invoice_confirm";
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({
-    from,
-    text: "2"
-  });
+if (al === "inv_add_item") {
+  return continueTwilioFlow({ from, text: "1" });
 }
 
-// Add VAT
-if (a === "inv_set_discount") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_set_discount";
-  await saveBizSafe(biz);
-  return sendText(from, "Send discount percent (e.g. 10)");
+if (al === "inv_generate_pdf") {
+  return continueTwilioFlow({ from, text: "2" });
 }
 
-if (a === "inv_set_vat") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_set_vat";
-  await saveBizSafe(biz);
-  return sendText(from, "Send VAT percent (e.g. 15)");
+if (al === "inv_cancel") {
+  return continueTwilioFlow({ from, text: "3" });
 }
+
+if (al === "inv_set_discount") {
+  return continueTwilioFlow({ from, text: "4" });
+}
+
+if (al === "inv_set_vat") {
+  return continueTwilioFlow({ from, text: "5" });
+}
+
 
   if (al === "inv_new_client") {
     await handleNewClientFromInvoice(from);

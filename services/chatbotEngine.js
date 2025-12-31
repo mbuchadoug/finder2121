@@ -32,9 +32,14 @@ export async function handleIncomingMessage({ from, action }) {
   const biz = await getBizForPhone(from);
 
   /* =====================================================
-     1️⃣ GLOBAL GREETING / MENU ENTRY
+     1️⃣ GLOBAL GREETING / MENU ENTRY (FIXED)
+     - allow menu when sessionState is null OR "ready"
   ===================================================== */
-  if (!biz?.sessionState && (!al || ["hi", "hello", "menu"].includes(al))) {
+  const isBusy =
+    biz?.sessionState &&
+    biz.sessionState !== "ready";
+
+  if (!isBusy && (!al || ["hi", "hello", "menu"].includes(al))) {
     return sendMainMenu(from);
   }
 
@@ -174,7 +179,7 @@ export async function handleIncomingMessage({ from, action }) {
       return startClientFlow(from);
 
     default:
-      // 🔥 DO NOTHING — prevents killing active invoice flow
+      // DO NOTHING — preserves active flows
       return;
   }
 }

@@ -19,159 +19,25 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
-// helpers you already use elsewhere
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
 
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
-const biz = await getBizForPhone(from);
 
-  /* =========================
-     ENTRY
-  ========================= */
+  const biz = await getBizForPhone(from);
+
+  /* =====================================================
+     1️⃣ GLOBAL ENTRY
+  ===================================================== */
   if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
   }
 
-  /* =========================
-     META LIST / BUTTON ACTIONS
-     (MUST HARD RETURN)
-  ========================= */
-
-  if (al === "inv_use_client") {
-    await handleChooseSavedClient(from);
-    return;
-  }
-
-  // ===============================
-// INVOICE CONFIRM ACTIONS (META)
-// ===============================
-
-// Generate PDF
-// ===============================
-// META → TWILIO CONFIRM DELEGATION
-// ===============================
-
-if (al === "inv_add_item") {
-  return continueTwilioFlow({ from, text: "1" });
-}
-
-// ===============================
-// INVOICE CONFIRM ACTIONS (META)
-// ===============================
-
-// ✅ Generate PDF → simulate "2"
-if (a === "inv_generate_pdf") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  // build summary text
-  const summary = biz.sessionData.items
-    .map(
-      (i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
-    )
-    .join("\n");
-
-  // 🔥 SEND SOMETHING BACK TO META
-  await sendText(
-    from,
-    `📄 Generating invoice PDF...\n\n${summary}`
-  );
-
-  // now let Twilio logic generate + send PDF
-  await continueTwilioFlow({
-    from,
-    text: "2"
-  });
-
-  return;
-}
-
-// ✅ Set Discount → simulate "4"
-// ✅ Set Discount %
-if (a === "inv_set_discount") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_set_discount";
-  await saveBizSafe(biz);
-
-  return sendText(from, "Enter discount percent (0–100):");
-}
-
-// ✅ Set VAT %
-if (a === "inv_set_vat") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_set_vat";
-  await saveBizSafe(biz);
-
-  return sendText(from, "Enter VAT percent (0–100):");
-}
-
-
-
-  if (al === "inv_new_client") {
-    await handleNewClientFromInvoice(from);
-    return;
-  }
-
-  if (al.startsWith("client_")) {
-    await handleClientPicked(from, al.replace("client_", ""));
-    return;
-  }
-
-  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "creating_invoice_add_items";
-    await saveBizSafe(biz);
-    return sendText(from, "Send item description:");
-  }
-
-  if (a === ACTIONS.INV_ENTER_PRICES) {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "creating_invoice_enter_prices";
-    biz.sessionData.priceIndex = 0;
-    await saveBizSafe(biz);
-
-    const item = biz.sessionData.items[0];
-    return sendText(
-      from,
-      `Enter price for:\n${item.item} x${item.qty}`
-    );
-  }
-
-  if (al === "inv_cancel") {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = null;
-    biz.sessionData = {};
-    biz.markModified("sessionData");
-    await biz.save();
-    return sendMainMenu(from);
-  }
-
-  /* =========================
-     TEXT → TWILIO FLOW
-  ========================= */
-
-  // 🔥 CRITICAL FIX:
-// If we are inside an active business flow, ALWAYS let Twilio engine try first
-if (biz?.sessionState) {
-  const handled = await continueTwilioFlow({
-    from,
-    text: action
-  });
-  if (handled) return;
-}
-
-
-  /* =========================
-     MENUS
-  ========================= */
-
+  /* =====================================================
+     2️⃣ MENU BUTTONS — ALWAYS FIRST (🔥 FIX)
+  ===================================================== */
   switch (a) {
     case ACTIONS.SALES_MENU:
       return sendSalesMenu(from);
@@ -190,7 +56,87 @@ if (biz?.sessionState) {
 
     case ACTIONS.BACK:
       return sendMainMenu(from);
+  }
 
+  /* =====================================================
+     3️⃣ INVOICE META ACTIONS (BUTTONS)
+  ===================================================== */
+  if (al === "inv_use_client") {
+    await handleChooseSavedClient(from);
+    return;
+  }
+
+  if (al === "inv_new_client") {
+    await handleNewClientFromInvoice(from);
+    return;
+  }
+
+  if (al.startsWith("client_")) {
+    await handleClientPicked(from, al.replace("client_", ""));
+    return;
+  }
+
+  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
+    biz.sessionState = "creating_invoice_add_items";
+    await saveBizSafe(biz);
+    return sendText(from, "Send item description:");
+  }
+
+  if (a === ACTIONS.INV_ENTER_PRICES) {
+    biz.sessionState = "creating_invoice_enter_prices";
+    biz.sessionData.priceIndex = 0;
+    await saveBizSafe(biz);
+
+    const item = biz.sessionData.items?.[0];
+    return sendText(from, `Enter price for:\n${item.item} x${item.qty}`);
+  }
+
+  if (a === "inv_generate_pdf") {
+    await sendText(from, "📄 Generating invoice PDF...");
+    await continueTwilioFlow({ from, text: "2" });
+    return;
+  }
+
+  if (a === "inv_set_discount") {
+    biz.sessionState = "creating_invoice_set_discount";
+    await saveBizSafe(biz);
+    return sendText(from, "Enter discount percent (0–100):");
+  }
+
+  if (a === "inv_set_vat") {
+    biz.sessionState = "creating_invoice_set_vat";
+    await saveBizSafe(biz);
+    return sendText(from, "Enter VAT percent (0–100):");
+  }
+
+  if (al === "inv_cancel") {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    return sendMainMenu(from);
+  }
+
+  /* =====================================================
+     4️⃣ FREE TEXT → TWILIO STATE ENGINE ONLY
+     (🔥 THIS IS THE KEY)
+  ===================================================== */
+  const isFreeText =
+    !al.startsWith("inv_") &&
+    !al.startsWith("client_") &&
+    !Object.values(ACTIONS).includes(a);
+
+  if (isFreeText) {
+    const handled = await continueTwilioFlow({
+      from,
+      text: action
+    });
+    if (handled) return;
+  }
+
+  /* =====================================================
+     5️⃣ FLOW STARTERS
+  ===================================================== */
+  switch (a) {
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
 

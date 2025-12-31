@@ -15,6 +15,8 @@ async function saveBizSafe(biz) {
 /**
  * Continue Twilio-style state machine for Meta text input
  */
+
+
 export async function continueTwilioFlow({ from, text }) {
   const phone = from.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
@@ -25,6 +27,39 @@ export async function continueTwilioFlow({ from, text }) {
 
   const trimmed = text.trim();
   const state = biz.sessionState;
+
+
+  /* ======================================================
+   META → TWILIO CONFIRM MENU BRIDGE (CRITICAL)
+====================================================== */
+
+if (biz.sessionState === "creating_invoice_confirm") {
+
+  // ➕ Add item
+  if (trimmed === "inv_add_item") {
+    return continueTwilioFlow({ from, text: "1" });
+  }
+
+  // 📄 Generate PDF
+  if (trimmed === "inv_generate_pdf") {
+    return continueTwilioFlow({ from, text: "2" });
+  }
+
+  // ❌ Cancel
+  if (trimmed === "inv_cancel") {
+    return continueTwilioFlow({ from, text: "3" });
+  }
+
+  // 💸 Discount
+  if (trimmed === "inv_set_discount") {
+    return continueTwilioFlow({ from, text: "4" });
+  }
+
+  // 🧾 VAT
+  if (trimmed === "inv_set_vat") {
+    return continueTwilioFlow({ from, text: "5" });
+  }
+}
 
   /* ======================================================
      🔹 ADDED: META CONFIRM BUTTON → TWILIO BRIDGE
@@ -150,49 +185,7 @@ export async function continueTwilioFlow({ from, text }) {
   /* ===========================
      CONFIRMATION → PDF
   ============================ */
-  if (state === "creating_invoice_confirm" && trimmed === "2") {
 
-    // 🔹 ADDED: user feedback so it doesn't look frozen
-    await sendText(from, "📄 Generating invoice PDF…");
-
-    const client = biz.sessionData.client;
-    const items = biz.sessionData.items || [];
-
-    if (!items.length) {
-      await sendText(from, "❌ No items found for this invoice.");
-      return true;
-    }
-
-    const number = `INV-${Date.now()}`;
-
-    const { filename } = await generatePDF({
-      type: "invoice",
-      number,
-      date: new Date(),
-      billingTo: client?.name || client?.phone || "Client",
-      items,
-      bizMeta: {
-        name: biz.name,
-        logoUrl: biz.logoUrl,
-        address: biz.address || "",
-        discountPercent: biz.sessionData.discountPercent || 0,
-        vatPercent: biz.sessionData.vatPercent || 0,
-        applyVat: biz.sessionData.applyVat !== false,
-        _id: biz._id.toString()
-      }
-    });
-
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    const url = `${site}/docs/generated/invoices/${filename}`;
-
-    await sendDocument(from, { link: url, filename });
-
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    return true;
-  }
 
 
   /* ======================================================
@@ -200,18 +193,9 @@ export async function continueTwilioFlow({ from, text }) {
 ====================================================== */
 
 // Meta "Set Discount" button
-if (state === "creating_invoice_confirm" && trimmed === "4") {
-  biz.sessionState = "creating_invoice_set_discount";
-  await saveBizSafe(biz);
-  return true;
-}
+
 
 // Meta "Set VAT" button
-if (state === "creating_invoice_confirm" && trimmed === "5") {
-  biz.sessionState = "creating_invoice_set_vat";
-  await saveBizSafe(biz);
-  return true;
-}
 
 
   return false;

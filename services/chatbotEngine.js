@@ -19,10 +19,12 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
-// helpers you already use elsewhere
-import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
-import { sendText } from "./metaSender.js";
-
+/**
+ * Meta webhook dispatcher
+ * IMPORTANT:
+ * - Meta does NOT control invoice logic
+ * - Meta only routes menus and forwards input to Twilio engine
+ */
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
@@ -35,103 +37,38 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     META LIST / BUTTON ACTIONS
-     (MUST HARD RETURN)
+     META-ONLY ROUTING
+     (NO INVOICE STATE MUTATION)
   ========================= */
 
+  // Invoice: use saved client
   if (al === "inv_use_client") {
     await handleChooseSavedClient(from);
     return;
   }
 
-  // ===============================
-// INVOICE CONFIRM ACTIONS (META)
-// ===============================
-
-// Generate PDF
-// ===============================
-// META → TWILIO CONFIRM DELEGATION
-// ===============================
-
-// ===============================
-// INVOICE CONFIRM ACTIONS (META)
-// ===============================
-
-if (a === "inv_add_item") {
-  return continueTwilioFlow({ from, text: "1" });
-}
-
-if (a === "inv_generate_pdf") {
-  await sendText(from, "📄 Generating invoice PDF…");
-  return continueTwilioFlow({ from, text: "2" });
-}
-
-if (a === "inv_set_discount") {
-  return continueTwilioFlow({ from, text: "4" });
-}
-
-if (a === "inv_set_vat") {
-  return continueTwilioFlow({ from, text: "5" });
-}
-
-if (a === "inv_cancel") {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-  return sendMainMenu(from);
-}
-
-
+  // Invoice: add new client
   if (al === "inv_new_client") {
     await handleNewClientFromInvoice(from);
     return;
   }
 
+  // Invoice: client selected from list
   if (al.startsWith("client_")) {
     await handleClientPicked(from, al.replace("client_", ""));
     return;
   }
 
-  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "creating_invoice_add_items";
-    await saveBizSafe(biz);
-    return sendText(from, "Send item description:");
-  }
-
-  if (a === ACTIONS.INV_ENTER_PRICES) {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "creating_invoice_enter_prices";
-    biz.sessionData.priceIndex = 0;
-    await saveBizSafe(biz);
-
-    const item = biz.sessionData.items[0];
-    return sendText(
-      from,
-      `Enter price for:\n${item.item} x${item.qty}`
-    );
-  }
-
-  if (al === "inv_cancel") {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = null;
-    biz.sessionData = {};
-    biz.markModified("sessionData");
-    await biz.save();
-    return sendMainMenu(from);
-  }
-
   /* =========================
-     TEXT → TWILIO FLOW
+     PASS EVERYTHING ELSE
+     TO TWILIO STATE MACHINE
   ========================= */
 
-  const isMetaAction =
-    al.startsWith("inv_") ||
-    al.startsWith("client_") ||
-    Object.values(ACTIONS).includes(a);
+  const isMetaMenuAction =
+    Object.values(ACTIONS).includes(a) ||
+    al.startsWith("client_");
 
-  if (!isMetaAction) {
+  if (!isMetaMenuAction) {
     const handled = await continueTwilioFlow({
       from,
       text: action
@@ -140,7 +77,7 @@ if (a === "inv_cancel") {
   }
 
   /* =========================
-     MENUS
+     MAIN MENUS
   ========================= */
 
   switch (a) {
@@ -161,6 +98,10 @@ if (a === "inv_cancel") {
 
     case ACTIONS.BACK:
       return sendMainMenu(from);
+
+    /* =========================
+       START FLOWS
+    ========================= */
 
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);

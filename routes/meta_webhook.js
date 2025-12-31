@@ -43,34 +43,43 @@ router.post("/whatsapp", async (req, res) => {
     const value = change?.value;
     const msg = value?.messages?.[0];
 
-    // ✅ Always ACK Meta immediately
+    // ✅ ALWAYS ACK META IMMEDIATELY
     res.sendStatus(200);
 
-    // Nothing to process
     if (!msg) return;
 
     const from = msg.from;
     let action = "";
 
+    // ===========================
+    // 🔥 NORMALIZE INPUT HERE
+    // ===========================
+
     if (msg.type === "text") {
-      action = msg.text.body.trim();
+      action = (msg.text?.body || "")
+        .trim()
+        .toLowerCase();
     }
 
     if (msg.type === "interactive") {
-      action =
+      action = (
         msg.interactive?.button_reply?.id ||
         msg.interactive?.list_reply?.id ||
-        "";
+        ""
+      )
+        .trim()
+        .toLowerCase();
     }
 
-    // 🔥 IMPORTANT: NO res usage below this line
+    // 🔥 IMPORTANT: do NOT touch res below this line
     await handleIncomingMessage({ from, action });
 
   } catch (e) {
     console.error("[META WEBHOOK ERROR]", e);
-    // ❌ DO NOT res.send here — Meta already got 200
+    // ❌ Do NOT send res here — Meta already got 200
   }
 });
+
 
 
 export default router;

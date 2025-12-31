@@ -200,9 +200,27 @@ if (state === "creating_invoice_enter_prices") {
   }
 
 
- if (state === "creating_invoice_confirm" && trimmed === "2") {
+if (state === "creating_invoice_confirm" && trimmed === "2") {
 
-  const client = biz.sessionData.client;
+  // --- Resolve client safely ---
+  let client = biz.sessionData.client;
+
+  if (!client && biz.sessionData.clientId) {
+    client = await Client.findById(biz.sessionData.clientId);
+  }
+
+  // 🚨 Hard safety check (prevents blank PDFs)
+  if (!client) {
+    await sendText(
+      from,
+      "❌ Client information is missing. Please restart the invoice."
+    );
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    return true;
+  }
+
   const items = biz.sessionData.items || [];
 
   if (!items.length) {
@@ -216,7 +234,7 @@ if (state === "creating_invoice_enter_prices") {
     type: "invoice",
     number,
     date: new Date(),
-    billingTo: client?.name || client?.phone || "Client",
+    billingTo: client.name || client.phone || "Client",
     items,
     bizMeta: {
       name: biz.name,
@@ -238,12 +256,14 @@ if (state === "creating_invoice_enter_prices") {
     filename
   });
 
+  // ✅ Clean reset (DO NOT remove)
   biz.sessionState = "ready";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
   return true;
 }
+
 
 
 /* ===========================

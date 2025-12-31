@@ -36,11 +36,12 @@ export async function handleChooseSavedClient(to) {
     to,
     "Select client",
     clients.map(c => ({
-      id: `client_${c._id}`, // ✅ correct
+      id: `client_${c._id}`,   // ✅ FIXED
       title: c.name || c.phone
     }))
   );
 }
+
 
 /**
  * Meta: New client from invoice
@@ -62,33 +63,21 @@ export async function handleNewClientFromInvoice(to) {
 
 /**
  * Meta: client picked from list
- * 🔥 FIXED: persist clientId (THIS WAS THE BUG)
  */
 export async function handleClientPicked(to, clientId) {
   const phone = to.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
   const biz = await Business.findById(session?.activeBusinessId);
 
-  if (!biz) return sendText(to, "❌ No active business.");
-
   const client = await Client.findById(clientId);
-  if (!client) return sendText(to, "❌ Client not found.");
+  if (!client) return sendText(to, "Client not found.");
 
-  // 🔒 CRITICAL FIX — persist durable ID
-  biz.sessionData.clientId = client._id;
-
-  // Optional cache (safe)
   biz.sessionData.client = client;
-
   biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.items = [];
-  biz.sessionData.awaitingItemDesc = false;
-
-  biz.markModified("sessionData");
   await biz.save();
 
   return sendText(
     to,
-    `Client selected: ${client.name || client.phone}\n\nSend item description (e.g. "Website design").`
+    `Client set to ${client.name}.\n\nSend item description (e.g. "Website design").`
   );
 }

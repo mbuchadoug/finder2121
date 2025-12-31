@@ -200,24 +200,23 @@ if (state === "creating_invoice_enter_prices") {
   }
 
 
+/* ===========================
+   CONFIRMATION → GENERATE PDF
+=========================== */
 if (state === "creating_invoice_confirm" && trimmed === "2") {
 
-  // --- Resolve client safely ---
+  // 🔒 SAFELY RESOLVE CLIENT (object OR ID)
   let client = biz.sessionData.client;
 
   if (!client && biz.sessionData.clientId) {
     client = await Client.findById(biz.sessionData.clientId);
   }
 
-  // 🚨 Hard safety check (prevents blank PDFs)
   if (!client) {
     await sendText(
       from,
       "❌ Client information is missing. Please restart the invoice."
     );
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
     return true;
   }
 
@@ -250,19 +249,20 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
   const url = `${site}/docs/generated/invoices/${filename}`;
 
-  // ⬇️ send PDF via Meta
+  // 📎 SEND PDF (META)
   await sendDocument(from, {
     link: url,
     filename
   });
 
-  // ✅ Clean reset (DO NOT remove)
+  // ♻️ CLEAN RESET
   biz.sessionState = "ready";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
   return true;
 }
+
 
 
 

@@ -53,33 +53,67 @@ export async function handleIncomingMessage({ from, action }) {
 // META → TWILIO CONFIRM DELEGATION
 // ===============================
 
+if (al === "inv_add_item") {
+  return continueTwilioFlow({ from, text: "1" });
+}
+
 // ===============================
 // INVOICE CONFIRM ACTIONS (META)
 // ===============================
 
-if (a === "inv_add_item") {
-  return continueTwilioFlow({ from, text: "1" });
-}
-
+// ✅ Generate PDF → simulate "2"
 if (a === "inv_generate_pdf") {
-  await sendText(from, "📄 Generating invoice PDF…");
-  return continueTwilioFlow({ from, text: "2" });
-}
-
-if (a === "inv_set_discount") {
-  return continueTwilioFlow({ from, text: "4" });
-}
-
-if (a === "inv_set_vat") {
-  return continueTwilioFlow({ from, text: "5" });
-}
-
-if (a === "inv_cancel") {
   const biz = await getBizForPhone(from);
-  biz.sessionState = "ready";
-  biz.sessionData = {};
+  if (!biz) return sendMainMenu(from);
+
+  // build summary text
+  const summary = biz.sessionData.items
+    .map(
+      (i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
+    )
+    .join("\n");
+
+  // 🔥 SEND SOMETHING BACK TO META
+  await sendText(
+    from,
+    `📄 Generating invoice PDF...\n\n${summary}`
+  );
+
+  // now let Twilio logic generate + send PDF
+  await continueTwilioFlow({
+    from,
+    text: "2"
+  });
+
+  return;
+}
+
+// ✅ Set Discount → simulate "4"
+if (a === "inv_set_discount") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
   await saveBizSafe(biz);
-  return sendMainMenu(from);
+
+  return continueTwilioFlow({
+    from,
+    text: "4"
+  });
+}
+
+// ✅ Set VAT → simulate "5"
+if (a === "inv_set_vat") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "5"
+  });
 }
 
 

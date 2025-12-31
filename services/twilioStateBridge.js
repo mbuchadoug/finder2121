@@ -194,5 +194,25 @@ export async function continueTwilioFlow({ from, text }) {
     return true;
   }
 
+
+  /* ======================================================
+   🔹 META → TWILIO BRIDGE (DISCOUNT & VAT)
+====================================================== */
+
+// Meta "Set Discount" button
+if (state === "creating_invoice_confirm" && trimmed === "4") {
+  biz.sessionState = "creating_invoice_set_discount";
+  await saveBizSafe(biz);
+  return true;
+}
+
+// Meta "Set VAT" button
+if (state === "creating_invoice_confirm" && trimmed === "5") {
+  biz.sessionState = "creating_invoice_set_vat";
+  await saveBizSafe(biz);
+  return true;
+}
+
+
   return false;
 }

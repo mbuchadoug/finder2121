@@ -123,19 +123,12 @@ if (a === "inv_set_vat") {
     return;
   }
 
- if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
-  const biz = await getBizForPhone(from);
-
-  // 🔑 CRITICAL RESET (THIS WAS MISSING)
-  biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.expectingQty = false;
-  biz.sessionData.lastItem = null;
-
-  await saveBizSafe(biz);
-
-  return sendText(from, "Send item description:");
-}
-
+  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = "creating_invoice_add_items";
+    await saveBizSafe(biz);
+    return sendText(from, "Send item description:");
+  }
 
   if (a === ACTIONS.INV_ENTER_PRICES) {
     const biz = await getBizForPhone(from);

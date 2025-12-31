@@ -26,6 +26,7 @@ import { sendText } from "./metaSender.js";
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
+const biz = await getBizForPhone(from);
 
   /* =========================
      ENTRY

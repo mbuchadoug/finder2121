@@ -1,6 +1,6 @@
 import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
-import { startReceiptFlow } from "./receiptFlow.js";
+import { startReceiptFlow } from "./invoiceFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
 
 import { startClientFlow } from "./clientFlow.js";
@@ -34,7 +34,7 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     INVOICE ENTRY (META)
+     CLIENT SELECTION (META)
   ========================= */
   if (al === "inv_use_client") {
     await handleChooseSavedClient(from);
@@ -52,8 +52,28 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     INVOICE BUTTON SHORTCUTS
-     (ONLY state setters)
+     META → TWILIO CONFIRM BRIDGE
+     (THIS FIXES PDF / VAT / DISCOUNT)
+  ========================= */
+
+  if (al === "inv_generate_pdf") {
+    return continueTwilioFlow({ from, text: "2" });
+  }
+
+  if (al === "inv_set_discount") {
+    return continueTwilioFlow({ from, text: "4" });
+  }
+
+  if (al === "inv_set_vat") {
+    return continueTwilioFlow({ from, text: "5" });
+  }
+
+  if (al === "inv_cancel") {
+    return continueTwilioFlow({ from, text: "3" });
+  }
+
+  /* =========================
+     INVOICE ITEM SHORTCUTS
   ========================= */
   if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
     const biz = await getBizForPhone(from);
@@ -75,17 +95,9 @@ export async function handleIncomingMessage({ from, action }) {
     );
   }
 
-  if (al === "inv_cancel") {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-    return sendMainMenu(from);
-  }
-
   /* =========================
      TEXT → TWILIO ENGINE
-     🔥 THIS IS THE CRITICAL FIX
+     (DO NOT BLOCK NUMBERS)
   ========================= */
 
   const metaMenuOnlyActions = [

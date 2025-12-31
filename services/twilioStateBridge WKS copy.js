@@ -164,8 +164,6 @@ export async function continueTwilioFlow({ from, text }) {
   /* ===========================
      CONFIRMATION → GENERATE PDF
   ============================ */
-  const docType = biz.sessionData.docType || "invoice";
-
   if (state === "creating_invoice_confirm" && trimmed === "2") {
     let client = biz.sessionData.client;
 
@@ -187,15 +185,10 @@ export async function continueTwilioFlow({ from, text }) {
       return true;
     }
 
-   let prefix = "INV";
-if (docType === "quote") prefix = "QT";
-if (docType === "receipt") prefix = "RCPT";
-
-const number = `${prefix}-${Date.now()}`;
-
+    const number = `INV-${Date.now()}`;
 
     const { filename } = await generatePDF({
-      type: docType,
+      type: "invoice",
       number,
       date: new Date(),
       billingTo: client.name || client.phone || "Client",

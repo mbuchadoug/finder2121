@@ -156,18 +156,16 @@ if (a === "inv_set_vat") {
      TEXT → TWILIO FLOW
   ========================= */
 
-  const isMetaAction =
-    al.startsWith("inv_") ||
-    al.startsWith("client_") ||
-    Object.values(ACTIONS).includes(a);
+  // 🔥 CRITICAL FIX:
+// If we are inside an active business flow, ALWAYS let Twilio engine try first
+if (biz?.sessionState) {
+  const handled = await continueTwilioFlow({
+    from,
+    text: action
+  });
+  if (handled) return;
+}
 
-  if (!isMetaAction) {
-    const handled = await continueTwilioFlow({
-      from,
-      text: action
-    });
-    if (handled) return;
-  }
 
   /* =========================
      MENUS

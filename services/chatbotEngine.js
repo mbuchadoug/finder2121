@@ -19,7 +19,6 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
-// helpers you already use elsewhere
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
 
@@ -35,87 +34,12 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     META LIST / BUTTON ACTIONS
-     (MUST HARD RETURN)
+     INVOICE ENTRY (META)
   ========================= */
-
   if (al === "inv_use_client") {
     await handleChooseSavedClient(from);
     return;
   }
-
-  // ===============================
-// INVOICE CONFIRM ACTIONS (META)
-// ===============================
-
-// Generate PDF
-// ===============================
-// META → TWILIO CONFIRM DELEGATION
-// ===============================
-
-if (al === "inv_add_item") {
-  return continueTwilioFlow({ from, text: "1" });
-}
-
-// ===============================
-// INVOICE CONFIRM ACTIONS (META)
-// ===============================
-
-// ✅ Generate PDF → simulate "2"
-if (a === "inv_generate_pdf") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  // build summary text
-  const summary = biz.sessionData.items
-    .map(
-      (i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
-    )
-    .join("\n");
-
-  // 🔥 SEND SOMETHING BACK TO META
-  await sendText(
-    from,
-    `📄 Generating invoice PDF...\n\n${summary}`
-  );
-
-  // now let Twilio logic generate + send PDF
-  await continueTwilioFlow({
-    from,
-    text: "2"
-  });
-
-  return;
-}
-
-// ✅ Set Discount → simulate "4"
-if (a === "inv_set_discount") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_confirm";
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({
-    from,
-    text: "4"
-  });
-}
-
-// ✅ Set VAT → simulate "5"
-if (a === "inv_set_vat") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_confirm";
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({
-    from,
-    text: "5"
-  });
-}
-
 
   if (al === "inv_new_client") {
     await handleNewClientFromInvoice(from);
@@ -127,6 +51,10 @@ if (a === "inv_set_vat") {
     return;
   }
 
+  /* =========================
+     INVOICE BUTTON SHORTCUTS
+     (ONLY state setters)
+  ========================= */
   if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
     const biz = await getBizForPhone(from);
     biz.sessionState = "creating_invoice_add_items";
@@ -140,7 +68,7 @@ if (a === "inv_set_vat") {
     biz.sessionData.priceIndex = 0;
     await saveBizSafe(biz);
 
-    const item = biz.sessionData.items[0];
+    const item = biz.sessionData.items?.[0];
     return sendText(
       from,
       `Enter price for:\n${item.item} x${item.qty}`
@@ -149,23 +77,34 @@ if (a === "inv_set_vat") {
 
   if (al === "inv_cancel") {
     const biz = await getBizForPhone(from);
-    biz.sessionState = null;
+    biz.sessionState = "ready";
     biz.sessionData = {};
-    biz.markModified("sessionData");
-    await biz.save();
+    await saveBizSafe(biz);
     return sendMainMenu(from);
   }
 
   /* =========================
-     TEXT → TWILIO FLOW
+     TEXT → TWILIO ENGINE
+     🔥 THIS IS THE CRITICAL FIX
   ========================= */
 
-  const isMetaAction =
-    al.startsWith("inv_") ||
-    al.startsWith("client_") ||
-    Object.values(ACTIONS).includes(a);
+  const metaMenuOnlyActions = [
+    ACTIONS.SALES_MENU,
+    ACTIONS.CLIENTS_MENU,
+    ACTIONS.PAYMENTS_MENU,
+    ACTIONS.BUSINESS_MENU,
+    ACTIONS.SETTINGS_MENU,
+    ACTIONS.BACK,
+    ACTIONS.NEW_INVOICE,
+    ACTIONS.NEW_RECEIPT,
+    ACTIONS.ADD_CLIENT
+  ];
 
-  if (!isMetaAction) {
+  const shouldSkipTwilio =
+    al.startsWith("client_") ||
+    metaMenuOnlyActions.includes(a);
+
+  if (!shouldSkipTwilio) {
     const handled = await continueTwilioFlow({
       from,
       text: action
@@ -176,7 +115,6 @@ if (a === "inv_set_vat") {
   /* =========================
      MENUS
   ========================= */
-
   switch (a) {
     case ACTIONS.SALES_MENU:
       return sendSalesMenu(from);

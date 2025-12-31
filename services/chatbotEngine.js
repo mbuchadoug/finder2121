@@ -54,8 +54,18 @@ export async function handleIncomingMessage({ from, action }) {
 // ===============================
 
 if (al === "inv_add_item") {
-  return continueTwilioFlow({ from, text: "1" });
+  const biz = await getBizForPhone(from);
+
+  // 🔑 RESET ITEM STATE BEFORE RE-ENTERING
+  biz.sessionState = "creating_invoice_add_items";
+  biz.sessionData.expectingQty = false;
+  biz.sessionData.lastItem = null;
+
+  await saveBizSafe(biz);
+
+  return sendText(from, "Send item description:");
 }
+
 
 // ===============================
 // INVOICE CONFIRM ACTIONS (META)

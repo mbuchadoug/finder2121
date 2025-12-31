@@ -161,17 +161,13 @@ if (a === "inv_set_vat") {
     al.startsWith("client_") ||
     Object.values(ACTIONS).includes(a);
 
-// 🔥 ALWAYS let Twilio flow handle active invoice states
-const biz = await getBizForPhone(from);
-
-if (biz?.sessionState) {
-  const handled = await continueTwilioFlow({
-    from,
-    text: action
-  });
-  if (handled) return;
-}
-
+  if (!isMetaAction) {
+    const handled = await continueTwilioFlow({
+      from,
+      text: action
+    });
+    if (handled) return;
+  }
 
   /* =========================
      MENUS

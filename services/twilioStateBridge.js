@@ -51,22 +51,29 @@ export async function continueTwilioFlow({ from, text }) {
     return true;
   }
 
-  if (state === "creating_invoice_new_client_phone") {
-    const phoneVal = trimmed.toLowerCase() === "same" ? phone : trimmed;
+if (state === "creating_invoice_new_client_phone") {
+  const phoneVal = trimmed.toLowerCase() === "same" ? phone : trimmed;
 
-    const client = await Client.findOneAndUpdate(
-      { businessId: biz._id, phone: phoneVal },
-      { $set: { name: biz.sessionData.clientName, phone: phoneVal } },
-      { upsert: true, new: true }
-    );
+  const client = await Client.findOneAndUpdate(
+    { businessId: biz._id, phone: phoneVal },
+    { $set: { name: biz.sessionData.clientName, phone: phoneVal } },
+    { upsert: true, new: true }
+  );
 
-    biz.sessionData.client = client;
-    biz.sessionState = "creating_invoice_add_items";
-    biz.sessionData.items = [];
-    biz.sessionData.awaitingItemDesc = false;
-    await biz.save();
-    return true;
-  }
+  biz.sessionData.client = client;
+  biz.sessionState = "creating_invoice_add_items";
+  biz.sessionData.items = [];
+  biz.sessionData.awaitingItemDesc = false;
+  await biz.save();
+
+ await sendText(
+   from,
+   `Client saved: ${client.name || client.phone}\n\nSend item description (e.g. Website design)`
+ );
+
+  return true;
+}
+
 
   /* ===========================
      ITEM ADDING (THIS WAS MISSING)

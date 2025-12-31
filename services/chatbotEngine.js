@@ -1,15 +1,5 @@
+// services/chatbotEngine.js
 import { ACTIONS } from "./actions.js";
-import { startInvoiceFlow } from "./invoiceFlow.js";
-import { startReceiptFlow } from "./receiptFlow.js";
-import { continueTwilioFlow } from "./twilioStateBridge.js";
-
-import { startClientFlow } from "./clientFlow.js";
-import {
-  handleChooseSavedClient,
-  handleNewClientFromInvoice,
-  handleClientPicked
-} from "./invoiceAdapters.js";
-
 import {
   sendMainMenu,
   sendSalesMenu,
@@ -19,8 +9,23 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
+import { startInvoiceFlow } from "./invoiceFlow.js";
+import { startReceiptFlow } from "./receiptFlow.js";
+import { startClientFlow } from "./clientFlow.js";
+
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
+
+/**
+ * IMPORTANT ARCHITECTURE RULE
+ * ---------------------------
+ * - This file NEVER continues Twilio state logic
+ * - This file NEVER processes free text for invoices
+ * - This file ONLY:
+ *    • shows menus
+ *    • starts flows
+ *    • handles button actions
+ */
 
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
@@ -29,14 +34,14 @@ export async function handleIncomingMessage({ from, action }) {
   const biz = await getBizForPhone(from);
 
   /* =====================================================
-     1️⃣ GLOBAL ENTRY
+     1️⃣ GLOBAL ENTRY (SAFE)
   ===================================================== */
   if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
   }
 
   /* =====================================================
-     2️⃣ MENU BUTTONS — ALWAYS FIRST (🔥 FIX)
+     2️⃣ MAIN MENU NAVIGATION (SAFE)
   ===================================================== */
   switch (a) {
     case ACTIONS.SALES_MENU:
@@ -59,21 +64,32 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =====================================================
-     3️⃣ INVOICE META ACTIONS (BUTTONS)
+     3️⃣ SALES ACTIONS (STARTERS ONLY)
+     ❗ NO STATE CONTINUATION HERE
   ===================================================== */
-  if (al === "inv_use_client") {
-    await handleChooseSavedClient(from);
-    return;
+  switch (a) {
+    case ACTIONS.NEW_INVOICE:
+      // Starts invoice, then Meta STOPS
+      return startInvoiceFlow(from);
+
+    case ACTIONS.NEW_RECEIPT:
+      return startReceiptFlow(from);
+
+    case ACTIONS.NEW_QUOTE:
+      // Quotes reuse invoice flow logic on Twilio side
+      return startInvoiceFlow(from);
+
+    case ACTIONS.ADD_CLIENT:
+      return startClientFlow(from);
   }
 
-  if (al === "inv_new_client") {
-    await handleNewClientFromInvoice(from);
-    return;
-  }
-
-  if (al.startsWith("client_")) {
-    await handleClientPicked(from, al.replace("client_", ""));
-    return;
+  /* =====================================================
+     4️⃣ INVOICE BUTTON ACTIONS (SAFE)
+     These ONLY update state and prompt.
+     Twilio handles actual logic after.
+  ===================================================== */
+  if (!biz) {
+    return sendMainMenu(from);
   }
 
   if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
@@ -88,13 +104,14 @@ export async function handleIncomingMessage({ from, action }) {
     await saveBizSafe(biz);
 
     const item = biz.sessionData.items?.[0];
-    return sendText(from, `Enter price for:\n${item.item} x${item.qty}`);
-  }
+    if (!item) {
+      return sendText(from, "No items found. Send item description first.");
+    }
 
-  if (a === "inv_generate_pdf") {
-    await sendText(from, "📄 Generating invoice PDF...");
-    await continueTwilioFlow({ from, text: "2" });
-    return;
+    return sendText(
+      from,
+      `Enter price for:\n${item.item} x${item.qty}`
+    );
   }
 
   if (a === "inv_set_discount") {
@@ -109,7 +126,7 @@ export async function handleIncomingMessage({ from, action }) {
     return sendText(from, "Enter VAT percent (0–100):");
   }
 
-  if (al === "inv_cancel") {
+  if (a === "inv_cancel") {
     biz.sessionState = "ready";
     biz.sessionData = {};
     await saveBizSafe(biz);
@@ -117,36 +134,11 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =====================================================
-     4️⃣ FREE TEXT → TWILIO STATE ENGINE ONLY
-     (🔥 THIS IS THE KEY)
+     5️⃣ HARD STOP
+     ❌ NO FREE TEXT HANDLING
+     ❌ NO continueTwilioFlow
+     ❌ NO FALLTHROUGH INTO TWILIO LOGIC
   ===================================================== */
-  const isFreeText =
-    !al.startsWith("inv_") &&
-    !al.startsWith("client_") &&
-    !Object.values(ACTIONS).includes(a);
 
-  if (isFreeText) {
-    const handled = await continueTwilioFlow({
-      from,
-      text: action
-    });
-    if (handled) return;
-  }
-
-  /* =====================================================
-     5️⃣ FLOW STARTERS
-  ===================================================== */
-  switch (a) {
-    case ACTIONS.NEW_INVOICE:
-      return startInvoiceFlow(from);
-
-    case ACTIONS.NEW_RECEIPT:
-      return startReceiptFlow(from);
-
-    case ACTIONS.ADD_CLIENT:
-      return startClientFlow(from);
-
-    default:
-      return sendMainMenu(from);
-  }
+  return sendMainMenu(from);
 }

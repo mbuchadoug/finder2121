@@ -57,20 +57,50 @@ if (al === "inv_add_item") {
   return continueTwilioFlow({ from, text: "1" });
 }
 
-if (al === "inv_generate_pdf") {
-  return continueTwilioFlow({ from, text: "2" });
+// ===============================
+// INVOICE CONFIRM ACTIONS (META)
+// ===============================
+
+// ✅ Generate PDF → simulate "2"
+if (a === "inv_generate_pdf") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "2" // <-- THIS IS THE KEY FIX
+  });
 }
 
-if (al === "inv_cancel") {
-  return continueTwilioFlow({ from, text: "3" });
+// ✅ Set Discount → simulate "4"
+if (a === "inv_set_discount") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "4"
+  });
 }
 
-if (al === "inv_set_discount") {
-  return continueTwilioFlow({ from, text: "4" });
-}
+// ✅ Set VAT → simulate "5"
+if (a === "inv_set_vat") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
 
-if (al === "inv_set_vat") {
-  return continueTwilioFlow({ from, text: "5" });
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "5"
+  });
 }
 
 

@@ -1,6 +1,6 @@
 import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
-//import { startReceiptFlow } from "./invoiceFlow.js";
+import { startReceiptFlow } from "./receiptFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
 
 import { startClientFlow } from "./clientFlow.js";
@@ -19,6 +19,7 @@ import {
   sendSettingsMenu
 } from "./metaMenus.js";
 
+// helpers you already use elsewhere
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
 
@@ -34,12 +35,87 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
-     CLIENT SELECTION (META)
+     META LIST / BUTTON ACTIONS
+     (MUST HARD RETURN)
   ========================= */
+
   if (al === "inv_use_client") {
     await handleChooseSavedClient(from);
     return;
   }
+
+  // ===============================
+// INVOICE CONFIRM ACTIONS (META)
+// ===============================
+
+// Generate PDF
+// ===============================
+// META → TWILIO CONFIRM DELEGATION
+// ===============================
+
+if (al === "inv_add_item") {
+  return continueTwilioFlow({ from, text: "1" });
+}
+
+// ===============================
+// INVOICE CONFIRM ACTIONS (META)
+// ===============================
+
+// ✅ Generate PDF → simulate "2"
+if (a === "inv_generate_pdf") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // build summary text
+  const summary = biz.sessionData.items
+    .map(
+      (i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
+    )
+    .join("\n");
+
+  // 🔥 SEND SOMETHING BACK TO META
+  await sendText(
+    from,
+    `📄 Generating invoice PDF...\n\n${summary}`
+  );
+
+  // now let Twilio logic generate + send PDF
+  await continueTwilioFlow({
+    from,
+    text: "2"
+  });
+
+  return;
+}
+
+// ✅ Set Discount → simulate "4"
+if (a === "inv_set_discount") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "4"
+  });
+}
+
+// ✅ Set VAT → simulate "5"
+if (a === "inv_set_vat") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({
+    from,
+    text: "5"
+  });
+}
+
 
   if (al === "inv_new_client") {
     await handleNewClientFromInvoice(from);
@@ -51,30 +127,6 @@ export async function handleIncomingMessage({ from, action }) {
     return;
   }
 
-  /* =========================
-     META → TWILIO CONFIRM BRIDGE
-     (THIS FIXES PDF / VAT / DISCOUNT)
-  ========================= */
-
-  if (al === "inv_generate_pdf") {
-    return continueTwilioFlow({ from, text: "2" });
-  }
-
-  if (al === "inv_set_discount") {
-    return continueTwilioFlow({ from, text: "4" });
-  }
-
-  if (al === "inv_set_vat") {
-    return continueTwilioFlow({ from, text: "5" });
-  }
-
-  if (al === "inv_cancel") {
-    return continueTwilioFlow({ from, text: "3" });
-  }
-
-  /* =========================
-     INVOICE ITEM SHORTCUTS
-  ========================= */
   if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
     const biz = await getBizForPhone(from);
     biz.sessionState = "creating_invoice_add_items";
@@ -88,35 +140,32 @@ export async function handleIncomingMessage({ from, action }) {
     biz.sessionData.priceIndex = 0;
     await saveBizSafe(biz);
 
-    const item = biz.sessionData.items?.[0];
+    const item = biz.sessionData.items[0];
     return sendText(
       from,
       `Enter price for:\n${item.item} x${item.qty}`
     );
   }
 
+  if (al === "inv_cancel") {
+    const biz = await getBizForPhone(from);
+    biz.sessionState = null;
+    biz.sessionData = {};
+    biz.markModified("sessionData");
+    await biz.save();
+    return sendMainMenu(from);
+  }
+
   /* =========================
-     TEXT → TWILIO ENGINE
-     (DO NOT BLOCK NUMBERS)
+     TEXT → TWILIO FLOW
   ========================= */
 
-  const metaMenuOnlyActions = [
-    ACTIONS.SALES_MENU,
-    ACTIONS.CLIENTS_MENU,
-    ACTIONS.PAYMENTS_MENU,
-    ACTIONS.BUSINESS_MENU,
-    ACTIONS.SETTINGS_MENU,
-    ACTIONS.BACK,
-    ACTIONS.NEW_INVOICE,
-    ACTIONS.NEW_RECEIPT,
-    ACTIONS.ADD_CLIENT
-  ];
-
-  const shouldSkipTwilio =
+  const isMetaAction =
+    al.startsWith("inv_") ||
     al.startsWith("client_") ||
-    metaMenuOnlyActions.includes(a);
+    Object.values(ACTIONS).includes(a);
 
-  if (!shouldSkipTwilio) {
+  if (!isMetaAction) {
     const handled = await continueTwilioFlow({
       from,
       text: action
@@ -127,6 +176,7 @@ export async function handleIncomingMessage({ from, action }) {
   /* =========================
      MENUS
   ========================= */
+
   switch (a) {
     case ACTIONS.SALES_MENU:
       return sendSalesMenu(from);
@@ -149,8 +199,8 @@ export async function handleIncomingMessage({ from, action }) {
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
 
-   /* case ACTIONS.NEW_RECEIPT:
-      return startReceiptFlow(from);*/
+    case ACTIONS.NEW_RECEIPT:
+      return startReceiptFlow(from);
 
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);

@@ -1,9 +1,17 @@
 import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
-import { sendText, sendButtons, sendDocument } from "./metaSender.js";
+import { sendText } from "./metaSender.js";
 import { sendInvoiceConfirmMenu } from "./metaMenus.js";
 import { generatePDF } from "../routes/twilio_biz.js";
+import { sendDocument } from "./metaSender.js";
+
+
+
+// ...
+
+
+ import { sendButtons } from "./metaSender.js";
 import { ACTIONS } from "./actions.js";
 
 async function saveBizSafe(biz) {
@@ -12,6 +20,9 @@ async function saveBizSafe(biz) {
   return biz.save();
 }
 
+/**
+ * Continue Twilio-style state machine for Meta text input
+ */
 export async function continueTwilioFlow({ from, text }) {
   const phone = from.replace(/\D+/g, "");
   const session = await UserSession.findOne({ phone });
@@ -23,9 +34,16 @@ export async function continueTwilioFlow({ from, text }) {
   const trimmed = text.trim();
   const state = biz.sessionState;
 
-  /* =========================
-     CLIENT CREATION
-  ========================= */
+  /* ===========================
+   META BUTTON ACTION HANDLER
+   (THIS WAS MISSING)
+=========================== */
+
+
+
+  /* ===========================
+     CLIENT CREATION (INVOICE)
+  ============================ */
   if (state === "creating_invoice_new_client") {
     biz.sessionData.clientName = trimmed;
     biz.sessionState = "creating_invoice_new_client_phone";
@@ -45,151 +63,176 @@ export async function continueTwilioFlow({ from, text }) {
     biz.sessionData.client = client;
     biz.sessionState = "creating_invoice_add_items";
     biz.sessionData.items = [];
+    biz.sessionData.awaitingItemDesc = false;
     await biz.save();
     return true;
   }
 
-  /* =========================
-     ITEM ADDING
-  ========================= */
-  if (state === "creating_invoice_add_items") {
-    if (!biz.sessionData.expectingQty) {
-      if (!isNaN(Number(trimmed))) {
-        await sendText(from, "Please send an item description.");
-        return true;
-      }
+  /* ===========================
+     ITEM ADDING (THIS WAS MISSING)
+  ============================ */
+if (state === "creating_invoice_add_items") {
 
-      biz.sessionData.lastItem = trimmed;
-      biz.sessionData.expectingQty = true;
-      await saveBizSafe(biz);
-      await sendText(from, "Enter quantity:");
+  // ======================
+  // EXPECT DESCRIPTION
+  // ======================
+  if (!biz.sessionData.expectingQty) {
+
+    // reject numbers as descriptions
+    if (!isNaN(Number(trimmed))) {
+      await sendText(from, "Please send an item description (not a number).");
       return true;
     }
 
-    const qty = Number(trimmed);
-    if (isNaN(qty) || qty <= 0) {
-      await sendText(from, "Invalid quantity.");
-      return true;
-    }
+    biz.sessionData.lastItem = { description: trimmed };
+    biz.sessionData.expectingQty = true;
 
-    biz.sessionData.items.push({
-      item: biz.sessionData.lastItem,
-      qty,
-      unit: 0
-    });
-
-    biz.sessionData.lastItem = null;
-    biz.sessionData.expectingQty = false;
-    biz.sessionState = "creating_invoice_confirm";
     await saveBizSafe(biz);
 
-    await sendButtons(from, "Item added ✅", [
-      { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" },
-      { id: ACTIONS.INV_ENTER_PRICES, title: "💰 Enter prices" },
-      { id: ACTIONS.INV_CANCEL, title: "❌ Cancel" }
-    ]);
-
+    await sendText(from, "Enter quantity (e.g. 1):");
     return true;
   }
 
-  /* =========================
-     PRICE ENTRY
-  ========================= */
-  if (state === "creating_invoice_enter_prices") {
-    const price = Number(trimmed);
-    if (isNaN(price) || price < 0) {
-      await sendText(from, "Invalid price.");
-      return true;
-    }
+  // ======================
+  // EXPECT QUANTITY
+  // ======================
+  const qty = Number(trimmed);
 
-    const i = biz.sessionData.priceIndex || 0;
-    biz.sessionData.items[i].unit = price;
-    biz.sessionData.priceIndex = i + 1;
+  if (isNaN(qty) || qty <= 0) {
+    await sendText(from, "Invalid quantity. Enter a number like 1:");
+    return true;
+  }
 
-    if (biz.sessionData.priceIndex < biz.sessionData.items.length) {
-      await saveBizSafe(biz);
-      return sendText(
-        from,
-        `Enter price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
-      );
-    }
+  biz.sessionData.items = biz.sessionData.items || [];
+  biz.sessionData.items.push({
+    item: biz.sessionData.lastItem.description,
+    qty,
+    unit: 0
+  });
 
-    biz.sessionState = "creating_invoice_confirm";
-    biz.sessionData.priceIndex = 0;
+  // ✅ CLEAR FLAGS
+  biz.sessionData.lastItem = null;
+  biz.sessionData.expectingQty = false;
+
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+
+
+await sendButtons(from, "Item added ✅", [
+  { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" },
+  { id: ACTIONS.INV_ENTER_PRICES, title: "💰 Enter prices" },
+  { id: ACTIONS.INV_CANCEL, title: "❌ Cancel" }
+]);
+
+
+
+  return true;
+}
+
+
+/* ===========================
+   PRICE ENTRY
+=========================== */
+if (state === "creating_invoice_enter_prices") {
+
+  const price = Number(trimmed);
+
+  if (isNaN(price) || price < 0) {
+    await sendText(from, "Invalid price. Enter a number (e.g. 500):");
+    return true;
+  }
+
+  biz.sessionData.priceIndex = biz.sessionData.priceIndex || 0;
+
+  biz.sessionData.items[biz.sessionData.priceIndex].unit = price;
+  biz.sessionData.priceIndex++;
+
+  // More items need prices
+  if (biz.sessionData.priceIndex < biz.sessionData.items.length) {
     await saveBizSafe(biz);
-
-    const summary = biz.sessionData.items
-      .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
-      .join("\n");
-
-    return sendInvoiceConfirmMenu(
+    return sendText(
       from,
-      `🧾 Invoice Summary\n\n${summary}`
+      `Enter price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
     );
   }
 
-  /* =========================
-     CONFIRM ACTIONS
-  ========================= */
+  // ✅ All prices captured
+  biz.sessionState = "creating_invoice_confirm";
+  biz.sessionData.priceIndex = 0;
+  await saveBizSafe(biz);
+
+  // Build summary text
+  const summary = biz.sessionData.items
+    .map(
+      (i, idx) =>
+        `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
+    )
+    .join("\n");
+
+  return sendInvoiceConfirmMenu(
+    from,
+    `🧾 Invoice Summary\n\n${summary}`
+  );
+}
+
+  /* ===========================
+     CONFIRMATION → PDF
+  ============================ */
   if (state === "creating_invoice_confirm") {
-
-    if (trimmed === ACTIONS.INV_SET_DISCOUNT) {
-      biz.sessionState = "creating_invoice_set_discount";
-      await saveBizSafe(biz);
-      await sendText(from, "Enter discount %:");
-      return true;
-    }
-
-    if (trimmed === ACTIONS.INV_SET_VAT) {
-      biz.sessionState = "creating_invoice_set_vat";
-      await saveBizSafe(biz);
-      await sendText(from, "Enter VAT %:");
-      return true;
-    }
-
-    if (trimmed === ACTIONS.INV_GENERATE_PDF) {
-      const { filename } = await generatePDF({
-        type: "invoice",
-        number: `INV-${Date.now()}`,
-        date: new Date(),
-        billingTo: biz.sessionData.client?.name || "Client",
-        items: biz.sessionData.items,
-        bizMeta: {
-          name: biz.name,
-          logoUrl: biz.logoUrl,
-          address: biz.address || "",
-          discountPercent: biz.sessionData.discountPercent || 0,
-          vatPercent: biz.sessionData.vatPercent || 0,
-          _id: biz._id.toString()
-        }
-      });
-
-      const url = `${process.env.SITE_URL}/docs/generated/invoices/${filename}`;
-      await sendDocument(from, { link: url, filename });
-
-      biz.sessionState = "ready";
-      biz.sessionData = {};
-      await saveBizSafe(biz);
+    if (trimmed === "send") {
+      // you already have this logic in twilio_biz
+      // we just allow it to continue
       return true;
     }
   }
 
-  /* =========================
-     DISCOUNT / VAT INPUT
-  ========================= */
-  if (state === "creating_invoice_set_discount") {
-    biz.sessionData.discountPercent = Number(trimmed) || 0;
-    biz.sessionState = "creating_invoice_confirm";
-    await saveBizSafe(biz);
-    return sendInvoiceConfirmMenu(from, "Discount applied.");
+
+ if (state === "creating_invoice_confirm" && trimmed === "2") {
+
+  const client = biz.sessionData.client;
+  const items = biz.sessionData.items || [];
+
+  if (!items.length) {
+    await sendText(from, "❌ No items found for this invoice.");
+    return true;
   }
 
-  if (state === "creating_invoice_set_vat") {
-    biz.sessionData.vatPercent = Number(trimmed) || 0;
-    biz.sessionState = "creating_invoice_confirm";
-    await saveBizSafe(biz);
-    return sendInvoiceConfirmMenu(from, "VAT applied.");
-  }
+  const number = `INV-${Date.now()}`;
+
+  const { filename } = await generatePDF({
+    type: "invoice",
+    number,
+    date: new Date(),
+    billingTo: client?.name || client?.phone || "Client",
+    items,
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      discountPercent: biz.sessionData.discountPercent || 0,
+      vatPercent: biz.sessionData.vatPercent || 0,
+      applyVat: biz.sessionData.applyVat !== false,
+      _id: biz._id.toString()
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/invoices/${filename}`;
+
+  // ⬇️ send PDF via Meta
+  await sendDocument(from, {
+    link: url,
+    filename
+  });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return true;
+}
+
 
   return false;
 }

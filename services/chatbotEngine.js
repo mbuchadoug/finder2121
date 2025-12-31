@@ -1,6 +1,6 @@
 import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
-import { startReceiptFlow } from "./invoiceFlow.js";
+//import { startReceiptFlow } from "./invoiceFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
 
 import { startClientFlow } from "./clientFlow.js";
@@ -149,8 +149,8 @@ export async function handleIncomingMessage({ from, action }) {
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
 
-    case ACTIONS.NEW_RECEIPT:
-      return startReceiptFlow(from);
+   /* case ACTIONS.NEW_RECEIPT:
+      return startReceiptFlow(from);*/
 
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);

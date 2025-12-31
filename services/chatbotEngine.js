@@ -118,6 +118,17 @@ export async function handleIncomingMessage({ from, action }) {
     return sendMainMenu(from);
   }
 
+  // 🔥 FIX: ADD_CLIENT inside invoice flow must NOT start global client flow
+if (a === ACTIONS.ADD_CLIENT) {
+  const biz = await getBizForPhone(from);
+
+  if (biz?.sessionState === "creating_invoice_choose_client") {
+    await handleNewClientFromInvoice(from);
+    return;
+  }
+}
+
+
   /* =========================
      TEXT → TWILIO STATE ENGINE
      (ONLY FOR REAL TEXT INPUT)
@@ -135,6 +146,7 @@ export async function handleIncomingMessage({ from, action }) {
     });
     if (handled) return;
   }
+
 
   /* =========================
      MENUS

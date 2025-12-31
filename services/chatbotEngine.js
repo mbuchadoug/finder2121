@@ -34,8 +34,20 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =========================
+     ALWAYS LET ACTIVE FLOWS
+     CONSUME TEXT FIRST 🔥
+  ========================= */
+  const biz = await getBizForPhone(from);
+  if (biz?.sessionState) {
+    const handled = await continueTwilioFlow({
+      from,
+      text: a
+    });
+    if (handled) return;
+  }
+
+  /* =========================
      META BUTTON ACTIONS
-     (MUST RETURN)
   ========================= */
 
   if (al === "inv_use_client") {
@@ -62,7 +74,6 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   if (a === "inv_generate_pdf") {
-    const biz = await getBizForPhone(from);
     if (!biz) return sendMainMenu(from);
 
     const summary = (biz.sessionData.items || [])
@@ -70,83 +81,31 @@ export async function handleIncomingMessage({ from, action }) {
       .join("\n");
 
     await sendText(from, `📄 Generating invoice PDF...\n\n${summary}`);
-
     await continueTwilioFlow({ from, text: "2" });
     return;
   }
 
   if (a === "inv_set_discount") {
-    const biz = await getBizForPhone(from);
     if (!biz) return sendMainMenu(from);
-
     biz.sessionState = "creating_invoice_set_discount";
     await saveBizSafe(biz);
     return sendText(from, "Enter discount percent (0–100):");
   }
 
   if (a === "inv_set_vat") {
-    const biz = await getBizForPhone(from);
     if (!biz) return sendMainMenu(from);
-
     biz.sessionState = "creating_invoice_set_vat";
     await saveBizSafe(biz);
     return sendText(from, "Enter VAT percent (0–100):");
   }
 
-  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "creating_invoice_add_items";
-    await saveBizSafe(biz);
-    return sendText(from, "Send item description:");
-  }
-
-  if (a === ACTIONS.INV_ENTER_PRICES) {
-    const biz = await getBizForPhone(from);
-    biz.sessionState = "creating_invoice_enter_prices";
-    biz.sessionData.priceIndex = 0;
-    await saveBizSafe(biz);
-
-    const item = biz.sessionData.items?.[0];
-    return sendText(from, `Enter price for:\n${item.item} x${item.qty}`);
-  }
-
   if (al === "inv_cancel") {
-    const biz = await getBizForPhone(from);
+    if (!biz) return sendMainMenu(from);
     biz.sessionState = null;
     biz.sessionData = {};
     await saveBizSafe(biz);
     return sendMainMenu(from);
   }
-
-  // 🔥 FIX: ADD_CLIENT inside invoice flow must NOT start global client flow
-if (a === ACTIONS.ADD_CLIENT) {
-  const biz = await getBizForPhone(from);
-
-  if (biz?.sessionState === "creating_invoice_choose_client") {
-    await handleNewClientFromInvoice(from);
-    return;
-  }
-}
-
-
-  /* =========================
-     TEXT → TWILIO STATE ENGINE
-     (ONLY FOR REAL TEXT INPUT)
-  ========================= */
-
-  const isMetaAction =
-    al.startsWith("inv_") ||
-    al.startsWith("client_") ||
-    Object.values(ACTIONS).includes(a);
-
-  if (!isMetaAction) {
-    const handled = await continueTwilioFlow({
-      from,
-      text: action
-    });
-    if (handled) return;
-  }
-
 
   /* =========================
      MENUS
@@ -155,31 +114,22 @@ if (a === ACTIONS.ADD_CLIENT) {
   switch (a) {
     case ACTIONS.SALES_MENU:
       return sendSalesMenu(from);
-
     case ACTIONS.CLIENTS_MENU:
       return sendClientsMenu(from);
-
     case ACTIONS.PAYMENTS_MENU:
       return sendPaymentsMenu(from);
-
     case ACTIONS.BUSINESS_MENU:
       return sendBusinessMenu(from);
-
     case ACTIONS.SETTINGS_MENU:
       return sendSettingsMenu(from);
-
     case ACTIONS.BACK:
       return sendMainMenu(from);
-
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
-
     case ACTIONS.NEW_RECEIPT:
       return startReceiptFlow(from);
-
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
-
     default:
       return sendMainMenu(from);
   }

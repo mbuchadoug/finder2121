@@ -3151,4 +3151,7 @@ return sendTwimlText(
   }
 });
 
+
+export { generatePDF };
+
 export default router;

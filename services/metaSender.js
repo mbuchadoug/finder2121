@@ -103,3 +103,11 @@ export async function sendList(to, title, items) {
   }, { headers });
 }
 
+export async function sendDocument(to, document) {
+  return axios.post(API, {
+    messaging_product: "whatsapp",
+    to,
+    type: "document",
+    document
+  }, { headers });
+}

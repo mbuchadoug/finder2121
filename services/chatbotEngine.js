@@ -66,13 +66,26 @@ if (a === "inv_generate_pdf") {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "creating_invoice_confirm";
-  await saveBizSafe(biz);
+  // build summary text
+  const summary = biz.sessionData.items
+    .map(
+      (i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`
+    )
+    .join("\n");
 
-  return continueTwilioFlow({
+  // 🔥 SEND SOMETHING BACK TO META
+  await sendText(
     from,
-    text: "2" // <-- THIS IS THE KEY FIX
+    `📄 Generating invoice PDF...\n\n${summary}`
+  );
+
+  // now let Twilio logic generate + send PDF
+  await continueTwilioFlow({
+    from,
+    text: "2"
   });
+
+  return;
 }
 
 // ✅ Set Discount → simulate "4"

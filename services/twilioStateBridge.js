@@ -48,6 +48,11 @@ export async function continueTwilioFlow({ from, text }) {
     biz.sessionData.clientName = trimmed;
     biz.sessionState = "creating_invoice_new_client_phone";
     await biz.save();
+
+     await sendText(
+   from,
+   "Enter client phone number (or type *same* to use this WhatsApp number):"
+ );
     return true;
   }
 

@@ -234,5 +234,57 @@ if (state === "creating_invoice_enter_prices") {
 }
 
 
+/* ===========================
+   SET DISCOUNT %
+=========================== */
+if (state === "creating_invoice_set_discount") {
+  const pct = Number(trimmed);
+
+  if (isNaN(pct) || pct < 0 || pct > 100) {
+    await sendText(from, "❌ Invalid discount. Enter a percent (0–100):");
+    return true;
+  }
+
+  biz.sessionData.discountPercent = pct;
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  const summary = biz.sessionData.items
+    .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
+    .join("\n");
+
+  return sendInvoiceConfirmMenu(
+    from,
+    `🧾 Invoice Summary\n\n${summary}\n\n💸 Discount: ${pct}%`
+  );
+}
+
+/* ===========================
+   SET VAT %
+=========================== */
+if (state === "creating_invoice_set_vat") {
+  const pct = Number(trimmed);
+
+  if (isNaN(pct) || pct < 0 || pct > 100) {
+    await sendText(from, "❌ Invalid VAT. Enter a percent (0–100):");
+    return true;
+  }
+
+  biz.sessionData.vatPercent = pct;
+  biz.sessionData.applyVat = pct > 0;
+  biz.sessionState = "creating_invoice_confirm";
+  await saveBizSafe(biz);
+
+  const summary = biz.sessionData.items
+    .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
+    .join("\n");
+
+  return sendInvoiceConfirmMenu(
+    from,
+    `🧾 Invoice Summary\n\n${summary}\n\n🧾 VAT: ${pct}%`
+  );
+}
+
+
   return false;
 }

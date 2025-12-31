@@ -64,25 +64,22 @@ if (a === "inv_generate_pdf") {
 }
 
 // Add VAT
-if (a === "inv_add_vat") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "creating_invoice_set_vat";
-  await saveBizSafe(biz);
-
-  return sendText(from, "Send VAT percent (e.g. 15)");
-}
-
-// Add Discount
-if (a === "inv_add_discount") {
+if (a === "inv_set_discount") {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "creating_invoice_set_discount";
   await saveBizSafe(biz);
-
   return sendText(from, "Send discount percent (e.g. 10)");
+}
+
+if (a === "inv_set_vat") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "creating_invoice_set_vat";
+  await saveBizSafe(biz);
+  return sendText(from, "Send VAT percent (e.g. 15)");
 }
 
   if (al === "inv_new_client") {

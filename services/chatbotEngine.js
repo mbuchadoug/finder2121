@@ -89,32 +89,28 @@ if (a === "inv_generate_pdf") {
 }
 
 // ✅ Set Discount → simulate "4"
+// ✅ Set Discount %
 if (a === "inv_set_discount") {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "creating_invoice_confirm";
+  biz.sessionState = "creating_invoice_set_discount";
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({
-    from,
-    text: "4"
-  });
+  return sendText(from, "Enter discount percent (0–100):");
 }
 
-// ✅ Set VAT → simulate "5"
+// ✅ Set VAT %
 if (a === "inv_set_vat") {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "creating_invoice_confirm";
+  biz.sessionState = "creating_invoice_set_vat";
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({
-    from,
-    text: "5"
-  });
+  return sendText(from, "Enter VAT percent (0–100):");
 }
+
 
 
   if (al === "inv_new_client") {

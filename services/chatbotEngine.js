@@ -32,7 +32,7 @@ export async function handleIncomingMessage({ from, action }) {
   const biz = await getBizForPhone(from);
 
   /* =====================================================
-     1️⃣ GLOBAL GREETING / MENU ENTRY (SAFE)
+     1️⃣ GLOBAL GREETING / MENU ENTRY
   ===================================================== */
   if (!biz?.sessionState && (!al || ["hi", "hello", "menu"].includes(al))) {
     return sendMainMenu(from);
@@ -40,7 +40,6 @@ export async function handleIncomingMessage({ from, action }) {
 
   /* =====================================================
      2️⃣ META MENU BUTTONS — MUST ALWAYS WIN
-     (THIS IS THE FIX THAT RESTORES SALES)
   ===================================================== */
   switch (a) {
     case ACTIONS.SALES_MENU:
@@ -136,8 +135,7 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =====================================================
-     4️⃣ SPECIAL CASE:
-     ADD CLIENT DURING INVOICE (DO NOT START GLOBAL FLOW)
+     4️⃣ ADD CLIENT DURING INVOICE (SAFE)
   ===================================================== */
   if (a === ACTIONS.ADD_CLIENT) {
     if (biz?.sessionState === "creating_invoice_choose_client") {
@@ -147,8 +145,7 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =====================================================
-     5️⃣ TEXT → TWILIO STATE ENGINE
-     (ONLY REAL USER TEXT)
+     5️⃣ TEXT → TWILIO STATE MACHINE
   ===================================================== */
   const isMetaAction =
     al.startsWith("inv_") ||
@@ -164,7 +161,7 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
   /* =====================================================
-     6️⃣ FLOW STARTERS
+     6️⃣ FLOW STARTERS ONLY
   ===================================================== */
   switch (a) {
     case ACTIONS.NEW_INVOICE:
@@ -177,6 +174,7 @@ export async function handleIncomingMessage({ from, action }) {
       return startClientFlow(from);
 
     default:
-      return sendMainMenu(from);
+      // 🔥 DO NOTHING — prevents killing active invoice flow
+      return;
   }
 }

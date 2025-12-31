@@ -215,6 +215,9 @@ if (a === "inv_set_vat") {
     case ACTIONS.NEW_INVOICE:
       return startInvoiceFlow(from);
 
+      case ACTIONS.NEW_QUOTE:
+  return startQuoteFlow(from);
+
     case ACTIONS.NEW_RECEIPT:
       return startReceiptFlow(from);
 

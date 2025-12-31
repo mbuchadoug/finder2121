@@ -1,6 +1,6 @@
 import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
-import { sendButtons, sendText } from "./metaSender.js";
+import { sendButtons } from "./metaSender.js";
 
 export async function startQuoteFlow(to) {
   const phone = to.replace(/\D+/g, "");
@@ -11,13 +11,17 @@ export async function startQuoteFlow(to) {
     return sendText(to, "❌ No active business. Reply *menu*.");
   }
 
-  biz.sessionState = "creating_invoice_choose_client"; // SAME STATE
-  biz.sessionData = { docType: "quote", items: [] };   // ONLY DIFFERENCE
+  biz.sessionState = "creating_invoice_choose_client";
+  biz.sessionData = {
+    docType: "quote",   // ✅ ONLY DIFFERENCE
+    items: []
+  };
+
   await biz.save();
 
   return sendButtons(
     to,
-    "🧾 New Quotation\n\nChoose client option:",
+    "📝 New Quotation\n\nChoose client option:",
     [
       { id: "INV_USE_CLIENT", title: "📋 Use saved client" },
       { id: "INV_NEW_CLIENT", title: "➕ New client" },

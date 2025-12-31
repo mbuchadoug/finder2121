@@ -184,11 +184,15 @@ export async function continueTwilioFlow({ from, text }) {
       await sendText(from, "❌ No items found for this invoice.");
       return true;
     }
-
+const docType = biz.sessionData.docType || "invoice";
     const number = `INV-${Date.now()}`;
 
     const { filename } = await generatePDF({
-      type: "invoice",
+     type: docType === "quote"
+  ? "quote"
+  : docType === "receipt"
+  ? "receipt"
+  : "invoice",
       number,
       date: new Date(),
       billingTo: client.name || client.phone || "Client",

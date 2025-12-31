@@ -155,10 +155,21 @@ export async function continueTwilioFlow({ from, text }) {
       .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
       .join("\n");
 
-    return sendInvoiceConfirmMenu(
-      from,
-      `🧾 Invoice Summary\n\n${summary}`
-    );
+
+      
+ const docType = biz.sessionData.docType || "invoice";
+const label =
+  docType === "invoice"
+    ? "Invoice"
+    : docType === "quote"
+    ? "Quotation"
+    : "Receipt";
+
+return sendInvoiceConfirmMenu(
+  from,
+  `🧾 ${label} Summary\n\n${summary}`
+);
+
   }
 
   /* ===========================
@@ -166,62 +177,80 @@ export async function continueTwilioFlow({ from, text }) {
   ============================ */
   const docType = biz.sessionData.docType || "invoice";
 
-  if (state === "creating_invoice_confirm" && trimmed === "2") {
-    let client = biz.sessionData.client;
+ if (state === "creating_invoice_confirm" && trimmed === "2") {
+  let client = biz.sessionData.client;
 
-    if (!client && biz.sessionData.clientId) {
-      client = await Client.findById(biz.sessionData.clientId);
-    }
+  if (!client && biz.sessionData.clientId) {
+    client = await Client.findById(biz.sessionData.clientId);
+  }
 
-    if (!client) {
-      await sendText(
-        from,
-        "❌ Client information is missing. Please restart the invoice."
-      );
-      return true;
-    }
-
-    const items = biz.sessionData.items || [];
-    if (!items.length) {
-      await sendText(from, "❌ No items found for this invoice.");
-      return true;
-    }
-
-   let prefix = "INV";
-if (docType === "quote") prefix = "QT";
-if (docType === "receipt") prefix = "RCPT";
-
-const number = `${prefix}-${Date.now()}`;
-
-
-    const { filename } = await generatePDF({
-      type: docType,
-      number,
-      date: new Date(),
-      billingTo: client.name || client.phone || "Client",
-      items,
-      bizMeta: {
-        name: biz.name,
-        logoUrl: biz.logoUrl,
-        address: biz.address || "",
-        discountPercent: biz.sessionData.discountPercent || 0,
-        vatPercent: biz.sessionData.vatPercent || 0,
-        applyVat: biz.sessionData.applyVat !== false,
-        _id: biz._id.toString()
-      }
-    });
-
-    const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-    const url = `${site}/docs/generated/invoices/${filename}`;
-
-    await sendDocument(from, { link: url, filename });
-
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
+  if (!client) {
+    await sendText(from, "❌ Client information is missing.");
     return true;
   }
+
+  const items = biz.sessionData.items || [];
+  if (!items.length) {
+    await sendText(from, "❌ No items found.");
+    return true;
+  }
+
+  const docType = biz.sessionData.docType || "invoice";
+
+  const label =
+    docType === "invoice"
+      ? "Invoice"
+      : docType === "quote"
+      ? "Quotation"
+      : "Receipt";
+
+  const numberPrefix =
+    docType === "invoice"
+      ? "INV"
+      : docType === "quote"
+      ? "QT"
+      : "RCPT";
+
+  const number = `${numberPrefix}-${Date.now()}`;
+
+  const { filename } = await generatePDF({
+    type: docType,
+    number,
+    date: new Date(),
+    billingTo: client.name || client.phone,
+    items,
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      discountPercent: biz.sessionData.discountPercent || 0,
+      vatPercent: biz.sessionData.vatPercent || 0,
+      applyVat:
+        docType === "receipt"
+          ? false        // ✅ receipts never have VAT
+          : biz.sessionData.applyVat !== false,
+      _id: biz._id.toString()
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const folder =
+    docType === "invoice"
+      ? "invoices"
+      : docType === "quote"
+      ? "quotes"
+      : "receipts";
+
+  const url = `${site}/docs/generated/${folder}/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return true;
+}
 
   /* ===========================
      SET DISCOUNT %
@@ -241,10 +270,20 @@ const number = `${prefix}-${Date.now()}`;
       .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
       .join("\n");
 
-    return sendInvoiceConfirmMenu(
-      from,
-      `🧾 Invoice Summary\n\n${summary}\n\n💸 Discount: ${pct}%`
-    );
+
+    const docType = biz.sessionData.docType || "invoice";
+const label =
+  docType === "invoice"
+    ? "Invoice"
+    : docType === "quote"
+    ? "Quotation"
+    : "Receipt";
+
+return sendInvoiceConfirmMenu(
+  from,
+  `🧾 ${label} Summary\n\n${summary}\n\n💸 Discount: ${pct}%`
+);
+
   }
 
   /* ===========================
@@ -266,10 +305,19 @@ const number = `${prefix}-${Date.now()}`;
       .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
       .join("\n");
 
-    return sendInvoiceConfirmMenu(
-      from,
-      `🧾 Invoice Summary\n\n${summary}\n\n🧾 VAT: ${pct}%`
-    );
+    const docType = biz.sessionData.docType || "invoice";
+const label =
+  docType === "invoice"
+    ? "Invoice"
+    : docType === "quote"
+    ? "Quotation"
+    : "Receipt";
+
+return sendInvoiceConfirmMenu(
+  from,
+  `🧾 ${label} Summary\n\n${summary}\n\n🧾 VAT: ${pct}%`
+);
+
   }
 
   return false;

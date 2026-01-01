@@ -208,18 +208,7 @@ if (a === "inv_set_vat") {
 // PAYMENTS (META → TWILIO)
 // ===============================
 
-if (a === "pay_invoice") {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "payment_choose_invoice";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  // 🔁 Let Twilio brain take over
-  await continueTwilioFlow({ from, text: "" });
-  return;
-}
 
 if (a === "record_expense") {
   const biz = await getBizForPhone(from);

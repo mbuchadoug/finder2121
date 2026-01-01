@@ -43,6 +43,18 @@ export async function continueTwilioFlow({ from, text }) {
   }
 
 
+/* ===========================
+   PAYMENT START (META ENTRY)
+=========================== */
+if (state === "payment_start") {
+  // Tell user what to do next
+  await sendText(
+    from,
+    "💰 Record Payment\n\nReply with the invoice number or type *list* to see unpaid invoices."
+  );
+
+  return true;
+}
 
 
   /* ===========================

@@ -176,6 +176,25 @@ if (a === "inv_set_vat") {
      TEXT → TWILIO FLOW
   ========================= */
 
+const biz = await getBizForPhone(from);
+
+// 🧠 TWILIO-BRAIN STATES — ALWAYS DELEGATE TEXT
+const twilioOwnedStates = [
+  "adding_client_name",
+  "adding_client_phone",
+  "creating_invoice_new_client",
+  "creating_invoice_new_client_phone"
+];
+
+if (biz?.sessionState && twilioOwnedStates.includes(biz.sessionState)) {
+  const handled = await continueTwilioFlow({
+    from,
+    text: action
+  });
+  if (handled) return;
+}
+
+
   const isMetaAction =
     al.startsWith("inv_") ||
     al.startsWith("client_") ||

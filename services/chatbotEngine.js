@@ -3,7 +3,7 @@ import { startInvoiceFlow } from "./invoiceFlow.js";
 import { startReceiptFlow } from "./receiptFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
 import { showUnpaidInvoices } from "./paymentAdapters.js";
-
+import Invoice from "../models/invoice.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 
 

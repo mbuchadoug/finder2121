@@ -86,7 +86,7 @@ export async function sendList(to, bodyText, rows) {
   }
 
   return axios.post(
-    `${process.env.SITE_URL}/${PHONE_ID}/messages`,
+    `${process.env.SITE_URL}/${process.env.PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: "whatsapp",
       to,

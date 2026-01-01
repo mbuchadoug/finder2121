@@ -3,33 +3,30 @@ import UserSession from "../models/userSession.js";
 import Invoice from "../models/invoice.js"; // adjust if your model name differs
 import { sendList, sendText } from "./metaSender.js";
 
-export async function showUnpaidInvoices(to) {
-  const phone = to.replace(/\D+/g, "");
-  const session = await UserSession.findOne({ phone });
-  const biz = await Business.findById(session?.activeBusinessId);
-
-  if (!biz) {
-    return sendText(to, "❌ No active business.");
-  }
+export async function showUnpaidInvoices(from) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
 
   const invoices = await Invoice.find({
     businessId: biz._id,
-    status: { $ne: "paid" }
-  })
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
+    balance: { $gt: 0 }
+  }).limit(10);
 
   if (!invoices.length) {
-    return sendText(to, "✅ No unpaid invoices found.");
+    return sendText(from, "✅ No unpaid invoices.");
   }
 
+  biz.sessionState = "payment_choose_invoice";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
   return sendList(
-    to,
-    "📄 Select Invoice to Record Payment",
+    from,
+    "Select invoice to record payment",
     invoices.map(inv => ({
-      id: `payinv_${inv.number}`,
-      title: `${inv.number} – ${inv.clientName || "Client"}`
+      id: `payinv_${inv._id}`,   // 🔥 ObjectId
+      title: `${inv.number}`,
+      description: `Balance: ${inv.balance} ${inv.currency}`
     }))
   );
 }

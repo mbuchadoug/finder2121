@@ -178,12 +178,23 @@ if (a === "inv_set_vat") {
 
 const biz = await getBizForPhone(from);
 
-// 🧠 TWILIO-BRAIN STATES — ALWAYS DELEGATE TEXT
+/**
+ * 🧠 TWILIO-OWNED STATES
+ * Meta must NEVER interfere here
+ */
 const twilioOwnedStates = [
+  // client flow
   "adding_client_name",
   "adding_client_phone",
+
+  // invoice / quote / receipt flows
   "creating_invoice_new_client",
-  "creating_invoice_new_client_phone"
+  "creating_invoice_new_client_phone",
+  "creating_invoice_add_items",
+  "creating_invoice_enter_prices",
+  "creating_invoice_confirm",
+  "creating_invoice_set_discount",
+  "creating_invoice_set_vat"
 ];
 
 if (biz?.sessionState && twilioOwnedStates.includes(biz.sessionState)) {

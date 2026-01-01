@@ -3,7 +3,7 @@ import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
 import { sendText } from "./metaSender.js";
 import { sendInvoiceConfirmMenu, sendMainMenu } from "./metaMenus.js";
-
+import Invoice from "../models/invoice.js";
 
 import { generatePDF } from "../routes/twilio_biz.js";
 import { sendDocument } from "./metaSender.js";

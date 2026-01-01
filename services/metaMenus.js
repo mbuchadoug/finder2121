@@ -1,5 +1,7 @@
 import { ACTIONS } from "./actions.js";
-import { sendList } from "./metaSender.js";
+import { sendList, sendText, sendButtons } from "./metaSender.js";
+
+
 
 /* =========================
    MAIN
@@ -46,9 +48,9 @@ export function sendPaymentsMenu(to) {
     to,
     "💰 Payments\n\nWhat would you like to do?",
     [
-      { id: "pay_invoice", title: "📥 Record payment (IN)" },
-      { id: "record_expense", title: "📤 Record expense (OUT)" },
-      { id: "back", title: "⬅ Back" }
+      { id: ACTIONS.PAYMENT_IN, title: "📥 Record payment (IN)" },
+      { id: ACTIONS.PAYMENT_OUT, title: "📤 Record expense (OUT)" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
     ]
   );
 }

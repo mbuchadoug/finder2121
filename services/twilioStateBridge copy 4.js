@@ -234,7 +234,7 @@ return sendInvoiceConfirmMenu(
   ============================ */
   const docType = biz.sessionData.docType || "invoice";
 
-if (state === "creating_invoice_confirm" && trimmed === "2") {
+ if (state === "creating_invoice_confirm" && trimmed === "2") {
   let client = biz.sessionData.client;
 
   if (!client && biz.sessionData.clientId) {
@@ -252,82 +252,26 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
     return true;
   }
 
+  
+
   const docType = biz.sessionData.docType || "invoice";
 
-  const prefix =
+  const label =
     docType === "invoice"
-      ? biz.invoicePrefix || "INV"
+      ? "Invoice"
       : docType === "quote"
-      ? biz.quotePrefix || "QT"
-      : biz.receiptPrefix || "RCPT";
+      ? "Quotation"
+      : "Receipt";
 
-  // ✅ increment counter
-  biz.counters = biz.counters || { invoice: 0, quote: 0, receipt: 0 };
-  const counterKey =
+  const numberPrefix =
     docType === "invoice"
-      ? "invoice"
+      ? "INV"
       : docType === "quote"
-      ? "quote"
-      : "receipt";
+      ? "QT"
+      : "RCPT";
 
-  biz.counters[counterKey] =
-    (biz.counters[counterKey] || 0) + 1;
+  const number = `${numberPrefix}-${Date.now()}`;
 
-  const number = `${prefix}-${String(biz.counters[counterKey]).padStart(6, "0")}`;
-
-  // ==========================
-  // 💾 SAVE INVOICE TO DATABASE
-  // ==========================
-  const subtotal = items.reduce(
-    (s, i) => s + i.qty * i.unit,
-    0
-  );
-
-  const discountPercent = Number(biz.sessionData.discountPercent || 0);
-  const discountAmount = subtotal * (discountPercent / 100);
-
-  const vatPercent = Number(biz.sessionData.vatPercent || 0);
-  const applyVat =
-    docType === "receipt"
-      ? false
-      : biz.sessionData.applyVat !== false;
-
-  const vatAmount = applyVat
-    ? (subtotal - discountAmount) * (vatPercent / 100)
-    : 0;
-
-  const total = subtotal - discountAmount + vatAmount;
-
-  const invoiceDoc = await Invoice.create({
-    businessId: biz._id,
-    clientId: client._id,
-    number,
-    currency: biz.currency,
-
-    items: items.map(i => ({
-      item: i.item,
-      qty: i.qty,
-      unit: i.unit,
-      total: i.qty * i.unit
-    })),
-
-    subtotal,
-    discountPercent,
-    discountAmount,
-    vatPercent,
-    vatAmount,
-    total,
-
-    amountPaid: 0,
-    balance: total,
-    status: "unpaid",
-
-    createdBy: from
-  });
-
-  // ==========================
-  // 📄 GENERATE PDF
-  // ==========================
   const { filename } = await generatePDF({
     type: docType,
     number,
@@ -338,11 +282,13 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
       name: biz.name,
       logoUrl: biz.logoUrl,
       address: biz.address || "",
-      discountPercent,
-      vatPercent,
-      applyVat,
-      _id: biz._id.toString(),
-      status: invoiceDoc.status
+      discountPercent: biz.sessionData.discountPercent || 0,
+      vatPercent: biz.sessionData.vatPercent || 0,
+      applyVat:
+        docType === "receipt"
+          ? false        // ✅ receipts never have VAT
+          : biz.sessionData.applyVat !== false,
+      _id: biz._id.toString()
     }
   });
 
@@ -364,7 +310,6 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
 
   return true;
 }
-
 
   /* ===========================
      SET DISCOUNT %

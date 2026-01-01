@@ -232,26 +232,29 @@ if (a === "record_expense") {
  case ACTIONS.PAYMENTS_MENU:
   return sendPaymentsMenu(from);
 
-case ACTIONS.NEW_PAYMENT: // or PAYMENTS_IN
+case ACTIONS.PAYMENT_IN: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "payment_start"; // OR payment_choose_invoice
+  biz.sessionState = "payment_choose_invoice";
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
-  // 🔑 hand control to Twilio logic
-  await continueTwilioFlow({
-    from,
-    text: "" // triggers Twilio unpaid invoice listing
-  });
+  // hand over to Twilio logic
+  await continueTwilioFlow({ from, text: "" });
   return;
+}
 
-  case ACTIONS.NEW_EXPENSE:
-   biz = await getBizForPhone(from);
+case ACTIONS.PAYMENT_OUT: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
   biz.sessionState = "expense_amount";
+  biz.sessionData = {};
   await saveBizSafe(biz);
-  return sendText(from, "Enter expense amount:");
 
+  return sendText(from, "Enter expense amount:");
+}
 
     case ACTIONS.BUSINESS_MENU:
       return sendBusinessMenu(from);

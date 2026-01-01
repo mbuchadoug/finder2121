@@ -43,16 +43,12 @@ export async function sendClientsMenu(to) {
 /* =========================
    PAYMENTS
 ========================= */
-export function sendPaymentsMenu(to) {
-  return sendButtons(
-    to,
-    "💰 Payments\n\nWhat would you like to do?",
-    [
-      { id: ACTIONS.PAYMENT_IN, title: "📥 Record payment (IN)" },
-      { id: ACTIONS.PAYMENT_OUT, title: "📤 Record expense (OUT)" },
-      { id: ACTIONS.BACK, title: "⬅ Back" }
-    ]
-  );
+export async function sendPaymentsMenu(to) {
+  return sendList(to, "💰 Payments", [
+    { id: ACTIONS.PAYMENT_IN, title: "Record payment (IN)" },
+    { id: ACTIONS.PAYMENT_OUT, title: "Record expense (OUT)" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
 }
 
 

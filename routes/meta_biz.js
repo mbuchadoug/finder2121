@@ -1247,7 +1247,8 @@ if (action === "payment") {
   biz.sessionState = "payment_choose_invoice";
   await saveBiz(biz);
 
-  let msg = "Select invoice to record payment:\n";
+ let msg = "📥 Record payment\n\nSelect invoice:\n";
+
   invoices.forEach((inv, i) => {
     msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
   });

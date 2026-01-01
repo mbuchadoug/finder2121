@@ -172,6 +172,35 @@ if (a === "inv_set_vat") {
     return sendMainMenu(from);
   }
 
+
+  // ===============================
+// PAYMENTS (META → TWILIO)
+// ===============================
+
+if (a === "pay_invoice") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "payment_choose_invoice";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  // 🔁 Let Twilio brain take over
+  await continueTwilioFlow({ from, text: "" });
+  return;
+}
+
+if (a === "record_expense") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "expense_amount";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(from, "Enter expense amount:");
+}
+
   /* =========================
      TEXT → TWILIO FLOW
   ========================= */
@@ -200,12 +229,34 @@ if (a === "inv_set_vat") {
     case ACTIONS.CLIENTS_MENU:
       return sendClientsMenu(from);
 
-    case ACTIONS.PAYMENTS_MENU:
-      return sendPaymentsMenu(from);
+ case ACTIONS.PAYMENTS_MENU:
+  return sendPaymentsMenu(from);
+
+case ACTIONS.NEW_PAYMENT: // or PAYMENTS_IN
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "payment_start"; // OR payment_choose_invoice
+  await saveBizSafe(biz);
+
+  // 🔑 hand control to Twilio logic
+  await continueTwilioFlow({
+    from,
+    text: "" // triggers Twilio unpaid invoice listing
+  });
+  return;
+
+  case ACTIONS.NEW_EXPENSE:
+   biz = await getBizForPhone(from);
+  biz.sessionState = "expense_amount";
+  await saveBizSafe(biz);
+  return sendText(from, "Enter expense amount:");
+
 
     case ACTIONS.BUSINESS_MENU:
       return sendBusinessMenu(from);
 
+      
     case ACTIONS.SETTINGS_MENU:
       return sendSettingsMenu(from);
 

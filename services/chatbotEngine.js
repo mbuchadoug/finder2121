@@ -236,14 +236,17 @@ case ACTIONS.PAYMENT_IN: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "payment_choose_invoice";
+  // 🔑 enter Twilio payment flow cleanly
+  biz.sessionState = "payment_start";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  // hand over to Twilio logic
+  // let Twilio logic list unpaid invoices
   await continueTwilioFlow({ from, text: "" });
   return;
 }
+
+
 
 case ACTIONS.PAYMENT_OUT: {
   const biz = await getBizForPhone(from);

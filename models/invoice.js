@@ -1,29 +1,50 @@
 import mongoose from "mongoose";
 
 const InvoiceSchema = new mongoose.Schema({
-  businessId: { type: mongoose.Schema.Types.ObjectId, index: true },
-  branchId: { type: mongoose.Schema.Types.ObjectId, index: true },
-  clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    index: true,
+    required: true
+  },
 
-  number: { type: String, index: true },
-  currency: String,
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    index: true
+  },
+
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Client",
+    required: true
+  },
+
+  number: {
+    type: String,
+    index: true,
+    required: true
+  },
+
+  currency: {
+    type: String,
+    required: true
+  },
 
   status: {
-  type: String,
-  enum: ["unpaid", "partial", "paid"],
-  default: "unpaid"
-},
+    type: String,
+    enum: ["unpaid", "partial", "paid"],
+    default: "unpaid",
+    index: true
+  },
 
-amountPaid: {
-  type: Number,
-  default: 0
-},
+  amountPaid: {
+    type: Number,
+    default: 0
+  },
 
-balance: {
-  type: Number,
-  default: 0
-}
-,
+  balance: {
+    type: Number,
+    default: 0
+  },
 
   items: [{
     item: String,
@@ -39,7 +60,6 @@ balance: {
   vatAmount: Number,
   total: Number,
 
-  status: { type: String, default: "sent" }, // sent | partial | paid
   createdBy: String
 }, { timestamps: true });
 

@@ -79,39 +79,29 @@ export async function sendButtons(to, bodyText, buttons) {
 
 // services/metaSender.js
 
-export async function sendList(to, bodyText, rows) {
-  if (!Array.isArray(rows)) {
-    console.error("❌ sendList rows is not an array:", rows);
-    return;
-  }
-
-  return axios.post(
-    `${BASE_URL}/${PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to,
-      type: "interactive",
-      interactive: {
-        type: "list",
-        body: { text: bodyText },
-        action: {
-          button: "Select",
-          sections: [
-            {
-              title: "Options",
-              rows: rows.map(r => ({
-                id: String(r.id),
-                title: String(r.title)
-              }))
-            }
-          ]
-        }
+export async function sendList(to, title, items) {
+  return axios.post(API, {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: title },
+      action: {
+        button: "Select",
+        sections: [
+          {
+            title: "Options",
+            rows: items.map(i => ({
+              id: i.id,
+              title: i.title
+            }))
+          }
+        ]
       }
-    },
-    { headers }
-  );
+    }
+  }, { headers });
 }
-
 
 export async function sendDocument(to, document) {
   return axios.post(API, {

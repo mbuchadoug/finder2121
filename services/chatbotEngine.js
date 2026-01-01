@@ -49,15 +49,35 @@ export async function handleIncomingMessage({ from, action }) {
   }
 
 
-  if (al.startsWith("payinv_")) {
-  const invoiceNumber = al.replace("payinv_", "");
+ if (a.startsWith("payinv_")) {
+  const invoiceId = a.replace("payinv_", "");
 
-  await continueTwilioFlow({
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const invoice = await Invoice.findById(invoiceId);
+  if (!invoice || invoice.balance <= 0) {
+    await resetSession(biz);
+    return sendText(from, "Invoice not found or already paid.");
+  }
+
+  // 🔑 FORCE Twilio into correct state
+  biz.sessionState = "payment_amount";
+  biz.sessionData = {
+    invoiceId: invoice._id
+  };
+
+  await saveBizSafe(biz);
+
+  return sendText(
     from,
-    text: invoiceNumber
-  });
+`Invoice ${invoice.number}
+Total: ${invoice.total} ${invoice.currency}
+Paid: ${invoice.amountPaid || 0} ${invoice.currency}
+Balance: ${invoice.balance} ${invoice.currency}
 
-  return;
+Enter amount paid:`
+  );
 }
 
 

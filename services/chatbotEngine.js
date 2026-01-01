@@ -60,22 +60,21 @@ if (a.startsWith("payinv_")) {
     return sendText(from, "Invoice not found.");
   }
 
-  // 🔑 FIX STARTS HERE
   biz.sessionState = "payment_amount";
-  biz.sessionData = {
-    invoiceId: invoice._id
-  };
-
+  biz.sessionData = { invoiceId: invoice._id };
   await saveBizSafe(biz);
 
-  // 🔁 HAND CONTROL TO TWILIO FLOW
-  await continueTwilioFlow({
+  return sendText(
     from,
-    text: ""   // IMPORTANT
-  });
+`Invoice ${invoice.number}
+Total: ${invoice.total} ${invoice.currency}
+Paid: ${invoice.amountPaid} ${invoice.currency}
+Balance: ${invoice.balance} ${invoice.currency}
 
-  return;
+Enter amount paid:`
+  );
 }
+
 
 
 

@@ -28,8 +28,9 @@ export async function showUnpaidInvoices(to) {
     to,
     "📄 Select Invoice to Record Payment",
     invoices.map(inv => ({
-      id: `payinv_${inv.number}`,
-      title: `${inv.number} – ${inv.clientName || "Client"}`
+      id: `payinv_${inv._id}`,
+title: `${inv.number} – ${inv.balance} ${inv.currency}`
+
     }))
   );
 }

@@ -176,36 +176,6 @@ if (a === "inv_set_vat") {
      TEXT → TWILIO FLOW
   ========================= */
 
-const biz = await getBizForPhone(from);
-
-/**
- * 🧠 TWILIO-OWNED STATES
- * Meta must NEVER interfere here
- */
-const twilioOwnedStates = [
-  // client flow
-  "adding_client_name",
-  "adding_client_phone",
-
-  // invoice / quote / receipt flows
-  "creating_invoice_new_client",
-  "creating_invoice_new_client_phone",
-  "creating_invoice_add_items",
-  "creating_invoice_enter_prices",
-  "creating_invoice_confirm",
-  "creating_invoice_set_discount",
-  "creating_invoice_set_vat"
-];
-
-if (biz?.sessionState && twilioOwnedStates.includes(biz.sessionState)) {
-  const handled = await continueTwilioFlow({
-    from,
-    text: action
-  });
-  if (handled) return;
-}
-
-
   const isMetaAction =
     al.startsWith("inv_") ||
     al.startsWith("client_") ||

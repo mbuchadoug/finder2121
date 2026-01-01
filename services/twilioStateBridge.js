@@ -40,6 +40,46 @@ export async function continueTwilioFlow({ from, text }) {
     }
   }
 
+
+
+
+  /* ===========================
+   CLIENT CREATION (MAIN MENU)
+=========================== */
+if (state === "adding_client_name") {
+  biz.sessionData.clientName = trimmed;
+  biz.sessionState = "adding_client_phone";
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    "Enter client phone number (or type *same* to use this WhatsApp number):"
+  );
+  return true;
+}
+
+if (state === "adding_client_phone") {
+  const phoneVal = trimmed.toLowerCase() === "same" ? phone : trimmed;
+
+  const client = await Client.findOneAndUpdate(
+    { businessId: biz._id, phone: phoneVal },
+    { $set: { name: biz.sessionData.clientName, phone: phoneVal } },
+    { upsert: true, new: true }
+  );
+
+  // reset state
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Client added: ${client.name || client.phone}`
+  );
+
+  return true;
+}
+
   /* ===========================
      CLIENT CREATION (INVOICE)
   ============================ */

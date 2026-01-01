@@ -2,6 +2,7 @@ import { ACTIONS } from "./actions.js";
 import { startInvoiceFlow } from "./invoiceFlow.js";
 import { startReceiptFlow } from "./receiptFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
+import { showUnpaidInvoices } from "./paymentAdapters.js";
 
 import { startQuoteFlow } from "./quoteFlow.js";
 
@@ -232,19 +233,10 @@ if (a === "record_expense") {
  case ACTIONS.PAYMENTS_MENU:
   return sendPaymentsMenu(from);
 
-case ACTIONS.PAYMENT_IN: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  // 🔑 enter Twilio payment flow cleanly
-  biz.sessionState = "payment_start";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  // let Twilio logic list unpaid invoices
-  await continueTwilioFlow({ from, text: "" });
+case ACTIONS.PAYMENT_IN:
+  await showUnpaidInvoices(from);
   return;
-}
+
 
 
 

@@ -48,6 +48,18 @@ export async function handleIncomingMessage({ from, action }) {
     return;
   }
 
+  if (al.startsWith("payinv_")) {
+  const invoiceNumber = al.replace("payinv_", "");
+
+  // Hand over to Twilio logic exactly as if user typed invoice number
+  await continueTwilioFlow({
+    from,
+    text: invoiceNumber
+  });
+
+  return;
+}
+
   // ===============================
 // INVOICE CONFIRM ACTIONS (META)
 // ===============================

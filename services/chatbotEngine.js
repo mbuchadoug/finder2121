@@ -225,10 +225,16 @@ if (a === "record_expense") {
      TEXT → TWILIO FLOW
   ========================= */
 
-  const isMetaAction =
-    al.startsWith("inv_") ||
-    al.startsWith("client_") ||
-    Object.values(ACTIONS).includes(a);
+  const biz = await getBizForPhone(from);
+
+const isMetaAction =
+  al.startsWith("inv_") ||
+  al.startsWith("client_") ||
+  (
+    Object.values(ACTIONS).includes(a) &&
+    !["payment_amount", "payment_method"].includes(biz?.sessionState)
+  );
+
 
   if (!isMetaAction) {
     const handled = await continueTwilioFlow({

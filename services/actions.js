@@ -22,7 +22,8 @@ export const ACTIONS = {
   RECORD_PAYMENT: "record_payment",
   RECORD_EXPENSE: "record_expense",
 
-
+PAYMENT_IN: "payment_in",
+PAYMENT_OUT: "payment_out",
   INV_ADD_ANOTHER_ITEM: "inv_add_item",
   INV_ENTER_PRICES: "inv_enter_prices",
   INV_CANCEL: "inv_cancel",

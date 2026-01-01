@@ -68,7 +68,7 @@ if (state === "adding_client_phone") {
   );
 
   // reset state
-  biz.sessionState = "ready";
+   biz.sessionState = "ready";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
@@ -76,6 +76,9 @@ if (state === "adding_client_phone") {
     from,
     `✅ Client added: ${client.name || client.phone}`
   );
+
+  // 🔁 SHOW MAIN MENU AFTER SUCCESS
+  await sendMainMenu(from);
 
   return true;
 }

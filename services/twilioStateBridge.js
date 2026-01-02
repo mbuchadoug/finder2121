@@ -74,12 +74,17 @@ if (state === "expense_amount") {
   biz.sessionState = ACTIONS.EXPENSE_METHOD;
   await saveBizSafe(biz);
 
-  await sendButtons(from, "💳 Select payment method", [
+ await sendList(
+  from,
+  "💳 Select payment method",
+  [
     { id: "exp_method_cash", title: "Cash" },
     { id: "exp_method_bank", title: "Bank" },
     { id: "exp_method_ecocash", title: "EcoCash" },
     { id: "exp_method_other", title: "Other" }
-  ]);
+  ]
+);
+
 
   return true;
 }

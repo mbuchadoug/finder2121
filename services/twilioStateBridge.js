@@ -93,26 +93,29 @@ if (state === "expense_amount") {
 /* ===========================
    EXPENSE: CATEGORY
 =========================== */
-if (state === "expense_category") {
+if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
   const categoryMap = {
-    "1": "Rent",
-    "2": "Utilities",
-    "3": "Transport",
-    "4": "Supplies",
-    "5": "Other"
+    exp_cat_rent: "Rent",
+    exp_cat_utilities: "Utilities",
+    exp_cat_transport: "Transport",
+    exp_cat_supplies: "Supplies",
+    exp_cat_other: "Other"
   };
 
-  const category = categoryMap[trimmed];
+  const category = categoryMap[text];
   if (!category) {
-    await sendText(from, "❌ Invalid option. Choose 1–5.");
+    await sendText(from, "❌ Please select a category from the list.");
     return true;
   }
 
+  // ✅ Save selected category
   biz.sessionData.category = category;
+
+  // ➡️ Move to next step
   biz.sessionState = "expense_amount";
   await saveBizSafe(biz);
 
-  await sendText(from, "Enter expense amount:");
+  await sendText(from, "💵 Enter expense amount:");
   return true;
 }
 

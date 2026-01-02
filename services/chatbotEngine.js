@@ -232,26 +232,6 @@ if (a === ACTIONS.RECORD_EXPENSE) {
 }
 
 
-if (a === ACTIONS.RECORD_EXPENSE) {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return sendList(
-    from,
-    "📂 Select Expense Category",
-    [
-      { id: "exp_cat_rent", title: "🏢 Rent" },
-      { id: "exp_cat_utilities", title: "💡 Utilities" },
-      { id: "exp_cat_transport", title: "🚗 Transport" },
-      { id: "exp_cat_supplies", title: "📦 Supplies" },
-      { id: "exp_cat_other", title: "📝 Other" }
-    ]
-  );
-}
 
 
   /* =========================

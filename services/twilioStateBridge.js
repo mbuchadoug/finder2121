@@ -103,6 +103,92 @@ if (state === "payment_amount") {
 }
 
 
+
+
+/* ===========================
+   PAYMENT: METHOD → SAVE + RECEIPT
+=========================== */
+if (state === "payment_method") {
+  const methodMap = {
+    "1": "Cash",
+    "2": "Bank",
+    "3": "EcoCash",
+    "4": "Other"
+  };
+
+  const method = methodMap[trimmed];
+  if (!method) {
+    await sendText(from, "❌ Invalid option. Choose 1–4.");
+    return true;
+  }
+
+  const invoice = await Invoice.findById(biz.sessionData.invoiceId);
+  if (!invoice) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ Invoice not found.");
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const amount = biz.sessionData.amount;
+
+  // 💰 UPDATE INVOICE
+  invoice.amountPaid += amount;
+  invoice.balance -= amount;
+
+  if (invoice.balance <= 0) {
+    invoice.status = "paid";
+    invoice.balance = 0;
+  } else {
+    invoice.status = "partial";
+  }
+
+  await invoice.save();
+
+  // 🧾 GENERATE RECEIPT
+  const receiptNumber = `RCPT-${Date.now()}`;
+
+  const { filename } = await generatePDF({
+    type: "receipt",
+    number: receiptNumber,
+    date: new Date(),
+    billingTo: invoice.number,
+    items: [{
+      item: `Payment (${method})`,
+      qty: 1,
+      unit: amount,
+      total: amount
+    }],
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      _id: biz._id.toString(),
+      status: invoice.status
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/receipts/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  // ✅ CLEAN EXIT
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Payment recorded\nInvoice: ${invoice.number}\nAmount: ${amount} ${invoice.currency}\nMethod: ${method}`
+  );
+
+  await sendMainMenu(from);
+  return true;
+}
+
   /* ===========================
    CLIENT CREATION (MAIN MENU)
 =========================== */

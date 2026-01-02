@@ -57,6 +57,52 @@ if (state === "payment_start") {
 }
 
 
+/* ===========================
+   PAYMENT: ENTER AMOUNT
+=========================== */
+if (state === "payment_amount") {
+  const amount = Number(trimmed);
+
+  if (isNaN(amount) || amount <= 0) {
+    await sendText(from, "❌ Invalid amount. Enter a number greater than 0.");
+    return true;
+  }
+
+  const invoice = await Invoice.findById(biz.sessionData.invoiceId);
+  if (!invoice) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "❌ Invoice not found. Returning to menu.");
+    await sendMainMenu(from);
+    return true;
+  }
+
+  if (amount > invoice.balance) {
+    await sendText(
+      from,
+      `❌ Amount exceeds balance.\nBalance: ${invoice.balance} ${invoice.currency}\nEnter a valid amount:`
+    );
+    return true;
+  }
+
+  biz.sessionData.amount = amount;
+  biz.sessionState = "payment_method";
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+`Payment method:
+1) Cash
+2) Bank
+3) EcoCash
+4) Other`
+  );
+
+  return true;
+}
+
+
   /* ===========================
    CLIENT CREATION (MAIN MENU)
 =========================== */

@@ -210,16 +210,49 @@ if (a === "inv_set_vat") {
 
 
 
-if (a === "record_expense") {
+if (a === ACTIONS.RECORD_EXPENSE) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "expense_amount";
+  biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return sendText(from, "Enter expense amount:");
+  return sendList(
+    from,
+    "📂 Select Expense Category",
+    [
+      { id: "exp_cat_rent", title: "🏢 Rent" },
+      { id: "exp_cat_utilities", title: "💡 Utilities" },
+      { id: "exp_cat_transport", title: "🚗 Transport" },
+      { id: "exp_cat_supplies", title: "📦 Supplies" },
+      { id: "exp_cat_other", title: "📝 Other" }
+    ]
+  );
 }
+
+
+if (a === ACTIONS.RECORD_EXPENSE) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendList(
+    from,
+    "📂 Select Expense Category",
+    [
+      { id: "exp_cat_rent", title: "🏢 Rent" },
+      { id: "exp_cat_utilities", title: "💡 Utilities" },
+      { id: "exp_cat_transport", title: "🚗 Transport" },
+      { id: "exp_cat_supplies", title: "📦 Supplies" },
+      { id: "exp_cat_other", title: "📝 Other" }
+    ]
+  );
+}
+
 
   /* =========================
      TEXT → TWILIO FLOW

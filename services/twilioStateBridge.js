@@ -4,6 +4,7 @@ import Client from "../models/client.js";
 import { sendText } from "./metaSender.js";
 import { sendInvoiceConfirmMenu, sendMainMenu } from "./metaMenus.js";
 import Invoice from "../models/invoice.js";
+import Expense from "../models/expense.js";
 
 import { generatePDF } from "../routes/twilio_biz.js";
 import { sendDocument } from "./metaSender.js";
@@ -56,6 +57,122 @@ if (state === "payment_start") {
   return true;
 }
 
+
+
+/* ===========================
+   EXPENSE: ENTER AMOUNT
+=========================== */
+if (state === "expense_amount") {
+  const amount = Number(trimmed);
+
+  if (isNaN(amount) || amount <= 0) {
+    await sendText(from, "❌ Invalid amount. Enter a valid number.");
+    return true;
+  }
+
+  biz.sessionData.amount = amount;
+  biz.sessionState = ACTIONS.EXPENSE_METHOD;
+  await saveBizSafe(biz);
+
+  await sendButtons(from, "💳 Select payment method", [
+    { id: "exp_method_cash", title: "Cash" },
+    { id: "exp_method_bank", title: "Bank" },
+    { id: "exp_method_ecocash", title: "EcoCash" },
+    { id: "exp_method_other", title: "Other" }
+  ]);
+
+  return true;
+}
+
+/* ===========================
+   EXPENSE: CATEGORY
+=========================== */
+if (state === "expense_category") {
+  const categoryMap = {
+    "1": "Rent",
+    "2": "Utilities",
+    "3": "Transport",
+    "4": "Supplies",
+    "5": "Other"
+  };
+
+  const category = categoryMap[trimmed];
+  if (!category) {
+    await sendText(from, "❌ Invalid option. Choose 1–5.");
+    return true;
+  }
+
+  biz.sessionData.category = category;
+  biz.sessionState = "expense_amount";
+  await saveBizSafe(biz);
+
+  await sendText(from, "Enter expense amount:");
+  return true;
+}
+
+
+/* ===========================
+   EXPENSE: METHOD → SAVE + RECEIPT
+=========================== */
+if (state === ACTIONS.EXPENSE_METHOD) {
+  const methodMap = {
+    exp_method_cash: "Cash",
+    exp_method_bank: "Bank",
+    exp_method_ecocash: "EcoCash",
+    exp_method_other: "Other"
+  };
+
+  const method = methodMap[text];
+  if (!method) {
+    await sendText(from, "❌ Invalid method selected.");
+    return true;
+  }
+
+  const Expense = (await import("../models/expense.js")).default;
+
+  const expense = await Expense.create({
+    businessId: biz._id,
+    amount: biz.sessionData.amount,
+    category: biz.sessionData.category,
+    method,
+    createdBy: from
+  });
+
+  const receiptNumber = `EXP-${expense._id.toString().slice(-6)}`;
+
+  const { filename } = await generatePDF({
+    type: "receipt",
+    number: receiptNumber,
+    date: new Date(),
+    billingTo: biz.sessionData.category,
+    items: [{
+      item: `${biz.sessionData.category} (${method})`,
+      qty: 1,
+      unit: biz.sessionData.amount,
+      total: biz.sessionData.amount
+    }],
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      _id: biz._id.toString(),
+      status: "paid"
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/receipts/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "✅ Expense recorded successfully.");
+  await sendMainMenu(from);
+  return true;
+}
 
 /* ===========================
    PAYMENT: ENTER AMOUNT

@@ -228,31 +228,26 @@ if (a === "record_expense") {
   /* =========================
      TEXT → TWILIO FLOW
   ========================= */
+const biz = await getBizForPhone(from);
 
-  const biz = await getBizForPhone(from);
+// 🔒 PAYMENT FLOW CONTROL
+if (biz?.sessionState?.startsWith("payment_")) {
 
-  // 🔒 HARD STOP: PAYMENT STATES MUST NEVER HIT MENUS
-  if (biz?.sessionState?.startsWith("payment_")) {
+  // ✅ Allow menu/navigation buttons to escape payment flow
+  if (Object.values(ACTIONS).includes(a)) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    // fall through to menu switch
+  } else {
+    // ❌ Numbers/text stay inside payment flow
     await continueTwilioFlow({
       from,
       text: action
     });
-    return; // ⛔ ABSOLUTE STOP
+    return;
   }
-
-  const isMetaAction =
-    al.startsWith("inv_") ||
-    al.startsWith("client_") ||
-    Object.values(ACTIONS).includes(a);
-
-  if (!isMetaAction) {
-    const handled = await continueTwilioFlow({
-      from,
-      text: action
-    });
-    if (handled) return;
-  }
-
+}
 
   /* =========================
      MENUS

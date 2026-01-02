@@ -225,29 +225,23 @@ if (a === "record_expense") {
      TEXT → TWILIO FLOW
   ========================= */
 
-  /* =========================
-     TEXT → TWILIO FLOW
-  ========================= */
+
 const biz = await getBizForPhone(from);
 
-// 🔒 PAYMENT FLOW CONTROL
-if (biz?.sessionState?.startsWith("payment_")) {
+const isMetaAction =
+  al.startsWith("inv_") ||
+  al.startsWith("client_") ||
+  Object.values(ACTIONS).includes(a);
 
-  // ✅ Allow menu/navigation buttons to escape payment flow
-  if (Object.values(ACTIONS).includes(a)) {
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-    // fall through to menu switch
-  } else {
-    // ❌ Numbers/text stay inside payment flow
-    await continueTwilioFlow({
-      from,
-      text: action
-    });
-    return;
-  }
+// Anything that is NOT a Meta action → Twilio state machine
+if (!isMetaAction) {
+  const handled = await continueTwilioFlow({
+    from,
+    text: action
+  });
+  if (handled) return;
 }
+
 
   /* =========================
      MENUS

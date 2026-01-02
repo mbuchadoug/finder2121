@@ -228,13 +228,12 @@ if (a === "record_expense") {
 
 const biz = await getBizForPhone(from);
 
-const isMetaAction =
-  al.startsWith("inv_") ||
-  al.startsWith("client_") ||
-  (
-    Object.values(ACTIONS).includes(a) &&
-    !biz?.sessionState?.startsWith("payment_")
-  );
+// Always try Twilio flow first
+const handled = await continueTwilioFlow({
+  from,
+  text: action
+});
+if (handled) return;
 
 
 // Anything that is NOT a Meta action → Twilio state machine

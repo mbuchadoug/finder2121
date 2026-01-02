@@ -225,16 +225,25 @@ if (a === "record_expense") {
      TEXT → TWILIO FLOW
   ========================= */
 
+  /* =========================
+     TEXT → TWILIO FLOW
+  ========================= */
+
   const biz = await getBizForPhone(from);
 
-const isMetaAction =
-  al.startsWith("inv_") ||
-  al.startsWith("client_") ||
-  (
-    Object.values(ACTIONS).includes(a) &&
-    !["payment_amount", "payment_method"].includes(biz?.sessionState)
-  );
+  // 🔒 HARD STOP: PAYMENT STATES MUST NEVER HIT MENUS
+  if (biz?.sessionState?.startsWith("payment_")) {
+    await continueTwilioFlow({
+      from,
+      text: action
+    });
+    return; // ⛔ ABSOLUTE STOP
+  }
 
+  const isMetaAction =
+    al.startsWith("inv_") ||
+    al.startsWith("client_") ||
+    Object.values(ACTIONS).includes(a);
 
   if (!isMetaAction) {
     const handled = await continueTwilioFlow({
@@ -243,6 +252,7 @@ const isMetaAction =
     });
     if (handled) return;
   }
+
 
   /* =========================
      MENUS

@@ -322,6 +322,10 @@ if (!isMetaAction) {
  case ACTIONS.PAYMENTS_MENU:
   return sendPaymentsMenu(from);
 
+    case ACTIONS.REPORTS_MENU:
+      return sendReportsMenu(from);
+
+
 case ACTIONS.PAYMENT_IN:
   await showUnpaidInvoices(from);
   return;

@@ -367,18 +367,18 @@ case ACTIONS.INVITE_USER: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // owner-only
-  const ok = await requireRole(biz, from, ["owner"]);
-  if (!ok) {
+  // ✅ SAFE INLINE ROLE CHECK (NO HELPER)
+  if (biz.ownerPhone && biz.ownerPhone !== from) {
     return sendText(from, "⛔ Only the business owner can invite users.");
   }
 
-  // go to branches menu (Meta version)
+  // go to branches menu
   biz.sessionState = "branches_menu";
   await saveBizSafe(biz);
 
   return sendBranchesMenu(from);
 }
+
 
 
 case ACTIONS.BRANCHES_MENU: {

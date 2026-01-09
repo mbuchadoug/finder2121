@@ -246,7 +246,9 @@ if (a === ACTIONS.DAILY_REPORT) {
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({ from, text: "auto" });
+  //return continueTwilioFlow({ from, text: "auto" });
+
+    return continueTwilioFlow({ from, text: "1" });
 }
 
 // 📊 Weekly Report (Gold only)
@@ -258,7 +260,8 @@ if (a === ACTIONS.WEEKLY_REPORT) {
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({ from, text: "auto" });
+  //return continueTwilioFlow({ from, text: "auto" });
+   return continueTwilioFlow({ from, text: "2" });
 }
 
 // 📆 Monthly Report (Gold only)
@@ -270,7 +273,8 @@ if (a === ACTIONS.MONTHLY_REPORT) {
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({ from, text: "auto" });
+ // return continueTwilioFlow({ from, text: "auto" });
+ return continueTwilioFlow({ from, text: "3" });
 }
 
 // 🏢 Branch Summary Report (Gold only)
@@ -282,7 +286,8 @@ if (a === ACTIONS.BRANCH_REPORT) {
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({ from, text: "auto" });
+  //return continueTwilioFlow({ from, text: "auto" });
+  return continueTwilioFlow({ from, text: "4" });
 }
 
 

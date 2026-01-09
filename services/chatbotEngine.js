@@ -338,6 +338,43 @@ if (!isMetaAction) {
   return sendReportsMenu(from, isGold);
 }
 
+case ACTIONS.BUSINESS_PROFILE: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // 1️⃣ Send profile info
+  await sendText(
+    from,
+`🏢 Business Profile
+
+Name: ${biz.name}
+Currency: ${biz.currency}
+Package: ${biz.package}`
+  );
+
+  // 2️⃣ Automatically show main menu
+  return sendMainMenu(from);
+}
+
+
+
+case ACTIONS.USERS_MENU: {
+
+  // 1️⃣ Send users info
+  await sendText(
+    from,
+`👥 Users
+
+This section is managed via WhatsApp invitations.
+
+To add users:
+Business & Users → Invite User`
+  );
+
+  // 2️⃣ Auto main menu
+  return sendMainMenu(from);
+}
+
 
 
 case ACTIONS.PAYMENT_IN:

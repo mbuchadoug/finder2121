@@ -56,14 +56,24 @@ export async function sendPaymentsMenu(to) {
 
 /* =========================
    BUSINESS
-========================= */
+========================= 
 export async function sendBusinessMenu(to) {
   return sendList(to, "🏢 Business & Users", [
     { id: ACTIONS.BUSINESS_PROFILE, title: "Business Profile" },
     { id: ACTIONS.USERS, title: "Users" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
+}*/
+
+
+export async function sendBusinessMenu(to) {
+  return sendList(to, "🏢 Business & Users", [
+    { id: ACTIONS.BUSINESS_PROFILE, title: "🏢 Business Profile" },
+    { id: ACTIONS.USERS_MENU, title: "👥 Users" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
 }
+
 
 /* =========================
    SETTINGS

@@ -39,6 +39,11 @@ WEEKLY_REPORT: "weekly_report",
 MONTHLY_REPORT: "monthly_report",
 BRANCH_REPORT: "branch_report",
 
+// BUSINESS
+BUSINESS_PROFILE: "business_profile",
+USERS_MENU: "users_menu",
+
+
 
   // NAV
   BACK: "back"

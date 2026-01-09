@@ -78,20 +78,22 @@ export async function continueTwilioFlow({ from, text }) {
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  await sendText(
-    from,
+ await sendText(
+  from,
 `📊 Daily Report (${start.toISOString().slice(0,10)})
 
 Invoices: ${invoices.length}
 Sales: ${invoiced} ${biz.currency}
 Cash received: ${received} ${biz.currency}
 Expenses: ${spent} ${biz.currency}
-Outstanding: ${outstanding} ${biz.currency}
+Outstanding: ${outstanding} ${biz.currency}`
+);
 
-Reply *menu* to continue.`
-  );
+// ✅ show main menu immediately
+await sendMainMenu(from);
 
-  return true;
+return true;
+
 }
 
 

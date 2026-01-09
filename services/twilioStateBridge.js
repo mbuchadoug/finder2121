@@ -45,6 +45,60 @@ export async function continueTwilioFlow({ from, text }) {
   }
 
 
+
+  async function runDailyReportMeta({ biz, from }) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const invoices = await Invoice.find({
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  }).lean();
+
+  const payments = await (await import("../models/payment.js")).default.find({
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  }).lean();
+
+  const expenses = await Expense.find({
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  }).lean();
+
+  const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
+  const received = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const outstanding = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+
+  // reset state
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+`📊 Daily Report (${start.toISOString().slice(0,10)})
+
+Invoices: ${invoices.length}
+Sales: ${invoiced} ${biz.currency}
+Cash received: ${received} ${biz.currency}
+Expenses: ${spent} ${biz.currency}
+Outstanding: ${outstanding} ${biz.currency}
+
+Reply *menu* to continue.`
+  );
+
+  return true;
+}
+
+
+if (state === "report_daily") {
+  return runDailyReportMeta({ biz, from });
+}
+
 /* ===========================
    PAYMENT START (META ENTRY)
 =========================== */
@@ -70,7 +124,7 @@ if (state === "expense_amount") {
     await sendText(from, "❌ Invalid amount. Enter a valid number.");
     return true;
   }
-
+ 
   biz.sessionData.amount = amount;
   biz.sessionState = ACTIONS.EXPENSE_METHOD;
   await saveBizSafe(biz);

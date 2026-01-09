@@ -363,6 +363,24 @@ Package: ${biz.package}`
 case ACTIONS.USERS_MENU:
   return sendUsersMenu(from);
 
+case ACTIONS.INVITE_USER: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // owner-only
+  const ok = await requireRole(biz, from, ["owner"]);
+  if (!ok) {
+    return sendText(from, "⛔ Only the business owner can invite users.");
+  }
+
+  // go to branches menu (Meta version)
+  biz.sessionState = "branches_menu";
+  await saveBizSafe(biz);
+
+  return sendBranchesMenu(from);
+}
+
+
 case ACTIONS.BRANCHES_MENU: {
   const biz = await getBizForPhone(from);
   biz.sessionState = "branches_menu";
@@ -411,7 +429,8 @@ case ACTIONS.BRANCH_ASSIGN_USER: {
 }
 
 
-case ACTIONS.PENDING_INVITES: {
+
+case ACTIONS.VIEW_INVITES: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
@@ -434,9 +453,7 @@ case ACTIONS.PENDING_INVITES: {
   return sendText(from, msg);
 }
 
-
-
-case ACTIONS.ACTIVE_USERS: {
+case ACTIONS.VIEW_USERS: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
@@ -458,6 +475,9 @@ case ACTIONS.ACTIVE_USERS: {
 
   return sendText(from, msg);
 }
+
+
+
 
 
 

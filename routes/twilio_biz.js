@@ -1503,30 +1503,29 @@ if (state === "reports_menu" && isSingleNumber) {
 
   // 🚫 Block advanced reports for non-Gold
   if (!canUseFeature(biz, "reports_advanced") && trimmed !== "1") {
-  await resetSession(biz);
-  return blockedMessage(res);
-}
-
+    await resetSession(biz);
+    return blockedMessage(res);
+  }
 
   if (trimmed === "1") {
     biz.sessionState = "report_daily";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl);
+    // ✅ DO NOT redirect
   }
 
-  if (trimmed === "2") {
+  else if (trimmed === "2") {
     biz.sessionState = "report_weekly";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl);
+    // ✅ DO NOT redirect
   }
 
-  if (trimmed === "3") {
+  else if (trimmed === "3") {
     biz.sessionState = "report_monthly";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl);
+    // ✅ DO NOT redirect
   }
 
-  if (trimmed === "4") {
+  else if (trimmed === "4") {
     const ok = await requireRole(biz, providerId, ["owner"]);
     if (!ok) {
       await resetSession(biz);
@@ -1542,15 +1541,13 @@ if (state === "reports_menu" && isSingleNumber) {
     biz.sessionData.branches = branches;
     biz.sessionState = "report_choose_branch";
     await saveBiz(biz);
-
-    let msg = "Select branch:\n";
-    branches.forEach((b, i) => msg += `${i + 1}) ${b.name}\n`);
-    msg += "0) Cancel";
-
-    return sendTwimlText(res, msg);
+    return sendTwimlText(
+      res,
+      branches.map((b, i) => `${i + 1}) ${b.name}`).join("\n") + "\n0) Cancel"
+    );
   }
 
-  return sendTwimlText(res, "Invalid report option.");
+  // ⬇️ IMPORTANT: allow execution to continue
 }
 
 /* ================= REPORT BY BRANCH ================= */

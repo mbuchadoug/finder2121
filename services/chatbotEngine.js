@@ -379,21 +379,35 @@ case ACTIONS.BRANCHES_MENU: {
 }
 
 
-case ACTIONS.INVITE_USER: {
+case ACTIONS.BRANCH_VIEW: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "branches_menu";
   await saveBizSafe(biz);
 
-  return sendText(
-    from,
-`Invite User:
-1) View branches
-2) Add branch
-3) Assign user to branch
-0) Back`
-  );
+  // simulate "view branches"
+  return continueTwilioFlow({ from, text: "1" });
+}
+
+case ACTIONS.BRANCH_ADD: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "branch_add_name";
+  await saveBizSafe(biz);
+
+  return sendText(from, "🏢 Enter branch name:");
+}
+
+case ACTIONS.BRANCH_ASSIGN_USER: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "assign_user_choose_branch";
+  await saveBizSafe(biz);
+
+  return continueTwilioFlow({ from, text: "auto" });
 }
 
 

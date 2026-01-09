@@ -135,3 +135,14 @@ export async function sendBranchesMenu(to) {
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
+
+
+
+export async function sendInviteUserMenu(to) {
+  return sendList(to, "👤 Invite User", [
+    { id: ACTIONS.BRANCH_VIEW, title: "📂 View branches" },
+    { id: ACTIONS.BRANCH_ADD, title: "➕ Add branch" },
+    { id: ACTIONS.BRANCH_ASSIGN_USER, title: "👥 Assign user to branch" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}

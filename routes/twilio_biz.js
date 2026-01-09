@@ -1495,32 +1495,35 @@ if (state === "payment_start") {
 
 if (state === "reports_menu" && isSingleNumber) {
 
+  // 0) Back
   if (trimmed === "0") {
     await resetSession(biz);
     return sendMenuForUser(res, biz, providerId);
   }
 
+  // 🚫 Block advanced reports for non-Gold
   if (!canUseFeature(biz, "reports_advanced") && trimmed !== "1") {
-    await resetSession(biz);
-    return blockedMessage(res);
-  }
+  await resetSession(biz);
+  return blockedMessage(res);
+}
+
 
   if (trimmed === "1") {
     biz.sessionState = "report_daily";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
+    return res.redirect(307, req.originalUrl);
   }
 
   if (trimmed === "2") {
     biz.sessionState = "report_weekly";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
+    return res.redirect(307, req.originalUrl);
   }
 
   if (trimmed === "3") {
     biz.sessionState = "report_monthly";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
+    return res.redirect(307, req.originalUrl);
   }
 
   if (trimmed === "4") {
@@ -1539,10 +1542,16 @@ if (state === "reports_menu" && isSingleNumber) {
     biz.sessionData.branches = branches;
     biz.sessionState = "report_choose_branch";
     await saveBiz(biz);
-    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
-  }
-}
 
+    let msg = "Select branch:\n";
+    branches.forEach((b, i) => msg += `${i + 1}) ${b.name}\n`);
+    msg += "0) Cancel";
+
+    return sendTwimlText(res, msg);
+  }
+
+  return sendTwimlText(res, "Invalid report option.");
+}
 
 /* ================= REPORT BY BRANCH ================= */
 

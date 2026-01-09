@@ -363,20 +363,88 @@ Package: ${biz.package}`
 case ACTIONS.USERS_MENU:
   return sendUsersMenu(from);
 
-case ACTIONS.BRANCHES_MENU:
-  return sendBranchesMenu(from);
+case ACTIONS.BRANCHES_MENU: {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "branches_menu";
+  await saveBizSafe(biz);
 
-  case ACTIONS.INVITE_USER: {
-  await sendText(
+  return sendText(
     from,
-`➕ Invite User
-
-Send the user's WhatsApp number or email to invite them.`
+`Branches:
+1) View branches
+2) Add branch
+3) Assign user to branch
+0) Back`
   );
-
-  // Later: set state if you want multi-step
-  return;
 }
+
+
+case ACTIONS.INVITE_USER: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "branches_menu";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+`Invite User:
+1) View branches
+2) Add branch
+3) Assign user to branch
+0) Back`
+  );
+}
+
+
+case ACTIONS.PENDING_INVITES: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const pending = await (
+    await import("../models/userRole.js")
+  ).default.find({
+    businessId: biz._id,
+    pending: true
+  }).populate("branchId");
+
+  if (!pending.length) {
+    return sendText(from, "✅ No pending invitations.");
+  }
+
+  let msg = "⏳ Pending Invites:\n";
+  pending.forEach((u, i) => {
+    msg += `${i + 1}) ${u.phone} | ${u.role} | ${u.branchId?.name || "N/A"}\n`;
+  });
+
+  return sendText(from, msg);
+}
+
+
+
+case ACTIONS.ACTIVE_USERS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const users = await (
+    await import("../models/userRole.js")
+  ).default.find({
+    businessId: biz._id,
+    pending: false
+  }).populate("branchId");
+
+  if (!users.length) {
+    return sendText(from, "No active users found.");
+  }
+
+  let msg = "👥 Active Users:\n";
+  users.forEach((u, i) => {
+    msg += `${i + 1}) ${u.phone} | ${u.role} | ${u.branchId?.name || "N/A"}\n`;
+  });
+
+  return sendText(from, msg);
+}
+
 
 
 

@@ -43,6 +43,18 @@ BRANCH_REPORT: "branch_report",
 BUSINESS_PROFILE: "business_profile",
 USERS_MENU: "users_menu",
 
+// USERS
+INVITE_USER: "invite_user",
+VIEW_USERS: "view_users",
+VIEW_INVITES: "view_invites",
+
+// BRANCHES
+BRANCHES_MENU: "branches_menu",
+ADD_BRANCH: "add_branch",
+VIEW_BRANCHES: "view_branches",
+ASSIGN_BRANCH_USERS: "assign_branch_users",
+
+
 
 
   // NAV

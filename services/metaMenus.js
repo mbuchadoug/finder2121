@@ -70,6 +70,7 @@ export async function sendBusinessMenu(to) {
   return sendList(to, "🏢 Business & Users", [
     { id: ACTIONS.BUSINESS_PROFILE, title: "🏢 Business Profile" },
     { id: ACTIONS.USERS_MENU, title: "👥 Users" },
+    { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
@@ -113,4 +114,24 @@ export async function sendReportsMenu(to, isGold = false) {
   items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
 
   return sendList(to, "📈 Reports", items);
+}
+
+
+export async function sendUsersMenu(to) {
+  return sendList(to, "👥 Users", [
+    { id: ACTIONS.INVITE_USER, title: "➕ Invite User" },
+    { id: ACTIONS.VIEW_INVITES, title: "📨 Pending Invites" },
+    { id: ACTIONS.VIEW_USERS, title: "👤 Active Users" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
+}
+
+
+export async function sendBranchesMenu(to) {
+  return sendList(to, "🏬 Branches", [
+    { id: ACTIONS.ADD_BRANCH, title: "➕ Add Branch" },
+    { id: ACTIONS.VIEW_BRANCHES, title: "📋 View Branches" },
+    { id: ACTIONS.ASSIGN_BRANCH_USERS, title: "👥 Assign Users" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]);
 }

@@ -358,21 +358,22 @@ Package: ${biz.package}`
 
 
 
-case ACTIONS.USERS_MENU: {
+case ACTIONS.USERS_MENU:
+  return sendUsersMenu(from);
 
-  // 1️⃣ Send users info
+case ACTIONS.BRANCHES_MENU:
+  return sendBranchesMenu(from);
+
+  case ACTIONS.INVITE_USER: {
   await sendText(
     from,
-`👥 Users
+`➕ Invite User
 
-This section is managed via WhatsApp invitations.
-
-To add users:
-Business & Users → Invite User`
+Send the user's WhatsApp number or email to invite them.`
   );
 
-  // 2️⃣ Auto main menu
-  return sendMainMenu(from);
+  // Later: set state if you want multi-step
+  return;
 }
 
 

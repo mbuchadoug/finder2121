@@ -1495,13 +1495,11 @@ if (state === "payment_start") {
 
 if (state === "reports_menu" && isSingleNumber) {
 
-  // 0) Back
   if (trimmed === "0") {
     await resetSession(biz);
     return sendMenuForUser(res, biz, providerId);
   }
 
-  // 🚫 Block advanced reports for non-Gold
   if (!canUseFeature(biz, "reports_advanced") && trimmed !== "1") {
     await resetSession(biz);
     return blockedMessage(res);
@@ -1510,22 +1508,22 @@ if (state === "reports_menu" && isSingleNumber) {
   if (trimmed === "1") {
     biz.sessionState = "report_daily";
     await saveBiz(biz);
-    // ✅ DO NOT redirect
+    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
   }
 
-  else if (trimmed === "2") {
+  if (trimmed === "2") {
     biz.sessionState = "report_weekly";
     await saveBiz(biz);
-    // ✅ DO NOT redirect
+    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
   }
 
-  else if (trimmed === "3") {
+  if (trimmed === "3") {
     biz.sessionState = "report_monthly";
     await saveBiz(biz);
-    // ✅ DO NOT redirect
+    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
   }
 
-  else if (trimmed === "4") {
+  if (trimmed === "4") {
     const ok = await requireRole(biz, providerId, ["owner"]);
     if (!ok) {
       await resetSession(biz);
@@ -1541,14 +1539,10 @@ if (state === "reports_menu" && isSingleNumber) {
     biz.sessionData.branches = branches;
     biz.sessionState = "report_choose_branch";
     await saveBiz(biz);
-    return sendTwimlText(
-      res,
-      branches.map((b, i) => `${i + 1}) ${b.name}`).join("\n") + "\n0) Cancel"
-    );
+    return res.redirect(307, req.originalUrl); // ✅ REQUIRED
   }
-
-  // ⬇️ IMPORTANT: allow execution to continue
 }
+
 
 /* ================= REPORT BY BRANCH ================= */
 

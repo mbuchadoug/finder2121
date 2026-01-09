@@ -33,6 +33,13 @@ PAYMENT_OUT: "payment_out",
 EXPENSE_CATEGORY: "expense_category",
 EXPENSE_METHOD: "expense_method",
 
+// REPORTS
+DAILY_REPORT: "daily_report",
+WEEKLY_REPORT: "weekly_report",
+MONTHLY_REPORT: "monthly_report",
+BRANCH_REPORT: "branch_report",
+
+
   // NAV
   BACK: "back"
 };

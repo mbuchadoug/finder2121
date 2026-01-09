@@ -84,3 +84,23 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
     { id: "inv_cancel", title: "❌ Cancel" }
   ]);
 }
+
+
+
+export async function sendReportsMenu(to, isGold = false) {
+  const items = [
+    { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" }
+  ];
+
+  if (isGold) {
+    items.push(
+      { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report" },
+      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" },
+      { id: ACTIONS.BRANCH_REPORT, title: "🏢 Branch Report" }
+    );
+  }
+
+  items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
+
+  return sendList(to, "📈 Reports", items);
+}

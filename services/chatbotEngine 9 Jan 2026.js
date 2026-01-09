@@ -20,8 +20,7 @@ import {
   sendClientsMenu,
   sendPaymentsMenu,
   sendBusinessMenu,
-  sendSettingsMenu,
-    sendReportsMenu   // ✅ ADD THIS LINE
+  sendSettingsMenu
 } from "./metaMenus.js";
 
 // helpers you already use elsewhere
@@ -233,57 +232,6 @@ if (a === ACTIONS.RECORD_EXPENSE) {
 }
 
 
-/* =========================
-   REPORTS (META → TWILIO)
-========================= */
-
-// 📅 Daily Report
-if (a === ACTIONS.DAILY_REPORT) {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "report_daily";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({ from, text: "auto" });
-}
-
-// 📊 Weekly Report (Gold only)
-if (a === ACTIONS.WEEKLY_REPORT) {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "report_weekly";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({ from, text: "auto" });
-}
-
-// 📆 Monthly Report (Gold only)
-if (a === ACTIONS.MONTHLY_REPORT) {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "report_monthly";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({ from, text: "auto" });
-}
-
-// 🏢 Branch Summary Report (Gold only)
-if (a === ACTIONS.BRANCH_REPORT) {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "report_choose_branch";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  return continueTwilioFlow({ from, text: "auto" });
-}
 
 
   /* =========================

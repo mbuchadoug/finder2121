@@ -322,8 +322,22 @@ if (!isMetaAction) {
  case ACTIONS.PAYMENTS_MENU:
   return sendPaymentsMenu(from);
 
-    case ACTIONS.REPORTS_MENU:
-      return sendReportsMenu(from);
+    case ACTIONS.REPORTS_MENU: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // 🔑 SET TWILIO STATE
+  biz.sessionState = "reports_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  // 🔍 Check package
+  const isGold =
+    biz.package === "gold" || biz.package === "enterprise";
+
+  return sendReportsMenu(from, isGold);
+}
+
 
 
 case ACTIONS.PAYMENT_IN:

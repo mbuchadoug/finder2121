@@ -21,7 +21,9 @@ import {
   sendPaymentsMenu,
   sendBusinessMenu,
   sendSettingsMenu,
-    sendReportsMenu   // ✅ ADD THIS LINE
+    sendReportsMenu,   // ✅ ADD THIS LINE
+     sendUsersMenu,      // ✅ ADD
+  sendBranchesMenu    // ✅ ADD
 } from "./metaMenus.js";
 
 // helpers you already use elsewhere

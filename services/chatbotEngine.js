@@ -430,7 +430,7 @@ case ACTIONS.VIEW_BRANCHES: {
 
 
 
-case ACTIONS.ASSIGN_USER_BRANCH: {
+case ACTIONS.ASSIGN_BRANCH_USERS: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 

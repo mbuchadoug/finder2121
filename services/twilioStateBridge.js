@@ -101,6 +101,38 @@ if (state === "report_daily") {
   return runDailyReportMeta({ biz, from });
 }
 
+
+
+/////////////////////////////////branches
+/* ===========================
+   BRANCH: ADD BRANCH (META)
+=========================== */
+if (state === "branch_add_name") {
+  const name = trimmed;
+
+  if (!name) {
+    await sendText(from, "Branch name cannot be empty.");
+    return true;
+  }
+
+  const Branch = (await import("../models/branch.js")).default;
+
+  await Branch.create({
+    businessId: biz._id,
+    name,
+    isDefault: false
+  });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, `✅ Branch "${name}" added.`);
+  await sendMainMenu(from);
+
+  return true;
+}
+
 /* ===========================
    PAYMENT START (META ENTRY)
 =========================== */

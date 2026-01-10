@@ -301,8 +301,10 @@ const text = typeof action === "string" ? action.trim() : "";
 const isMetaAction =
   typeof action === "string" &&
   action.length > 0 &&
-  Object.values(ACTIONS).includes(action);
-
+  (
+    Object.values(ACTIONS).includes(action) ||
+    action.startsWith("assign_")
+  );
 
 // Anything that is NOT a Meta action → Twilio state machine
 //const biz = await getBizForPhone(from);
@@ -319,6 +321,43 @@ if (!isMetaAction) {
   if (handled) return;
 }
 
+
+// ===============================
+// ASSIGN USER → BRANCH PICK (META)
+// ===============================
+if (
+  a.startsWith("assign_branch_")
+) {
+  const branchId = a.replace("assign_branch_", "");
+
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // Load users
+  const UserRole = (await import("../models/userRole.js")).default;
+  const users = await UserRole.find({
+    businessId: biz._id,
+    pending: false
+  }).lean();
+
+  if (!users.length) {
+    await sendText(from, "No active users found.");
+    return sendMainMenu(from);
+  }
+
+  biz.sessionState = "assign_branch_pick_user";
+  biz.sessionData.branchId = branchId;
+  await saveBizSafe(biz);
+
+  return sendList(
+    from,
+    "Select user",
+    users.map(u => ({
+      id: `assign_user_${u._id}`,
+      title: u.phone
+    }))
+  );
+}
 
 
   /* =========================
@@ -374,19 +413,7 @@ Package: ${biz.package}`
 case ACTIONS.USERS_MENU:
   return sendUsersMenu(from);
 
-case ACTIONS.INVITE_USER: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "assign_user_choose_branch";
-  await saveBizSafe(biz);
-
-  // Let Twilio ask for numeric branch selection
-  return sendText(
-    from,
-    "Select branch for new user:\n1) Main Branch\n(Reply with a number)"
-  );
-}
 
 
 
@@ -442,7 +469,7 @@ case ACTIONS.ASSIGN_BRANCH_USERS: {
     return sendMainMenu(from);
   }
 
-  biz.sessionState = "assign_user_choose_branch";
+  biz.sessionState = "assign_branch_pick_branch";
   biz.sessionData.branches = branches;
   await saveBizSafe(biz);
 

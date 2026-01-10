@@ -302,22 +302,13 @@ const isMetaAction = Boolean(action);
 //const biz = await getBizForPhone(from);
 
 // 🔑 FORCE branch name input into Twilio flow
-if (
-  biz?.sessionState === "branch_add_name" &&
-  !isMetaAction
-) {
-  await continueTwilioFlow({
-    from,
-    text: action
-  });
-  return;
-}
+
 
 // default behaviour
 if (!isMetaAction) {
   const handled = await continueTwilioFlow({
     from,
-    text: action
+    text
   });
   if (handled) return;
 }

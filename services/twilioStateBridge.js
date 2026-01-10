@@ -104,6 +104,92 @@ if (state === "report_daily") {
 
 
 
+/* ===========================
+   INVITE USER: ENTER PHONE
+=========================== */
+if (state === "invite_user_phone") {
+  const raw = trimmed.replace(/\D+/g, "");
+
+  let phone = raw;
+  if (phone.startsWith("0")) {
+    phone = "263" + phone.slice(1);
+  }
+
+  if (!phone.startsWith("263") || phone.length !== 12) {
+    await sendText(
+      from,
+      "❌ Invalid WhatsApp number. Use 0772123456 or +263772123456"
+    );
+    return true;
+  }
+
+  const UserRole = (await import("../models/userRole.js")).default;
+  const Branch = (await import("../models/branch.js")).default;
+
+  const branchId = biz.sessionData.branchId;
+  const branch = await Branch.findById(branchId);
+
+  if (!branch) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendText(from, "⚠️ Branch not found.");
+    await sendMainMenu(from);
+    return true;
+  }
+
+  // Prevent duplicates
+  const exists = await UserRole.findOne({
+    businessId: biz._id,
+    phone,
+    pending: false
+  });
+
+  if (exists) {
+    await sendText(from, "⚠️ User already exists in your business.");
+    await sendMainMenu(from);
+    return true;
+  }
+
+  await UserRole.findOneAndUpdate(
+    { businessId: biz._id, phone },
+    {
+      businessId: biz._id,
+      phone,
+      role: "clerk",
+      branchId: branch._id,
+      pending: true
+    },
+    { upsert: true }
+  );
+
+  const bot = process.env.TWILIO_WHATSAPP_NUMBER.replace(/\D+/g, "");
+  const joinLink = `https://wa.me/${bot}?text=JOIN`;
+
+  const msg =
+`👋 You’ve been invited to ${biz.name}
+
+📍 Branch: ${branch.name}
+🔑 Role: Clerk
+
+👉 Join here:
+${joinLink}
+
+Or reply *JOIN*`;
+
+  await sendWhatsAppMessage(phone, msg);
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Invitation sent to ${phone}\n📍 Branch: ${branch.name}`
+  );
+  await sendMainMenu(from);
+  return true;
+}
 
 
 

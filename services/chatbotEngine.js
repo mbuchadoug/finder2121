@@ -367,15 +367,11 @@ case ACTIONS.INVITE_USER: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // ✅ ENTER DEDICATED INVITE FLOW
-  biz.sessionState = "invite_user_phone";
-  biz.sessionData = {};
+  // 🔁 REUSE WORKING FLOW
+  biz.sessionState = "assign_user_choose_branch";
   await saveBizSafe(biz);
 
-  return sendText(
-    from,
-    "👤 Invite User\n\nEnter the WhatsApp number to invite (e.g. 0772123456):"
-  );
+  return continueTwilioFlow({ from, text: "auto" });
 }
 
 
@@ -383,50 +379,14 @@ case ACTIONS.INVITE_USER: {
 
 case ACTIONS.BRANCHES_MENU: {
   const biz = await getBizForPhone(from);
-  biz.sessionState = "branches_menu";
-  await saveBizSafe(biz);
-
-  return sendText(
-    from,
-`Branches:
-1) View branches
-2) Add branch
-3) Assign user to branch
-0) Back`
-  );
-}
-
-
-case ACTIONS.BRANCH_VIEW: {
-  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "branches_menu";
-  await saveBizSafe(biz);
-
-  // simulate "view branches"
-  return continueTwilioFlow({ from, text: "1" });
-}
-
-case ACTIONS.BRANCH_ADD: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "branch_add_name";
-  await saveBizSafe(biz);
-
-  return sendText(from, "🏢 Enter branch name:");
-}
-
-case ACTIONS.BRANCH_ASSIGN_USER: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "assign_user_choose_branch";
   await saveBizSafe(biz);
 
   return continueTwilioFlow({ from, text: "auto" });
 }
+
 
 
 

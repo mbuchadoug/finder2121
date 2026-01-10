@@ -367,12 +367,16 @@ case ACTIONS.INVITE_USER: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // 🔁 REUSE WORKING FLOW
   biz.sessionState = "assign_user_choose_branch";
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({ from, text: "auto" });
+  // Let Twilio ask for numeric branch selection
+  return sendText(
+    from,
+    "Select branch for new user:\n1) Main Branch\n(Reply with a number)"
+  );
 }
+
 
 
 
@@ -384,8 +388,10 @@ case ACTIONS.BRANCHES_MENU: {
   biz.sessionState = "branches_menu";
   await saveBizSafe(biz);
 
-  return continueTwilioFlow({ from, text: "auto" });
+  // ✅ SEND META MENU, NOT TWILIO
+  return sendBranchesMenu(from);
 }
+
 
 
 

@@ -386,10 +386,10 @@ case ACTIONS.BRANCHES_MENU: {
   biz.sessionState = "branches_menu";
   await saveBizSafe(biz);
 
-  // ✅ DO NOT send another Meta menu
-  // Twilio will respond based on state
-  return;
+  // 🔑 FORCE Twilio to respond to the new state
+  return continueTwilioFlow({ from, text: "auto" });
 }
+
 
 
 

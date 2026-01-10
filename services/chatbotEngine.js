@@ -384,7 +384,15 @@ case ACTIONS.BRANCHES_MENU: {
 }
 
 
+case ACTIONS.ADD_BRANCH: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
 
+  biz.sessionState = "branch_add_name";
+  await saveBizSafe(biz);
+
+  return sendText(from, "Enter new branch name:");
+}
 
 
 

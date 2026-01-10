@@ -484,32 +484,36 @@ case ACTIONS.VIEW_BRANCHES: {
 }
 
 
-
 case ACTIONS.ASSIGN_BRANCH_USERS: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  const Branch = (await import("../models/branch.js")).default;
-  const branches = await Branch.find({ businessId: biz._id }).lean();
+  const UserRole = (await import("../models/userRole.js")).default;
+  const users = await UserRole.find({
+    businessId: biz._id,
+    pending: false
+  }).lean();
 
-  if (!branches.length) {
-    await sendText(from, "Add a branch first.");
+  if (!users.length) {
+    await sendText(from, "No active users found.");
     return sendMainMenu(from);
   }
 
-  biz.sessionState = "assign_branch_pick_branch";
-  biz.sessionData.branches = branches;
+  biz.sessionState = "assign_branch_pick_user";
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
   return sendList(
     from,
-    "Select branch",
-    branches.map(b => ({
-      id: `assign_branch_${b._id}`,
-      title: b.name
+    "Select user",
+    users.map(u => ({
+      id: `assign_user_${u._id}`,
+      title: u.phone
     }))
   );
 }
+
+
 
 case ACTIONS.VIEW_INVITES: {
   const biz = await getBizForPhone(from);

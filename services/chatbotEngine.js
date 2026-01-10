@@ -367,17 +367,17 @@ case ACTIONS.INVITE_USER: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // ✅ SAFE INLINE ROLE CHECK (NO HELPER)
-  if (biz.ownerPhone && biz.ownerPhone !== from) {
-    return sendText(from, "⛔ Only the business owner can invite users.");
-  }
-
-  // go to branches menu
-  biz.sessionState = "branches_menu";
+  // ✅ ENTER DEDICATED INVITE FLOW
+  biz.sessionState = "invite_user_phone";
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return sendBranchesMenu(from);
+  return sendText(
+    from,
+    "👤 Invite User\n\nEnter the WhatsApp number to invite (e.g. 0772123456):"
+  );
 }
+
 
 
 

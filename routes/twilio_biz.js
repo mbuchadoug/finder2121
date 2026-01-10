@@ -1399,7 +1399,7 @@ if (action === "statement") {
 }
 
 if (action === "invite_user") {
- if (!canUseFeature(biz, "invite_user")) {
+  if (!canUseFeature(biz, "invite_user")) {
     return blockedMessage(res);
   }
 
@@ -1408,18 +1408,26 @@ if (action === "invite_user") {
     return sendTwimlText(res, "⛔ Only the owner can invite users.");
   }
 
-  biz.sessionState = "branches_menu";
+  // 🚀 DIRECTLY START INVITE FLOW
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    return sendTwimlText(res, "No branches found. Add a branch first.");
+  }
+
+  biz.sessionData.branches = branches;
+  biz.sessionState = "assign_user_choose_branch";
   await saveBiz(biz);
 
-  return sendTwimlText(
-    res,
-`Invite user:
-1) View branches
-2) Add branch
-3) Assign user to branch
-0) Back`
-  );
+  let msg = "Select branch for new user:\n";
+  branches.forEach((b, i) => {
+    msg += `${i + 1}) ${b.name}\n`;
+  });
+  msg += "0) Cancel";
+
+  return sendTwimlText(res, msg);
 }
+
 
 if (action === "upload_logo") {
 

@@ -322,6 +322,18 @@ if (!isMetaAction) {
 }
 
 
+if (a.startsWith("invite_branch_")) {
+  const branchId = a.replace("invite_branch_", "");
+
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "invite_user_phone";
+  biz.sessionData.branchId = branchId;
+  await saveBizSafe(biz);
+
+  return sendText(from, "Enter WhatsApp number of the user to invite:");
+}
 
 
 // ===============================
@@ -447,6 +459,32 @@ case ACTIONS.USERS_MENU:
 
 
 
+case ACTIONS.INVITE_USER: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // move into invite flow
+  biz.sessionState = "invite_user_choose_branch";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  const Branch = (await import("../models/branch.js")).default;
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    await sendText(from, "No branches found. Please add a branch first.");
+    return sendBranchesMenu(from);
+  }
+
+  return sendList(
+    from,
+    "Select branch for new user",
+    branches.map(b => ({
+      id: `invite_branch_${b._id}`,
+      title: b.name
+    }))
+  );
+}
 
 
 

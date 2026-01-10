@@ -49,6 +49,33 @@ export async function dispatchAction({
       await saveBiz(biz);
       return res.redirect(307, req.originalUrl);
 
+
+case ACTIONS.ASSIGN_BRANCH_USERS: {
+  const users = await UserRole.find({
+    businessId: biz._id,
+    pending: false
+  }).lean();
+
+  if (!users.length) {
+    return sendTwimlText(res, "No active users yet.");
+  }
+
+  biz.sessionState = "assign_branch_pick_user";
+  biz.sessionData.users = users;
+  await saveBiz(biz);
+
+  return sendList(
+    providerId,
+    "Select user",
+    users.map(u => ({
+      id: `assign_user_${u._id}`,
+      title: u.phone
+    }))
+  );
+}
+
+
+
     case ACTIONS.REPORTS_MENU:
       biz.sessionState = "reports_menu";
       await saveBiz(biz);

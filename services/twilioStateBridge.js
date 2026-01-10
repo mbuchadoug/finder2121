@@ -102,6 +102,52 @@ if (state === "report_daily") {
 }
 
 
+if (state === "assign_branch_pick_user" && text.startsWith("assign_user_")) {
+  const userId = text.replace("assign_user_", "");
+  biz.sessionData.userId = userId;
+  biz.sessionState = "assign_branch_pick_branch";
+  await saveBizSafe(biz);
+
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+  return sendList(
+    from,
+    "Select branch",
+    branches.map(b => ({
+      id: `assign_branch_${b._id}`,
+      title: b.name
+    }))
+  );
+}
+
+
+
+/* ===========================
+   ASSIGN USER → SAVE BRANCH
+=========================== */
+if (
+  state === "assign_branch_pick_branch" &&
+  typeof text === "string" &&
+  text.startsWith("assign_branch_")
+) {
+  const branchId = text.replace("assign_branch_", "");
+
+  const UserRole = (await import("../models/userRole.js")).default;
+
+  await UserRole.findByIdAndUpdate(
+    biz.sessionData.userId,
+    { branchId }
+  );
+
+  // ✅ CLEAN EXIT
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "✅ User successfully assigned to branch.");
+  await sendMainMenu(from);
+
+  return true;
+}
 
 /////////////////////////////////branches
 /* ===========================

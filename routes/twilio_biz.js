@@ -2220,11 +2220,49 @@ if (state === "branch_add_name") {
     return sendTwimlText(res, "Branch name cannot be empty.");
   }
 
-  await Branch.create({
+try {
+  const branch = await Branch.create({
     businessId: biz._id,
-    name,
+    name: name.trim(),
     isDefault: false
   });
+
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`✅ Branch saved successfully!
+
+🏬 Branch: ${branch.name}
+
+1) View branches
+2) Add another branch
+3) Assign user to branch
+0) Back`
+  );
+
+} catch (err) {
+  console.error("❌ Branch save failed:", err);
+
+  biz.sessionState = "branches_menu";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+`❌ Failed to save branch.
+
+Possible reasons:
+• Duplicate name
+• Database error
+
+Please try again.
+
+1) Add branch
+0) Back`
+  );
+}
+
 
   biz.sessionState = "branches_menu";
   await saveBiz(biz);

@@ -177,7 +177,19 @@ ${joinLink}
 
 Or reply *JOIN*`;
 
-  await sendText(phone, msg);
+  await sendText(
+  from,
+`✅ Invitation created
+
+📍 Branch: ${branch.name}
+🔑 Role: Clerk
+
+👉 Share this link with the user:
+${joinLink}
+
+They must click it to join.`
+);
+
 
   biz.sessionState = "ready";
   biz.sessionData = {};

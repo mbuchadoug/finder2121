@@ -294,11 +294,14 @@ if (a === ACTIONS.BRANCH_REPORT) {
 
 const biz = await getBizForPhone(from);
 
-// ✅ Only treat REAL buttons/lists as Meta actions
+// 🔑 In Meta Cloud, typed text ALSO arrives as `action`
+const text = typeof action === "string" ? action.trim() : "";
+
+// ✅ Meta action = known button/list IDs only
 const isMetaAction =
   typeof action === "string" &&
   action.length > 0 &&
-  !text; // typed text should NEVER be meta action
+  Object.values(ACTIONS).includes(action);
 
 
 // Anything that is NOT a Meta action → Twilio state machine

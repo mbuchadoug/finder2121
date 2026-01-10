@@ -322,41 +322,66 @@ if (!isMetaAction) {
 }
 
 
+
+
 // ===============================
-// ASSIGN USER → BRANCH PICK (META)
+// ASSIGN USER → PICK USER (META)
 // ===============================
-if (
-  a.startsWith("assign_branch_")
-) {
+if (a.startsWith("assign_user_")) {
+  const userId = a.replace("assign_user_", "");
+
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const Branch = (await import("../models/branch.js")).default;
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    await sendText(from, "No branches found.");
+    return sendMainMenu(from);
+  }
+
+  biz.sessionData.userId = userId;
+  biz.sessionState = "assign_branch_pick_branch";
+  await saveBizSafe(biz);
+
+  return sendList(
+    from,
+    "Select branch",
+    branches.map(b => ({
+      id: `assign_branch_${b._id}`,
+      title: b.name
+    }))
+  );
+}
+
+
+// ===============================
+// FINAL STEP: SAVE USER → BRANCH
+// ===============================
+if (a.startsWith("assign_branch_")) {
   const branchId = a.replace("assign_branch_", "");
 
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // Load users
-  const UserRole = (await import("../models/userRole.js")).default;
-  const users = await UserRole.find({
-    businessId: biz._id,
-    pending: false
-  }).lean();
-
-  if (!users.length) {
-    await sendText(from, "No active users found.");
+  const userId = biz.sessionData.userId;
+  if (!userId) {
+    await sendText(from, "⚠️ No user selected.");
     return sendMainMenu(from);
   }
 
-  biz.sessionState = "assign_branch_pick_user";
-  biz.sessionData.branchId = branchId;
+  const UserRole = (await import("../models/userRole.js")).default;
+
+  await UserRole.findByIdAndUpdate(userId, { branchId });
+
+  // ✅ CLEAN EXIT
+  biz.sessionState = "ready";
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return sendList(
-    from,
-    "Select user",
-    users.map(u => ({
-      id: `assign_user_${u._id}`,
-      title: u.phone
-    }))
-  );
+  await sendText(from, "✅ User successfully assigned to branch.");
+  return sendMainMenu(from);
 }
 
 

@@ -407,9 +407,54 @@ case ACTIONS.ADD_BRANCH: {
   return sendText(from, "Enter new branch name:");
 }
 
+case ACTIONS.VIEW_BRANCHES: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const Branch = (await import("../models/branch.js")).default;
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    await sendText(from, "No branches found.");
+    return sendMainMenu(from);
+  }
+
+  let msg = "🏬 Branches:\n";
+  branches.forEach((b, i) => {
+    msg += `${i + 1}) ${b.name}\n`;
+  });
+
+  await sendText(from, msg);
+  return sendMainMenu(from);
+}
 
 
 
+case ACTIONS.ASSIGN_USER_BRANCH: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const Branch = (await import("../models/branch.js")).default;
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    await sendText(from, "Add a branch first.");
+    return sendMainMenu(from);
+  }
+
+  biz.sessionState = "assign_user_choose_branch";
+  biz.sessionData.branches = branches;
+  await saveBizSafe(biz);
+
+  return sendList(
+    from,
+    "Select branch",
+    branches.map(b => ({
+      id: `assign_branch_${b._id}`,
+      title: b.name
+    }))
+  );
+}
 
 case ACTIONS.VIEW_INVITES: {
   const biz = await getBizForPhone(from);

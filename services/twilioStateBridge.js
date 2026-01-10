@@ -177,7 +177,7 @@ ${joinLink}
 
 Or reply *JOIN*`;
 
-  await sendWhatsAppMessage(phone, msg);
+  await sendText(phone, msg);
 
   biz.sessionState = "ready";
   biz.sessionData = {};

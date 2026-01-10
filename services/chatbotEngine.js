@@ -359,10 +359,14 @@ if (a.startsWith("assign_user_")) {
 // ===============================
 // FINAL STEP: SAVE USER → BRANCH
 // ===============================
+
 // ===============================
 // FINAL STEP: SAVE USER → BRANCH
 // ===============================
-if (a.startsWith("assign_branch_")) {
+if (
+  a.startsWith("assign_branch_") &&
+  biz.sessionState === "assign_branch_pick_branch"
+) {
   const branchId = a.replace("assign_branch_", "");
 
   const biz = await getBizForPhone(from);
@@ -375,10 +379,8 @@ if (a.startsWith("assign_branch_")) {
   }
 
   const UserRole = (await import("../models/userRole.js")).default;
-
   await UserRole.findByIdAndUpdate(userId, { branchId });
 
-  // ✅ CLEAN EXIT
   biz.sessionState = "ready";
   biz.sessionData = {};
   await saveBizSafe(biz);
@@ -386,6 +388,7 @@ if (a.startsWith("assign_branch_")) {
   await sendText(from, "✅ User successfully assigned to branch.");
   return sendMainMenu(from);
 }
+
 
 
   /* =========================

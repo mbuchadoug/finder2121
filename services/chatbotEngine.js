@@ -380,15 +380,9 @@ case ACTIONS.INVITE_USER: {
 
 
 case ACTIONS.BRANCHES_MENU: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  biz.sessionState = "branches_menu";
-  await saveBizSafe(biz);
-
-  // 🔑 FORCE Twilio to respond to the new state
-  return continueTwilioFlow({ from, text: "auto" });
+  return sendBranchesMenu(from);
 }
+
 
 
 

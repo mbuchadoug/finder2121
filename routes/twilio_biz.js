@@ -873,8 +873,10 @@ try {
   action = null;
 }
 
-const isMetaAction = Boolean(action);
-
+const isMetaAction =
+  typeof action === "string" &&
+  action.length > 0 &&
+  !trimmed;
 
     const text = bodyRaw || "";
 const trimmed = text.trim();

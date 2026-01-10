@@ -292,10 +292,13 @@ if (a === ACTIONS.BRANCH_REPORT) {
      TEXT → TWILIO FLOW
   ========================= */
 
-
 const biz = await getBizForPhone(from);
 
-const isMetaAction = Boolean(action);
+// ✅ Only treat REAL buttons/lists as Meta actions
+const isMetaAction =
+  typeof action === "string" &&
+  action.length > 0 &&
+  !text; // typed text should NEVER be meta action
 
 
 // Anything that is NOT a Meta action → Twilio state machine

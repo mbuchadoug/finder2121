@@ -859,8 +859,31 @@ router.post("/webhook", async (req, res) => {
     const bodyRaw = String(params.Body || params.body || "").trim();
     const profileName = String(params.ProfileName || params.profileName || "");
 
+
+    // ================= META INTERACTIVE PARSING =================
+let action = null;
+
+try {
+  if (params?.interactive?.button_reply?.id) {
+    action = params.interactive.button_reply.id;
+  } else if (params?.interactive?.list_reply?.id) {
+    action = params.interactive.list_reply.id;
+  }
+} catch (e) {
+  action = null;
+}
+
+const isMetaAction = Boolean(action);
+
+
     const text = bodyRaw || "";
 const trimmed = text.trim();
+
+// 🔒 Meta actions should NOT be treated as typed text
+if (isMetaAction) {
+  console.log("META ACTION RECEIVED:", action);
+}
+
     if (!rawFrom) return sendTwimlText(res, "Missing sender info");
     //const providerId = rawFrom.replace(/^whatsapp:/i, "").trim();
 
@@ -1168,287 +1191,35 @@ Choose a new package:
 
 
 // ===== ROLE-BASED MAIN MENU ROUTER =====
-if ((state === "idle" || state === "ready") && isSingleNumber && !state.startsWith("report_")) {
-
-
-  const { role } = await getUserBranchContext(biz, providerId);
- const action = resolveMenuAction(role, trimmed);
-if (!action) return sendTwimlText(res, "Invalid selection.");
-
-return dispatchAction({
-  action,
-  biz,
-  providerId,
-  req,
-  res,
-  helpers: {
-    saveBiz,
-    resetSession,
-    sendMenuForUser,
-    sendTwimlText
-  }
-});
-
-  // ---- ROUTE BY ACTION ----
-
-  
-
-  if (action === "create_business") {
-    biz.sessionState = "awaiting_business_name";
-    await saveBiz(biz);
-    return sendTwimlText(res, "Enter business name:");
-  }
-
-  if (action === "invoice") {
-    biz.sessionState = "creating_invoice_choose_client";
-    biz.sessionData = { docType: "invoice", items: [] };
-    await saveBiz(biz);
-    return sendTwimlText(res, "Invoice:\n1) Use saved client\n2) New client\n3) Cancel");
-  }
-
-  if (action === "quote") {
-    biz.sessionState = "creating_invoice_choose_client";
-    biz.sessionData = { docType: "quote", items: [] };
-    await saveBiz(biz);
-    return sendTwimlText(res, "Quotation:\n1) Use saved client\n2) New client\n3) Cancel");
-  }
-
-  if (action === "add_client") {
-    biz.sessionState = "adding_client_name";
-    biz.sessionData = {};
-    await saveBiz(biz);
-    return sendTwimlText(res, "Enter client name:");
-  }
-
-if (action === "payment") {
+// ===== ROLE-BASED MAIN MENU ROUTER =====
+if ((state === "idle" || state === "ready") && (isSingleNumber || isMetaAction)) {
 
   const ctx = await getUserBranchContext(biz, providerId);
   const role = ctx?.role || "owner";
-  const branchId = ctx?.branchId || null;
 
-  const query = {
-    businessId: biz._id,
-    balance: { $gt: 0 }
-  };
+  const resolvedAction = isMetaAction
+    ? action
+    : resolveMenuAction(role, trimmed);
 
-  // Branch restriction for manager / clerk
-  if (role !== "owner" && branchId) {
-    query.$or = [
-      { branchId },
-      { branchId: { $exists: false } },
-      { branchId: null }
-    ];
+  if (!resolvedAction) {
+    return sendTwimlText(res, "Invalid selection.");
   }
 
-  const invoices = await Invoice.find(query)
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
-
-  if (!invoices.length) {
-    await resetSession(biz);
-    return sendTwimlText(res, "No unpaid invoices found.");
-  }
-
-  // store invoices for next step
-  biz.sessionData.invoiceList = invoices;
-  biz.sessionState = "payment_choose_invoice";
-  await saveBiz(biz);
-
-  let msg = "Select invoice to record payment:\n";
-  invoices.forEach((inv, i) => {
-    msg += `${i + 1}) ${inv.number} | Balance: ${formatMoney(inv.balance)} ${inv.currency}\n`;
-  });
-  msg += "0) Cancel";
-
-  return sendTwimlText(res, msg);
-}
-
-
-
-
- if (action === "receipt") {
-
-  if (!canUseFeature(biz, "receipt")) {
-    return blockedMessage(res);
-  }
-
-  biz.sessionState = "creating_invoice_choose_client";
-  biz.sessionData = { docType: "receipt", items: [] };
-  await saveBiz(biz);
-
-  return sendTwimlText(
+  return dispatchAction({
+    action: resolvedAction,
+    biz,
+    providerId,
+    req,
     res,
-    "Receipt:\n1) Use saved client\n2) New client\n3) Cancel"
-  );
-}
-
-
-    if (action === "expense") {
-    biz.sessionState = "expense_amount";
-    biz.sessionData = {};
-    await saveBiz(biz);
-    return sendTwimlText(res, "Enter expense amount:");
-  }
-
-
-  if (action === "upgrade_plan") {
-  const currentKey = biz.package || "trial";
-  const currentPkg = PACKAGES[currentKey];
-
-  biz.sessionState = "upgrade_choose_package";
-  await saveBiz(biz);
-
-  let options = [];
-  let menu = `🚀 Upgrade your plan
-
-Current package: *${currentPkg.label}*
-Monthly limit: ${currentPkg.documentsPerMonth} documents
-
-Choose a new package:\n\n`;
-
-  // Trial → Bronze, Silver, Gold
-  if (currentKey === "trial") {
-    options = ["bronze", "silver", "gold"];
-  }
-
-  // Bronze → Silver, Gold
-  else if (currentKey === "bronze") {
-    options = ["silver", "gold"];
-  }
-
-  // Silver → Gold
-  else if (currentKey === "silver") {
-    options = ["gold"];
-  }
-
-  // Gold → no upgrade
-  else if (currentKey === "gold") {
-    return sendTwimlText(
-      res,
-`✅ You are already on the *Gold* plan.
-
-You have access to all features.
-
-Reply *menu* to continue.`
-    );
-  }
-
-  options.forEach((pkg, i) => {
-    menu += `${i + 1}) ${PACKAGES[pkg].label} - ${PACKAGES[pkg].documentsPerMonth} docs / month\n`;
+    helpers: {
+      saveBiz,
+      resetSession,
+      sendMenuForUser,
+      sendTwimlText
+    }
   });
-
-  menu += `\n0) Cancel`;
-
-  return sendTwimlText(res, menu);
 }
 
-
-  if (action === "settings") {
-    biz.sessionState = "settings_menu";
-    await saveBiz(biz);
-    return sendTwimlText(res, `Settings:
-1) Currency
-2) Payment terms
-3) Invoice prefix
-4) Quote prefix
-5) Change logo
-6) View clients
-7) Receipt prefix
-8) Branches
-0) Menu`);
-  }
-
-
-if (action === "reports_menu") {
-  biz.sessionState = "reports_menu";
-  await saveBiz(biz);
-
-  // Bronze / Silver → Daily only
-  if (!canAccessAdvancedReports(biz)) {
-    return sendTwimlText(
-      res,
-`📊 Reports
-1) Daily report
-0) Back
-
-🔒 Upgrade to Gold to unlock weekly & monthly reports.`
-    );
-  }
-
-  // Gold / Enterprise → Full menu
-  return sendTwimlText(
-    res,
-`📊 Reports
-1) Daily report
-2) Weekly report
-3) Monthly report
-4) By branch
-0) Back`
-  );
-}
-
-
-
-
-
-if (action === "statement") {
-  biz.sessionState = "statement_choose_client";
-  await saveBiz(biz);
-  return sendTwimlText(res, "Enter client name:");
-}
-
-if (action === "invite_user") {
-  if (!canUseFeature(biz, "invite_user")) {
-    return blockedMessage(res);
-  }
-
-  const ok = await requireRole(biz, providerId, ["owner"]);
-  if (!ok) {
-    return sendTwimlText(res, "⛔ Only the owner can invite users.");
-  }
-
-  // 🚀 DIRECTLY START INVITE FLOW
-  const branches = await Branch.find({ businessId: biz._id }).lean();
-
-  if (!branches.length) {
-    return sendTwimlText(res, "No branches found. Add a branch first.");
-  }
-
-  biz.sessionData.branches = branches;
-  biz.sessionState = "assign_user_choose_branch";
-  await saveBiz(biz);
-
-  let msg = "Select branch for new user:\n";
-  branches.forEach((b, i) => {
-    msg += `${i + 1}) ${b.name}\n`;
-  });
-  msg += "0) Cancel";
-
-  return sendTwimlText(res, msg);
-}
-
-
-if (action === "upload_logo") {
-
-  if (!canUseFeature(biz, "upload_logo")) {
-    return blockedMessage(res);
-  }
-  const ok = await requireRole(biz, providerId, ["owner"]);
-  if (!ok) {
-    return sendTwimlText(res, "⛔ Only the owner can upload a logo.");
-  }
-
-  biz.sessionState = "awaiting_logo_upload";
-  await saveBiz(biz);
-
-  return sendTwimlText(
-    res,
-    "📷 Upload logo\n\nPlease send your logo image now (PNG or JPG).\nReply 0 to cancel."
-  );
-}
-
-}
 
 // ================= PAYMENT START =================
 if (state === "payment_start") {

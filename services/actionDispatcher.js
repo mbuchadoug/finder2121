@@ -1,5 +1,8 @@
 // services/actionDispatcher.js
 import { ACTIONS } from "./actions.js";
+import Branch from "../models/branch.js";
+import { requireRole } from "./roleGuard.js";
+
 
 // ⛔ DO NOT import Meta UI here
 // ⛔ DO NOT import Twilio UI here
@@ -55,6 +58,34 @@ export async function dispatchAction({
       biz.sessionState = "upgrade_choose_package";
       await saveBiz(biz);
       return res.redirect(307, req.originalUrl);
+
+      case ACTIONS.INVITE_USER: {
+  // 🔒 Owner-only
+  const ok = await requireRole(biz, providerId, ["owner"]);
+  if (!ok) {
+    return sendTwimlText(res, "⛔ Only the owner can invite users.");
+  }
+
+  const branches = await Branch.find({ businessId: biz._id }).lean();
+
+  if (!branches.length) {
+    return sendTwimlText(res, "No branches found. Add a branch first.");
+  }
+
+  // 🚀 START INVITE FLOW (THIS IS THE KEY FIX)
+  biz.sessionData.branches = branches;
+  biz.sessionState = "assign_user_choose_branch";
+  await saveBiz(biz);
+
+  let msg = "Select branch for new user:\n";
+  branches.forEach((b, i) => {
+    msg += `${i + 1}) ${b.name}\n`;
+  });
+  msg += "0) Cancel";
+
+  return sendTwimlText(res, msg);
+}
+
 
     case ACTIONS.CANCEL:
     case ACTIONS.BACK:

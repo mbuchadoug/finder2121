@@ -38,7 +38,7 @@ export async function handleIncomingMessage({ from, action }) {
 const biz = await getBizForPhone(from);
   if (!al && biz?.sessionState === "awaiting_logo_upload") {
     return; // let Twilio webhook handle the image
-  }s
+  }
 
   if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);

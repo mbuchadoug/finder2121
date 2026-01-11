@@ -35,7 +35,8 @@ export async function handleIncomingMessage({ from, action }) {
   const al = a.toLowerCase();
 
   // 🔒 CRITICAL: Do NOT interrupt Twilio media flows (logo upload)
-  const biz = await getBizForPhone(from);
+  biz = biz || await getBizForPhone(from);
+
   if (!al && biz?.sessionState === "awaiting_logo_upload") {
     return; // let Twilio webhook handle the image
   }
@@ -58,7 +59,7 @@ export async function handleIncomingMessage({ from, action }) {
 if (a.startsWith("payinv_")) {
   const invoiceId = a.replace("payinv_", "");
 
-   biz = await getBizForPhone(from);
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const invoice = await Invoice.findById(invoiceId);
@@ -295,7 +296,8 @@ if (a === ACTIONS.BRANCH_REPORT) {
      TEXT → TWILIO FLOW
   ========================= */
 
- biz = await getBizForPhone(from);
+biz = biz || await getBizForPhone(from);
+
 
 // 🔑 In Meta Cloud, typed text ALSO arrives as `action`
 const text = typeof action === "string" ? action.trim() : "";

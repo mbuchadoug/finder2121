@@ -81,25 +81,7 @@ if (state === "settings_terms") {
 }
 
 
-if (state === "awaiting_logo_upload") {
-  // 1️⃣ Validate media
-  if (!mediaUrl) {
-    await sendText(from, "❌ Please send an image file (PNG or JPG).");
-    return true;
-  }
 
-  // 2️⃣ Save logo
-  biz.logoUrl = mediaUrl;
-  biz.sessionState = "settings_menu";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  // 3️⃣ Confirm + return to SETTINGS (NOT main menu)
-  await sendText(from, "✅ Business logo updated successfully.");
-  await sendSettingsMenu(from);
-
-  return true;
-}
 
 
 

@@ -2043,26 +2043,37 @@ if (state === "awaiting_logo_upload") {
   }
 
   const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
+
   if (!mediaCount) {
     return sendTwimlText(
       res,
-      "Please send an image file (PNG or JPG), or reply 0 to cancel."
+      "📷 Please send an image file (PNG or JPG), or reply 0 to cancel."
     );
   }
 
   const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
 
   try {
-    const saved = await saveLogoFromTwilio(mediaUrl0, biz._id.toString());
+    const saved = await saveLogoFromTwilio(
+      mediaUrl0,
+      biz._id.toString()
+    );
+
+    // ✅ SAVE LOGO
     biz.logoUrl = saved.publicUrl;
-    biz.sessionState = "ready";
+
+    // ✅ RETURN TO SETTINGS (NOT MAIN MENU)
+    biz.sessionState = "settings_menu";
     biz.sessionData = {};
     await saveBiz(biz);
 
-    return sendWithMenuHint(
+    await sendTwimlText(
       res,
-      "✅ Logo uploaded successfully."
+      "✅ Business logo uploaded successfully."
     );
+
+    return sendSettingsMenu(from); // 🔁 BACK TO SETTINGS (META)
+
   } catch (e) {
     console.error("logo save failed", e);
     return sendTwimlText(
@@ -2071,6 +2082,7 @@ if (state === "awaiting_logo_upload") {
     );
   }
 }
+
 
 
   

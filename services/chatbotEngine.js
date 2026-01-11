@@ -53,11 +53,16 @@ if (al === "menu") {
 
 // 🖼️ Empty action (media uploads, etc.)
 // Let Twilio handle it if a flow is active
+// 🖼️ Empty action (media uploads, etc.)
 if (!al) {
   const biz = await getBizForPhone(from);
 
+  // 🔑 Let Twilio webhook respond when a flow is active (e.g. logo upload)
   if (biz?.sessionState && biz.sessionState !== "idle" && biz.sessionState !== "ready") {
-    return;
+    return continueTwilioFlow({
+      from,
+      text: ""
+    });
   }
 
   return sendMainMenu(from);

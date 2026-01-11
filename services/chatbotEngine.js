@@ -322,8 +322,8 @@ const settingsStates = [
   "settings_rcpt_prefix"
 ];
 
-// ❌ NEVER send Meta-triggered states to Twilio
-if (!isMetaAction && biz) {
+// ✅ Allow Twilio to handle active session states (including media uploads)
+if (!isMetaAction && biz?.sessionState) {
   const handled = await continueTwilioFlow({
     from,
     text
@@ -792,7 +792,16 @@ case ACTIONS.SETTINGS_MENU: {
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
 
-    default:
-      return sendMainMenu(from);
+   default: {
+  const biz = await getBizForPhone(from);
+
+  // 🚫 Do NOT interrupt Twilio flows (e.g. logo upload)
+  if (biz?.sessionState === "awaiting_logo_upload") {
+    return;
+  }
+
+  return sendMainMenu(from);
+}
+
   }
 }

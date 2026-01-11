@@ -69,53 +69,6 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
 
     if (!msg) return;
 
-
-
-    // ===============================
-    // 🖼️ HANDLE LOGO UPLOAD (META)
-    // ===============================
-    if (msg.type === "image") {
-      const from = msg.from;
-      const imageUrl = msg.image?.url;
-
-      if (!imageUrl) return;
-
-      const biz = await getBizForPhone(from);
-
-      // Only accept image when user is in logo upload mode
-      if (!biz || biz.sessionState !== "awaiting_logo_upload") {
-        return;
-      }
-
-      try {
-        const logoUrl = await saveMetaLogo({
-          imageUrl,
-          businessId: biz._id.toString()
-        });
-
-        biz.logoUrl = logoUrl;
-        biz.sessionState = "settings_menu";
-        biz.sessionData = {};
-        await biz.save();
-
-        await sendText(
-          from,
-          "✅ Logo uploaded successfully.\n\nYou are back in Settings."
-        );
-      } catch (err) {
-        console.error("META LOGO SAVE ERROR:", err);
-        await sendText(from, "❌ Failed to save logo. Please try again.");
-      }
-
-      return; // 🚫 STOP — do NOT continue to text handling
-    }
-
-
-
-
-
-
-
     const from = msg.from;
     let action = "";
 

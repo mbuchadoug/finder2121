@@ -345,14 +345,15 @@ const settingsStates = [
   "settings_rcpt_prefix"
 ];
 
-// ❌ NEVER send Meta-triggered states to Twilio
-if (!isMetaAction && biz) {
+// ✅ Allow Twilio flow to handle text OR media when a state is active
+if (!isMetaAction && biz?.sessionState) {
   const handled = await continueTwilioFlow({
     from,
     text
   });
   if (handled) return;
 }
+
 
 
 if (a.startsWith("invite_branch_")) {

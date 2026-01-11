@@ -41,10 +41,21 @@ export async function handleIncomingMessage({ from, action }) {
     return sendMainMenu(from);
   }*/
 
-    if (!al || ["hi", "hello", "menu"].includes(al)) {
+    // 👋 Greetings → menu (always)
+if (["hi", "hello"].includes(al)) {
+  return sendMainMenu(from);
+}
+
+// 📋 Explicit menu request → ALWAYS show menu
+if (al === "menu") {
+  return sendMainMenu(from);
+}
+
+// 🖼️ Empty action (media uploads, etc.)
+// Let Twilio handle it if a flow is active
+if (!al) {
   const biz = await getBizForPhone(from);
 
-  // 🔒 DO NOT interrupt active flows (logo upload, settings, etc.)
   if (biz?.sessionState && biz.sessionState !== "idle" && biz.sessionState !== "ready") {
     return;
   }

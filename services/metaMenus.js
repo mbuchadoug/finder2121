@@ -81,10 +81,15 @@ export async function sendBusinessMenu(to) {
 ========================= */
 export async function sendSettingsMenu(to) {
   return sendList(to, "⚙ Settings", [
-    { id: ACTIONS.UPGRADE, title: "🚀 Upgrade Plan" },
+    { id: "settings_currency", title: "💱 Currency" },
+    { id: "settings_terms", title: "📅 Payment Terms" },
+    { id: "settings_inv_prefix", title: "🧾 Invoice Prefix" },
+    { id: "settings_qt_prefix", title: "📄 Quote Prefix" },
+    { id: "settings_rcpt_prefix", title: "🧾 Receipt Prefix" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
+
 
 export async function sendInvoiceConfirmMenu(to, summaryText) {
   return sendList(to, summaryText, [

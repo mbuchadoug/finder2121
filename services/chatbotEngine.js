@@ -402,6 +402,41 @@ if (
 }
 
 
+// ================= SETTINGS (META → TWILIO) =================
+if (a === "settings_currency") {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_currency";
+  await saveBizSafe(biz);
+  return sendText(from, "Reply with new currency (USD, ZWL, ZAR):");
+}
+
+if (a === "settings_terms") {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_terms";
+  await saveBizSafe(biz);
+  return sendText(from, "Enter payment terms in days (e.g. 30):");
+}
+
+if (a === "settings_inv_prefix") {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_inv_prefix";
+  await saveBizSafe(biz);
+  return sendText(from, "Enter invoice prefix (e.g. INV):");
+}
+
+if (a === "settings_qt_prefix") {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_qt_prefix";
+  await saveBizSafe(biz);
+  return sendText(from, "Enter quote prefix (e.g. QT):");
+}
+
+if (a === "settings_rcpt_prefix") {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_rcpt_prefix";
+  await saveBizSafe(biz);
+  return sendText(from, "Enter receipt prefix (e.g. RCPT):");
+}
 
   /* =========================
      MENUS
@@ -640,10 +675,18 @@ case ACTIONS.PAYMENT_OUT: {
     case ACTIONS.BUSINESS_MENU:
       return sendBusinessMenu(from);
 
-      
-    case ACTIONS.SETTINGS_MENU:
-      return sendSettingsMenu(from);
+      case ACTIONS.SETTINGS_MENU: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
 
+  biz.sessionState = "settings_menu"; // ✅ CRITICAL
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendSettingsMenu(from);
+}
+
+    
     case ACTIONS.BACK:
       return sendMainMenu(from);
 

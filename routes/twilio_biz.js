@@ -1036,7 +1036,7 @@ if (trimmed === "1") {
 
 const newBiz = await Business.create({
   name: null,
-  currency: "ZWL",
+  currency: "USD",
   provider: "whatsapp",
 
   package: "trial",

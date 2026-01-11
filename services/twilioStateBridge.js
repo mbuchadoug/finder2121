@@ -42,53 +42,6 @@ export async function continueTwilioFlow({ from, text }) {
 /* ===========================
    ⚙️ SETTINGS: TEXT INPUT HANDLERS
 =========================== */
-/* ===========================
-   🖼️ SETTINGS: LOGO UPLOAD
-=========================== */
-if (state === "awaiting_logo_upload") {
-  // Allow cancel
-  if (trimmed === "0") {
-    biz.sessionState = "settings_menu";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    await sendText(from, "❌ Logo upload cancelled.");
-    await sendSettingsMenu(from);
-    return true;
-  }
-
-  // Meta sends images as media, not text
-  const media =
-    (biz.sessionData?.lastMedia) ||
-    (biz.sessionData?.media);
-
-  // SAFETY: if no image received
-  if (!media || !media.url) {
-    await sendText(
-      from,
-      "❌ Please send an image (PNG or JPG) as your logo, or reply 0 to cancel."
-    );
-    return true;
-  }
-
-  // ✅ SAVE LOGO
-  biz.logoUrl = media.url;
-
-  biz.sessionState = "settings_menu";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  await sendText(from, "✅ Business logo updated successfully.");
-  await sendSettingsMenu(from);
-
-  return true;
-}
-
-
-
-
-
-
 
 
 

@@ -37,9 +37,21 @@ export async function handleIncomingMessage({ from, action }) {
   /* =========================
      ENTRY
   ========================= */
-  if (!al || ["hi", "hello", "menu"].includes(al)) {
+  /*if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
+  }*/
+
+    if (!al || ["hi", "hello", "menu"].includes(al)) {
+  const biz = await getBizForPhone(from);
+
+  // 🔒 DO NOT interrupt active flows (logo upload, settings, etc.)
+  if (biz?.sessionState && biz.sessionState !== "idle" && biz.sessionState !== "ready") {
+    return;
   }
+
+  return sendMainMenu(from);
+}
+
 
   /* =========================
      META LIST / BUTTON ACTIONS

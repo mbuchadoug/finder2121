@@ -42,12 +42,6 @@ export async function handleIncomingMessage({ from, action }) {
   }*/
 
     // 🔒 Prevent Meta from interrupting Twilio media flows
-const biz2 = await getBizForPhone(from);
-
-if (!al && biz2?.sessionState === "awaiting_logo_upload") {
-  // Do NOTHING — let Twilio webhook handle the image
-  return;
-}
 
 if (!al || ["hi", "hello", "menu"].includes(al)) {
   return sendMainMenu(from);

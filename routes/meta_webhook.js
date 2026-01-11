@@ -43,6 +43,18 @@ router.post("/whatsapp", async (req, res) => {
     const value = change?.value;
     const msg = value?.messages?.[0];
 
+
+    //////////////////////////////////
+    // 🔍 DEBUG META WEBHOOK
+console.log("===== META WEBHOOK HIT =====");
+console.log("Message type:", msg?.type);
+console.log("From:", msg?.from);
+console.log("Text:", msg?.text?.body);
+console.log("Has image:", !!msg?.image);
+console.log("Image ID:", msg?.image?.id);
+console.log("Image MIME:", msg?.image?.mime_type);
+console.log("Full msg:", JSON.stringify(msg, null, 2));
+
     // ✅ ALWAYS ACK META IMMEDIATELY
     res.sendStatus(200);
 

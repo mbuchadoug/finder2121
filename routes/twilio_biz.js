@@ -1153,6 +1153,52 @@ You are not linked to any business.
 const isSingleNumber = /^\d+$/.test(trimmed);
     const state = biz.sessionState || "idle";
 
+if (state === "awaiting_logo_upload") {
+
+  // cancel
+  if (trimmed === "0") {
+    await resetSession(biz);
+    return sendMenuForUser(res, biz, providerId);
+  }
+
+  const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
+
+  if (!mediaCount) {
+    return sendTwimlText(
+      res,
+      "📷 Please send an image file (PNG or JPG), or reply 0 to cancel."
+    );
+  }
+
+  const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
+
+  try {
+    const saved = await saveLogoFromTwilio(
+      mediaUrl0,
+      biz._id.toString()
+    );
+
+    biz.logoUrl = saved.publicUrl;
+    biz.sessionState = "settings_menu";
+    biz.sessionData = {};
+    await saveBiz(biz);
+
+    return sendTwimlText(
+      res,
+      "✅ Business logo uploaded successfully.\n\nReply *menu* to continue."
+    );
+
+  } catch (e) {
+    console.error("logo save failed", e);
+    return sendTwimlText(
+      res,
+      "❌ Could not save logo. Please send a PNG or JPG image, or reply 0 to cancel."
+    );
+  }
+}
+
+
+
     const ctx = await getUserBranchContext(biz, providerId);
 const role = ctx?.role;
 
@@ -2034,57 +2080,6 @@ return sendWithMenuHint(res, "✅ Expense recorded successfully.");
 
     // Logo upload (media)
     const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
-if (state === "awaiting_logo_upload") {
-
-  // cancel
-  if (trimmed === "0") {
-    await resetSession(biz);
-    return sendMenuForUser(res, biz, providerId);
-  }
-
-  const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
-
-  if (!mediaCount) {
-    return sendTwimlText(
-      res,
-      "📷 Please send an image file (PNG or JPG), or reply 0 to cancel."
-    );
-  }
-
-  const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
-
-  try {
-    const saved = await saveLogoFromTwilio(
-      mediaUrl0,
-      biz._id.toString()
-    );
-
-    // ✅ SAVE LOGO
-    biz.logoUrl = saved.publicUrl;
-
-    // ✅ RETURN TO SETTINGS (NOT MAIN MENU)
-    biz.sessionState = "settings_menu";
-    biz.sessionData = {};
-    await saveBiz(biz);
-
-    await sendTwimlText(
-      res,
-      "✅ Business logo uploaded successfully."
-    );
-
-   return sendTwimlText(
-  res,
-  "✅ Business logo uploaded successfully.\n\nReply *menu* to continue."
-);
-
-  } catch (e) {
-    console.error("logo save failed", e);
-    return sendTwimlText(
-      res,
-      "❌ Could not save logo. Please send a PNG or JPG image, or reply 0 to cancel."
-    );
-  }
-}
 
 
 

@@ -79,15 +79,21 @@ export async function sendBusinessMenu(to) {
 /* =========================
    SETTINGS
 ========================= */
-export async function sendSettingsMenu(to) {
-  return sendList(to, "⚙ Settings", [
-    { id: "settings_currency", title: "💱 Currency" },
-    { id: "settings_terms", title: "📅 Payment Terms" },
-    { id: "settings_inv_prefix", title: "🧾 Invoice Prefix" },
-    { id: "settings_qt_prefix", title: "📄 Quote Prefix" },
-    { id: "settings_rcpt_prefix", title: "🧾 Receipt Prefix" },
-    { id: ACTIONS.BACK, title: "⬅ Back" }
-  ]);
+export function sendSettingsMenu(from) {
+  return sendList(
+    from,
+    "⚙️ Settings",
+    [
+      { id: ACTIONS.SETTINGS_CURRENCY, title: "💱 Currency" },
+      { id: ACTIONS.SETTINGS_TERMS, title: "📅 Payment terms" },
+      { id: ACTIONS.SETTINGS_INV_PREFIX, title: "🧾 Invoice prefix" },
+      { id: ACTIONS.SETTINGS_QT_PREFIX, title: "📄 Quote prefix" },
+      { id: ACTIONS.SETTINGS_RCPT_PREFIX, title: "🧾 Receipt prefix" },
+      { id: ACTIONS.SETTINGS_LOGO, title: "🖼️ Business logo" },
+      { id: ACTIONS.SETTINGS_CLIENTS, title: "👥 View clients" },
+      { id: ACTIONS.SETTINGS_BRANCHES, title: "🏬 Branches" }
+    ]
+  );
 }
 
 

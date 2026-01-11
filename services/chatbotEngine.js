@@ -654,16 +654,52 @@ case ACTIONS.PAYMENT_OUT: {
     case ACTIONS.BUSINESS_MENU:
       return sendBusinessMenu(from);
 
-      case ACTIONS.SETTINGS_MENU: {
+case ACTIONS.SETTINGS_MENU: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  biz.sessionState = "settings_menu"; // ✅ CRITICAL
+  biz.sessionState = "settings_menu";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
   return sendSettingsMenu(from);
 }
+
+// ================= SETTINGS (META) =================
+
+if (a === ACTIONS.SETTINGS_INV_PREFIX) {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_inv_prefix";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `Current invoice prefix: ${biz.invoicePrefix || "INV"}\n\nReply with new prefix:`
+  );
+}
+
+if (a === ACTIONS.SETTINGS_QT_PREFIX) {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_qt_prefix";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `Current quote prefix: ${biz.quotePrefix || "QT"}\n\nReply with new prefix:`
+  );
+}
+
+if (a === ACTIONS.SETTINGS_RCPT_PREFIX) {
+  const biz = await getBizForPhone(from);
+  biz.sessionState = "settings_rcpt_prefix";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `Current receipt prefix: ${biz.receiptPrefix || "RCPT"}\n\nReply with new prefix:`
+  );
+}
+
 
     
     case ACTIONS.BACK:

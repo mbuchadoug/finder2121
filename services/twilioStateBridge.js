@@ -2,7 +2,7 @@ import Business from "../models/business.js";
 import UserSession from "../models/userSession.js";
 import Client from "../models/client.js";
 import { sendText } from "./metaSender.js";
-import { sendInvoiceConfirmMenu, sendMainMenu } from "./metaMenus.js";
+import { sendInvoiceConfirmMenu, sendMainMenu, sendSettingsMenu } from "./metaMenus.js";
 import Invoice from "../models/invoice.js";
 import Expense from "../models/expense.js";
 
@@ -11,6 +11,8 @@ import { sendDocument } from "./metaSender.js";
 import { sendButtons } from "./metaSender.js";
 import { ACTIONS } from "./actions.js";
 import { sendList } from "./metaSender.js";
+//import { sendSettingsMenu } from "./metaMenus.js";
+
 
 async function saveBizSafe(biz) {
   if (!biz) return;
@@ -36,6 +38,67 @@ export async function continueTwilioFlow({ from, text }) {
      🔑 ENSURE CLIENT IS LOADED
      (META RESUME SAFETY)
   ============================ */
+
+/* ===========================
+   ⚙️ SETTINGS: TEXT INPUT HANDLERS
+=========================== */
+
+// INVOICE PREFIX
+if (state === "settings_inv_prefix") {
+  if (!trimmed) {
+    await sendText(from, "❌ Prefix cannot be empty. Enter a valid invoice prefix:");
+    return true;
+  }
+
+  biz.invoicePrefix = trimmed.toUpperCase();
+  biz.sessionState = "settings_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, `✅ Invoice prefix updated to *${biz.invoicePrefix}*`);
+  await sendSettingsMenu(from); // 🔁 BACK TO SETTINGS (META)
+
+  return true;
+}
+
+// QUOTE PREFIX
+if (state === "settings_qt_prefix") {
+  if (!trimmed) {
+    await sendText(from, "❌ Prefix cannot be empty. Enter a valid quote prefix:");
+    return true;
+  }
+
+  biz.quotePrefix = trimmed.toUpperCase();
+  biz.sessionState = "settings_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, `✅ Quote prefix updated to *${biz.quotePrefix}*`);
+  await sendSettingsMenu(from);
+
+  return true;
+}
+
+// RECEIPT PREFIX
+if (state === "settings_rcpt_prefix") {
+  if (!trimmed) {
+    await sendText(from, "❌ Prefix cannot be empty. Enter a valid receipt prefix:");
+    return true;
+  }
+
+  biz.receiptPrefix = trimmed.toUpperCase();
+  biz.sessionState = "settings_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, `✅ Receipt prefix updated to *${biz.receiptPrefix}*`);
+  await sendSettingsMenu(from);
+
+  return true;
+}
+
+
+
   if (!biz.sessionData.client && biz.sessionData.clientId) {
     const client = await Client.findById(biz.sessionData.clientId);
     if (client) {

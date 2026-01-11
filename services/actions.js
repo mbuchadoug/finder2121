@@ -54,6 +54,15 @@ ADD_BRANCH: "add_branch",
 VIEW_BRANCHES: "view_branches",
 ASSIGN_BRANCH_USERS: "assign_branch_users",
 
+// SETTINGS
+SETTINGS_CURRENCY: "settings_currency",
+SETTINGS_TERMS: "settings_terms",
+SETTINGS_INV_PREFIX: "settings_inv_prefix",
+SETTINGS_QT_PREFIX: "settings_qt_prefix",
+SETTINGS_RCPT_PREFIX: "settings_rcpt_prefix",
+SETTINGS_LOGO: "settings_logo",
+SETTINGS_CLIENTS: "settings_clients",
+SETTINGS_BRANCHES: "settings_branches",
 
 
 

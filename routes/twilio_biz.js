@@ -1163,26 +1163,29 @@ const isSingleNumber = /^\d+$/.test(trimmed);
 
 if (state === "awaiting_logo_upload") {
 
-  // cancel
-  if (trimmed === "0") {
-    await resetSession(biz);
-    return sendMenuForUser(res, biz, providerId);
-  }
+  const mediaCount = Number(req.body.NumMedia || 0);
 
-  const mediaCount = Number(params.NumMedia || params.MediaCount || 0);
-
-  if (!mediaCount) {
+  // ❌ No image sent
+  if (mediaCount === 0) {
     return sendTwimlText(
       res,
-      "📷 Please send an image file (PNG or JPG), or reply 0 to cancel."
+      "📷 Please send an image (PNG or JPG), or reply 0 to cancel."
     );
   }
 
-  const mediaUrl0 = params.MediaUrl0 || params.mediaUrl0;
+  // ✅ Image received
+  const mediaUrl = req.body.MediaUrl0;
+
+  if (!mediaUrl) {
+    return sendTwimlText(
+      res,
+      "❌ Image upload failed. Please try again."
+    );
+  }
 
   try {
     const saved = await saveLogoFromTwilio(
-      mediaUrl0,
+      mediaUrl,
       biz._id.toString()
     );
 
@@ -1196,14 +1199,16 @@ if (state === "awaiting_logo_upload") {
       "✅ Business logo uploaded successfully.\n\nReply *menu* to continue."
     );
 
-  } catch (e) {
-    console.error("logo save failed", e);
+  } catch (err) {
+    console.error("LOGO SAVE ERROR:", err);
+
     return sendTwimlText(
       res,
-      "❌ Could not save logo. Please send a PNG or JPG image, or reply 0 to cancel."
+      "❌ Failed to save logo. Please try again."
     );
   }
 }
+
 
 
 

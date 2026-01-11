@@ -37,37 +37,9 @@ export async function handleIncomingMessage({ from, action }) {
   /* =========================
      ENTRY
   ========================= */
-  /*if (!al || ["hi", "hello", "menu"].includes(al)) {
+  if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
-  }*/
-
-    // 👋 Greetings → menu (always)
-if (["hi", "hello"].includes(al)) {
-  return sendMainMenu(from);
-}
-
-// 📋 Explicit menu request → ALWAYS show menu
-if (al === "menu") {
-  return sendMainMenu(from);
-}
-
-// 🖼️ Empty action (media uploads, etc.)
-// Let Twilio handle it if a flow is active
-// 🖼️ Empty action (media uploads, etc.)
-if (!al) {
-  const biz = await getBizForPhone(from);
-
-  // 🔑 Let Twilio webhook respond when a flow is active (e.g. logo upload)
-  if (biz?.sessionState && biz.sessionState !== "idle" && biz.sessionState !== "ready") {
-    return continueTwilioFlow({
-      from,
-      text: ""
-    });
   }
-
-  return sendMainMenu(from);
-}
-
 
   /* =========================
      META LIST / BUTTON ACTIONS
@@ -350,15 +322,14 @@ const settingsStates = [
   "settings_rcpt_prefix"
 ];
 
-// ✅ Allow Twilio flow to handle text OR media when a state is active
-if (!isMetaAction && biz?.sessionState) {
+// ❌ NEVER send Meta-triggered states to Twilio
+if (!isMetaAction && biz) {
   const handled = await continueTwilioFlow({
     from,
     text
   });
   if (handled) return;
 }
-
 
 
 if (a.startsWith("invite_branch_")) {

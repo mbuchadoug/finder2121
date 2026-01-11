@@ -365,9 +365,10 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
         if (idx !== -1) logoPathPart = rawLogoUrl.slice(idx);
       }
 
-      if (logoPathPart && logoPathPart.startsWith("/docs/logos/")) {
+      if (logoPathPart && logoPathPart.startsWith("/img/")) {
         const logoFilename = path.basename(logoPathPart);
-        const localLogo = path.join(process.cwd(), "public", "docs", "logos", logoFilename);
+       const localLogo = path.join(process.cwd(), "public", logoPathPart);
+
         if (fs.existsSync(localLogo)) {
           try {
             const data = await fs.promises.readFile(localLogo);
@@ -616,7 +617,11 @@ async function sendWhatsAppMessage(toPhone, message) {
 
 
 /* ---------- Logo saving helpers ---------- */
-async function ensureLogosDir() { const logosDir = path.join(process.cwd(), "public", "docs", "logos"); try { await fs.promises.mkdir(logosDir, { recursive: true }); } catch (e) {} return logosDir; }
+async function ensureLogosDir() {
+  const imgDir = path.join(process.cwd(), "public", "img");
+  try { await fs.promises.mkdir(imgDir, { recursive: true }); } catch (e) {}
+  return imgDir;
+}
 
 /**
  * Improved saveLogoFromTwilio:
@@ -718,7 +723,10 @@ async function saveLogoFromTwilio(mediaUrl, businessId) {
   await fs.promises.writeFile(filepath, resp.data);
 
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-  const publicUrl = site ? `${site}/docs/logos/${filename}` : `/docs/logos/${filename}`;
+  const publicUrl = site
+  ? `${site}/img/${filename}`
+  : `/img/${filename}`;
+
   return { filepath, filename, publicUrl };
 }
 function resolveMenuAction(role, choice) {

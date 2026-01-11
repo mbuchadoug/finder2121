@@ -982,6 +982,13 @@ if (session?.activeBusinessId) {
   biz = await Business.findById(session.activeBusinessId);
 }
 
+// 🔍 DEBUG: LOGO UPLOAD DIAGNOSTICS
+console.log("TWILIO WEBHOOK HIT");
+console.log("Body:", req.body.Body);
+console.log("NumMedia:", req.body.NumMedia);
+console.log("MediaUrl0:", req.body.MediaUrl0);
+console.log("SessionState:", biz?.sessionState);
+
 
 // 🚫 TRIAL EXPIRY CHECK (ALLOW MENU + UPGRADE ONLY)
 if (isTrialExpired(biz)) {

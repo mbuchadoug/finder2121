@@ -37,9 +37,16 @@ export async function handleIncomingMessage({ from, action }) {
   /* =========================
      ENTRY
   ========================= */
-  if (!al || ["hi", "hello", "menu"].includes(al)) {
-    return sendMainMenu(from);
+if (!al || ["hi", "hello", "menu"].includes(al)) {
+  const biz = await getBizForPhone(from);
+
+  // 🔒 If Twilio is handling a flow (e.g. logo upload), DO NOT override
+  if (biz?.sessionState && biz.sessionState !== "ready") {
+    return;
   }
+
+  return sendMainMenu(from);
+}
 
   /* =========================
      META LIST / BUTTON ACTIONS

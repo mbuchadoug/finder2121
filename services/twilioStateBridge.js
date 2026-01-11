@@ -42,6 +42,71 @@ export async function continueTwilioFlow({ from, text }) {
 /* ===========================
    ⚙️ SETTINGS: TEXT INPUT HANDLERS
 =========================== */
+if (state === "settings_currency") {
+  const cur = trimmed.toUpperCase();
+
+  if (!["ZWL", "USD", "ZAR"].includes(cur)) {
+    await sendText(from, "❌ Invalid currency. Use USD, ZWL or ZAR:");
+    return true;
+  }
+
+  biz.currency = cur;
+  biz.sessionState = "settings_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, `✅ Currency updated to *${cur}*`);
+  await sendSettingsMenu(from);
+
+  return true;
+}
+
+if (state === "settings_terms") {
+  const days = Number(trimmed);
+
+  if (isNaN(days) || days < 0) {
+    await sendText(from, "❌ Enter a valid number of days (e.g. 30):");
+    return true;
+  }
+
+  biz.paymentTermsDays = days;
+  biz.sessionState = "settings_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, `✅ Payment terms set to *${days} days*`);
+  await sendSettingsMenu(from);
+
+  return true;
+}
+
+
+if (state === "awaiting_logo_upload") {
+  // 1️⃣ Validate media
+  if (!mediaUrl) {
+    await sendText(from, "❌ Please send an image file (PNG or JPG).");
+    return true;
+  }
+
+  // 2️⃣ Save logo
+  biz.logoUrl = mediaUrl;
+  biz.sessionState = "settings_menu";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  // 3️⃣ Confirm + return to SETTINGS (NOT main menu)
+  await sendText(from, "✅ Business logo updated successfully.");
+  await sendSettingsMenu(from);
+
+  return true;
+}
+
+
+
+
+
+
+
 
 // INVOICE PREFIX
 if (state === "settings_inv_prefix") {

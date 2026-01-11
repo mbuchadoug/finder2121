@@ -455,6 +455,75 @@ if (a === ACTIONS.SETTINGS_RCPT_PREFIX) {
   );
 }
 
+if (a === ACTIONS.SETTINGS_CURRENCY) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "settings_currency";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `Current currency: ${biz.currency}\n\nReply with new currency (USD, ZWL, ZAR):`
+  );
+}
+
+
+if (a === ACTIONS.SETTINGS_TERMS) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "settings_terms";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `Current payment terms: ${biz.paymentTermsDays || 0} days\n\nReply with number of days:`
+  );
+}
+
+
+if (a === ACTIONS.SETTINGS_LOGO) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "awaiting_logo_upload";
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    "📷 Please send your business logo image (PNG or JPG).\nReply 0 to cancel."
+  );
+}
+
+
+if (a === ACTIONS.SETTINGS_CLIENTS) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const Client = (await import("../models/client.js")).default;
+  const clients = await Client.find({ businessId: biz._id }).lean();
+
+  if (!clients.length) {
+    return sendText(from, "No clients found.");
+  }
+
+  let msg = "👥 Clients:\n";
+  clients.forEach((c, i) => {
+    msg += `${i + 1}) ${c.name || c.phone}\n`;
+  });
+
+  await sendText(from, msg);
+  return sendSettingsMenu(from);
+}
+
+
+if (a === ACTIONS.SETTINGS_BRANCHES) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  return sendBranchesMenu(from);
+}
 
 
   /* =========================

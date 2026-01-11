@@ -2072,7 +2072,10 @@ if (state === "awaiting_logo_upload") {
       "✅ Business logo uploaded successfully."
     );
 
-    return sendSettingsMenu(from); // 🔁 BACK TO SETTINGS (META)
+   return sendTwimlText(
+  res,
+  "✅ Business logo uploaded successfully.\n\nReply *menu* to continue."
+);
 
   } catch (e) {
     console.error("logo save failed", e);

@@ -2396,28 +2396,32 @@ Or reply *JOIN* to this message.`;
     if (state === "settings_currency") {
       const cur = trimmed.toUpperCase();
       if (!["ZWL","USD","ZAR"].includes(cur)) return sendTwimlText(res, "Invalid currency. Reply with ZWL, USD or ZAR.");
-      biz.currency = cur; biz.sessionState = "settings_menu"; await saveBiz(biz);
+      biz.currency = cur;
+biz.markModified("currency");
+biz.sessionState = "settings_menu";
+await saveBiz(biz);
+
       return sendTwimlText(res, `Currency updated to ${cur}. Back to settings.`);
     }
     if (state === "settings_terms") {
       const days = Number(trimmed);
       if (isNaN(days) || days < 0) return sendTwimlText(res, "Invalid number. Reply with e.g. 30.");
-      biz.paymentTermsDays = days; biz.sessionState = "settings_menu"; await saveBiz(biz);
+      biz.paymentTermsDays = days;biz.markModified("paymentTermsDays"); biz.sessionState = "settings_menu"; await saveBiz(biz);
       return sendTwimlText(res, `Payment terms updated to ${days} days. Back to settings.`);
     }
     if (state === "settings_inv_prefix") {
       if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
-      biz.invoicePrefix = trimmed; biz.sessionState = "settings_menu"; await saveBiz(biz);
+      biz.invoicePrefix = trimmed;biz.markModified("invoicePrefix"); biz.sessionState = "settings_menu"; await saveBiz(biz);
       return sendTwimlText(res, `Invoice prefix set to ${trimmed}. Back to settings.`);
     }
     if (state === "settings_qt_prefix") {
       if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
-      biz.quotePrefix = trimmed; biz.sessionState = "settings_menu"; await saveBiz(biz);
+      biz.quotePrefix = trimmed;biz.markModified("quotePrefix"); biz.sessionState = "settings_menu"; await saveBiz(biz);
       return sendTwimlText(res, `Quote prefix set to ${trimmed}. Back to settings.`);
     }
     if (state === "settings_rcpt_prefix") {
       if (!trimmed) return sendTwimlText(res, "Enter a valid prefix.");
-      biz.receiptPrefix = trimmed; biz.sessionState = "settings_menu"; await saveBiz(biz);
+      biz.receiptPrefix = trimmed;biz.markModified("receiptPrefix"); biz.sessionState = "settings_menu"; await saveBiz(biz);
       return sendTwimlText(res, `Receipt prefix set to ${trimmed}. Back to settings.`);
     }
 

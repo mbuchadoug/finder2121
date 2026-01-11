@@ -313,7 +313,20 @@ const isMetaAction =
 
 
 // default behaviour
-if (!isMetaAction) {
+// ⚠️ Do NOT send settings input to Twilio bridge
+const settingsStates = [
+  "settings_currency",
+  "settings_terms",
+  "settings_inv_prefix",
+  "settings_qt_prefix",
+  "settings_rcpt_prefix"
+];
+
+if (
+  !isMetaAction &&
+  biz &&
+  !settingsStates.includes(biz.sessionState)
+) {
   const handled = await continueTwilioFlow({
     from,
     text
@@ -402,41 +415,7 @@ if (
 }
 
 
-// ================= SETTINGS (META → TWILIO) =================
-if (a === "settings_currency") {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "settings_currency";
-  await saveBizSafe(biz);
-  return sendText(from, "Reply with new currency (USD, ZWL, ZAR):");
-}
 
-if (a === "settings_terms") {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "settings_terms";
-  await saveBizSafe(biz);
-  return sendText(from, "Enter payment terms in days (e.g. 30):");
-}
-
-if (a === "settings_inv_prefix") {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "settings_inv_prefix";
-  await saveBizSafe(biz);
-  return sendText(from, "Enter invoice prefix (e.g. INV):");
-}
-
-if (a === "settings_qt_prefix") {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "settings_qt_prefix";
-  await saveBizSafe(biz);
-  return sendText(from, "Enter quote prefix (e.g. QT):");
-}
-
-if (a === "settings_rcpt_prefix") {
-  const biz = await getBizForPhone(from);
-  biz.sessionState = "settings_rcpt_prefix";
-  await saveBizSafe(biz);
-  return sendText(from, "Enter receipt prefix (e.g. RCPT):");
-}
 
   /* =========================
      MENUS

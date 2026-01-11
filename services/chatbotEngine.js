@@ -322,11 +322,8 @@ const settingsStates = [
   "settings_rcpt_prefix"
 ];
 
-if (
-  !isMetaAction &&
-  biz &&
-  !settingsStates.includes(biz.sessionState)
-) {
+// ❌ NEVER send Meta-triggered states to Twilio
+if (!isMetaAction && biz) {
   const handled = await continueTwilioFlow({
     from,
     text

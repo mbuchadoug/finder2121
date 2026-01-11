@@ -34,9 +34,12 @@ export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
 
-  /* =========================
-     ENTRY
-  ========================= */
+  // 🔒 CRITICAL: Do NOT interrupt Twilio media flows (logo upload)
+   biz = await getBizForPhone(from);
+  if (!al && biz?.sessionState === "awaiting_logo_upload") {
+    return; // let Twilio webhook handle the image
+  }
+
   if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
   }

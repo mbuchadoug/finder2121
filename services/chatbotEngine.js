@@ -58,7 +58,7 @@ export async function handleIncomingMessage({ from, action }) {
 if (a.startsWith("payinv_")) {
   const invoiceId = a.replace("payinv_", "");
 
-  const biz = await getBizForPhone(from);
+   biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const invoice = await Invoice.findById(invoiceId);

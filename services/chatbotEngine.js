@@ -34,12 +34,9 @@ export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
 
-  // 🔒 CRITICAL: Do NOT interrupt Twilio media flows (logo upload)
-const biz = await getBizForPhone(from);
-  if (!al && biz?.sessionState === "awaiting_logo_upload") {
-    return; // let Twilio webhook handle the image
-  }
-
+  /* =========================
+     ENTRY
+  ========================= */
   if (!al || ["hi", "hello", "menu"].includes(al)) {
     return sendMainMenu(from);
   }
@@ -58,7 +55,7 @@ const biz = await getBizForPhone(from);
 if (a.startsWith("payinv_")) {
   const invoiceId = a.replace("payinv_", "");
 
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const invoice = await Invoice.findById(invoiceId);
@@ -94,7 +91,7 @@ Enter amount paid:`
 // ===============================
 
 if (al === "inv_add_item") {
-  
+  const biz = await getBizForPhone(from);
 
   // 🔑 RESET ITEM STATE BEFORE RE-ENTERING
   biz.sessionState = "creating_invoice_add_items";
@@ -113,7 +110,7 @@ if (al === "inv_add_item") {
 
 // ✅ Generate PDF → simulate "2"
 if (a === "inv_generate_pdf") {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   // build summary text
@@ -141,7 +138,7 @@ if (a === "inv_generate_pdf") {
 // ✅ Set Discount → simulate "4"
 // ✅ Set Discount %
 if (a === "inv_set_discount") {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "creating_invoice_set_discount";
@@ -152,7 +149,7 @@ if (a === "inv_set_discount") {
 
 // ✅ Set VAT %
 if (a === "inv_set_vat") {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "creating_invoice_set_vat";
@@ -174,7 +171,7 @@ if (a === "inv_set_vat") {
   }
 
  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
-  
+  const biz = await getBizForPhone(from);
 
   // 🔑 CRITICAL RESET (THIS WAS MISSING)
   biz.sessionState = "creating_invoice_add_items";
@@ -188,7 +185,7 @@ if (a === "inv_set_vat") {
 
 
   if (a === ACTIONS.INV_ENTER_PRICES) {
-    
+    const biz = await getBizForPhone(from);
     biz.sessionState = "creating_invoice_enter_prices";
     biz.sessionData.priceIndex = 0;
     await saveBizSafe(biz);
@@ -201,7 +198,7 @@ if (a === "inv_set_vat") {
   }
 
   if (al === "inv_cancel") {
-    
+    const biz = await getBizForPhone(from);
     biz.sessionState = null;
     biz.sessionData = {};
     biz.markModified("sessionData");
@@ -217,7 +214,7 @@ if (a === "inv_set_vat") {
 
 
 if (a === ACTIONS.RECORD_EXPENSE) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
@@ -244,7 +241,7 @@ if (a === ACTIONS.RECORD_EXPENSE) {
 
 // 📅 Daily Report
 if (a === ACTIONS.DAILY_REPORT) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "report_daily";
@@ -256,7 +253,7 @@ if (a === ACTIONS.DAILY_REPORT) {
 
 // 📊 Weekly Report (Gold only)
 if (a === ACTIONS.WEEKLY_REPORT) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "report_weekly";
@@ -268,7 +265,7 @@ if (a === ACTIONS.WEEKLY_REPORT) {
 
 // 📆 Monthly Report (Gold only)
 if (a === ACTIONS.MONTHLY_REPORT) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "report_monthly";
@@ -280,7 +277,7 @@ if (a === ACTIONS.MONTHLY_REPORT) {
 
 // 🏢 Branch Summary Report (Gold only)
 if (a === ACTIONS.BRANCH_REPORT) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "report_choose_branch";
@@ -295,7 +292,7 @@ if (a === ACTIONS.BRANCH_REPORT) {
      TEXT → TWILIO FLOW
   ========================= */
 
-
+const biz = await getBizForPhone(from);
 
 // 🔑 In Meta Cloud, typed text ALSO arrives as `action`
 const text = typeof action === "string" ? action.trim() : "";
@@ -310,7 +307,7 @@ const isMetaAction =
   );
 
 // Anything that is NOT a Meta action → Twilio state machine
-//
+//const biz = await getBizForPhone(from);
 
 // 🔑 FORCE branch name input into Twilio flow
 
@@ -338,7 +335,7 @@ if (!isMetaAction && biz?.sessionState) {
 if (a.startsWith("invite_branch_")) {
   const branchId = a.replace("invite_branch_", "");
 
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "invite_user_phone";
@@ -355,7 +352,7 @@ if (a.startsWith("invite_branch_")) {
 if (a.startsWith("assign_user_")) {
   const userId = a.replace("assign_user_", "");
 
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const Branch = (await import("../models/branch.js")).default;
@@ -394,7 +391,7 @@ if (
 ) {
   const branchId = a.replace("assign_branch_", "");
 
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const userId = biz.sessionData.userId;
@@ -420,7 +417,7 @@ if (
 ========================= */
 
 if (a === ACTIONS.SETTINGS_INV_PREFIX) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "settings_inv_prefix";
@@ -433,7 +430,7 @@ if (a === ACTIONS.SETTINGS_INV_PREFIX) {
 }
 
 if (a === ACTIONS.SETTINGS_QT_PREFIX) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "settings_qt_prefix";
@@ -446,7 +443,7 @@ if (a === ACTIONS.SETTINGS_QT_PREFIX) {
 }
 
 if (a === ACTIONS.SETTINGS_RCPT_PREFIX) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "settings_rcpt_prefix";
@@ -459,7 +456,7 @@ if (a === ACTIONS.SETTINGS_RCPT_PREFIX) {
 }
 
 if (a === ACTIONS.SETTINGS_CURRENCY) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "settings_currency";
@@ -473,7 +470,7 @@ if (a === ACTIONS.SETTINGS_CURRENCY) {
 
 
 if (a === ACTIONS.SETTINGS_TERMS) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "settings_terms";
@@ -487,7 +484,7 @@ if (a === ACTIONS.SETTINGS_TERMS) {
 
 
 if (a === ACTIONS.SETTINGS_LOGO) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "awaiting_logo_upload";
@@ -501,7 +498,7 @@ if (a === ACTIONS.SETTINGS_LOGO) {
 
 
 if (a === ACTIONS.SETTINGS_CLIENTS) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const Client = (await import("../models/client.js")).default;
@@ -522,7 +519,7 @@ if (a === ACTIONS.SETTINGS_CLIENTS) {
 
 
 if (a === ACTIONS.SETTINGS_BRANCHES) {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   return sendBranchesMenu(from);
@@ -544,7 +541,7 @@ if (a === ACTIONS.SETTINGS_BRANCHES) {
   return sendPaymentsMenu(from);
 
     case ACTIONS.REPORTS_MENU: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   // 🔑 SET TWILIO STATE
@@ -560,7 +557,7 @@ if (a === ACTIONS.SETTINGS_BRANCHES) {
 }
 
 case ACTIONS.BUSINESS_PROFILE: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   // 1️⃣ Send profile info
@@ -586,7 +583,7 @@ case ACTIONS.USERS_MENU:
 
 
 case ACTIONS.INVITE_USER: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   // move into invite flow
@@ -620,7 +617,7 @@ case ACTIONS.BRANCHES_MENU: {
 
 
 case ACTIONS.ADD_BRANCH: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "branch_add_name";
@@ -630,7 +627,7 @@ case ACTIONS.ADD_BRANCH: {
 }
 
 case ACTIONS.VIEW_BRANCHES: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const Branch = (await import("../models/branch.js")).default;
@@ -652,7 +649,7 @@ case ACTIONS.VIEW_BRANCHES: {
 
 
 case ACTIONS.ASSIGN_BRANCH_USERS: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const UserRole = (await import("../models/userRole.js")).default;
@@ -683,7 +680,7 @@ case ACTIONS.ASSIGN_BRANCH_USERS: {
 
 
 case ACTIONS.VIEW_INVITES: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const pending = await (
@@ -706,7 +703,7 @@ case ACTIONS.VIEW_INVITES: {
 }
 
 case ACTIONS.VIEW_USERS: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   const users = await (
@@ -742,7 +739,7 @@ case ACTIONS.PAYMENT_IN:
 
 
 case ACTIONS.PAYMENT_OUT: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = ACTIONS.EXPENSE_CATEGORY;
@@ -767,7 +764,7 @@ case ACTIONS.PAYMENT_OUT: {
       return sendBusinessMenu(from);
 
 case ACTIONS.SETTINGS_MENU: {
-  
+  const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
   biz.sessionState = "settings_menu";
@@ -796,7 +793,7 @@ case ACTIONS.SETTINGS_MENU: {
       return startClientFlow(from);
 
    default: {
-  
+  const biz = await getBizForPhone(from);
 
   // 🚫 Do NOT interrupt Twilio flows (e.g. logo upload)
   if (biz?.sessionState === "awaiting_logo_upload") {

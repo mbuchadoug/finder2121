@@ -34,6 +34,72 @@ import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
 
 export async function handleIncomingMessage({ from, action }) {
+    // =========================
+  // 🚪 HARD ONBOARDING GATE (FINAL)
+  // =========================
+  const UserSession = (await import("../models/userSession.js")).default;
+  const phone = from.replace(/\D+/g, "");
+
+  let userSession = await UserSession.findOne({ phone });
+
+  // NEW USER → START ONBOARDING
+  if (!userSession) {
+    await UserSession.create({
+      phone,
+      sessionState: "onboarding_business_name",
+      sessionData: {}
+    });
+
+    await sendText(
+      from,
+      "👋 Welcome!\n\nPlease enter your *business name*:"
+    );
+    return; // 🔒 STOP EVERYTHING
+  }
+
+  // ONBOARDING OWNS ALL INPUT
+  if (userSession.sessionState?.startsWith("onboarding_")) {
+    const text = typeof action === "string" ? action.trim() : "";
+
+    if (userSession.sessionState === "onboarding_business_name") {
+      if (!text) {
+        await sendText(from, "Please enter a business name:");
+        return;
+      }
+
+      await UserSession.updateOne(
+        { phone },
+        {
+          sessionState: "onboarding_business_address",
+          "sessionData.name": text
+        }
+      );
+
+      await sendText(
+        from,
+        "📍 Enter your business address (or type *skip*):"
+      );
+      return; // 🔒 STOP EVERYTHING
+    }
+
+    if (userSession.sessionState === "onboarding_business_address") {
+      if (text.toLowerCase() !== "skip") {
+        await UserSession.updateOne(
+          { phone },
+          { "sessionData.address": text }
+        );
+      }
+
+      await UserSession.updateOne(
+        { phone },
+        { sessionState: "onboarding_create_business" }
+      );
+
+      await sendText(from, "✅ Creating your business...");
+      return; // 🔒 STOP EVERYTHING
+    }
+  }
+
   const a = action || "";
   const al = a.toLowerCase();
 
@@ -46,29 +112,7 @@ export async function handleIncomingMessage({ from, action }) {
    🚪 ONBOARDING (FIXED)
 ========================= */
 
-const UserSession = (await import("../models/userSession.js")).default;
-const phone = from.replace(/\D+/g, "");
 
-// ALWAYS fetch session first
-let userSession = await UserSession.findOne({ phone });
-
-// 🟢 START ONBOARDING (ONLY ONCE)
-// 🟢 START ONBOARDING (ONLY ONCE — EVER)
-if (!userSession) {
-  userSession = await UserSession.findOneAndUpdate(
-    { phone },
-    {
-      sessionState: "onboarding_business_name",
-      sessionData: {}
-    },
-    { upsert: true, new: true }
-  );
-
-  return sendText(
-    from,
-    "👋 Welcome!\n\nPlease enter your *business name*:"
-  );
-}
 
 
 // 🔒 HARD STOP: onboarding owns the conversation

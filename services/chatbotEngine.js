@@ -39,7 +39,18 @@ export async function handleIncomingMessage({ from, action }) {
 const biz = await getBizForPhone(from);
 
 // 🚫 No business → redirect to Twilio onboarding
+// 🚫 No business → ONLY block non-onboarding messages
 if (!biz) {
+  const al = (action || "").toLowerCase();
+
+  // ✅ Allow CREATE to reach Twilio
+  if (al === "create") {
+    return continueTwilioFlow({
+      from,
+      text: "CREATE"
+    });
+  }
+
   return sendText(
     from,
     "👋 Welcome!\n\nYou don’t have a business yet.\n\nReply *CREATE* to set up your business."
@@ -386,11 +397,8 @@ const text = typeof action === "string" ? action.trim() : "";
 // ✅ Meta action = known button/list IDs only
 const isMetaAction =
   typeof action === "string" &&
-  action.length > 0 &&
-  (
-    Object.values(ACTIONS).includes(action) ||
-    action.startsWith("assign_")
-  );
+  Object.values(ACTIONS).includes(action);
+
 
 // Anything that is NOT a Meta action → Twilio state machine
 //const biz = await getBizForPhone(from);

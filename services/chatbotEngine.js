@@ -37,68 +37,72 @@ export async function handleIncomingMessage({ from, action }) {
     // =========================
   // 🚪 HARD ONBOARDING GATE (FINAL)
   // =========================
-  const UserSession = (await import("../models/userSession.js")).default;
-  const phone = from.replace(/\D+/g, "");
+ // =========================
+// 🚪 HARD ONBOARDING GATE (FINAL)
+// =========================
+const UserSession = (await import("../models/userSession.js")).default;
+const phone = from.replace(/\D+/g, "");
 
-  let userSession = await UserSession.findOne({ phone });
+let userSession = await UserSession.findOne({ phone });
 
-  // NEW USER → START ONBOARDING
-  if (!userSession) {
-    await UserSession.create({
-      phone,
-      sessionState: "onboarding_business_name",
-      sessionData: {}
-    });
+// NEW USER → START ONBOARDING
+if (!userSession) {
+  await UserSession.create({
+    phone,
+    sessionState: "onboarding_business_name",
+    sessionData: {}
+  });
+
+  await sendText(
+    from,
+    "👋 Welcome!\n\nPlease enter your *business name*:"
+  );
+  return;
+}
+
+// ONBOARDING OWNS ALL INPUT
+if (userSession.sessionState?.startsWith("onboarding_")) {
+  const text = typeof action === "string" ? action.trim() : "";
+
+  if (userSession.sessionState === "onboarding_business_name") {
+    if (!text) {
+      await sendText(from, "Please enter a business name:");
+      return;
+    }
+
+    await UserSession.updateOne(
+      { phone },
+      {
+        sessionState: "onboarding_business_address",
+        "sessionData.name": text
+      }
+    );
 
     await sendText(
       from,
-      "👋 Welcome!\n\nPlease enter your *business name*:"
+      "📍 Enter your business address (or type *skip*):"
     );
-    return; // 🔒 STOP EVERYTHING
+    return;
   }
 
-  // ONBOARDING OWNS ALL INPUT
-  if (userSession.sessionState?.startsWith("onboarding_")) {
-    const text = typeof action === "string" ? action.trim() : "";
-
-    if (userSession.sessionState === "onboarding_business_name") {
-      if (!text) {
-        await sendText(from, "Please enter a business name:");
-        return;
-      }
-
+  if (userSession.sessionState === "onboarding_business_address") {
+    if (text.toLowerCase() !== "skip") {
       await UserSession.updateOne(
         { phone },
-        {
-          sessionState: "onboarding_business_address",
-          "sessionData.name": text
-        }
+        { "sessionData.address": text }
       );
-
-      await sendText(
-        from,
-        "📍 Enter your business address (or type *skip*):"
-      );
-      return; // 🔒 STOP EVERYTHING
     }
 
-    if (userSession.sessionState === "onboarding_business_address") {
-      if (text.toLowerCase() !== "skip") {
-        await UserSession.updateOne(
-          { phone },
-          { "sessionData.address": text }
-        );
-      }
+    await UserSession.updateOne(
+      { phone },
+      { sessionState: "onboarding_create_business" }
+    );
 
-      await UserSession.updateOne(
-        { phone },
-        { sessionState: "onboarding_create_business" }
-      );
-
-      await sendText(from, "✅ Creating your business...");
-      return; // 🔒 STOP EVERYTHING
-    }
+    await sendText(from, "✅ Creating your business...");
+    return;
   }
+}
+
 
   const a = action || "";
   const al = a.toLowerCase();
@@ -111,152 +115,6 @@ export async function handleIncomingMessage({ from, action }) {
 /* =========================
    🚪 ONBOARDING (FIXED)
 ========================= */
-
-
-
-
-// 🔒 HARD STOP: onboarding owns the conversation
-if (userSession.sessionState?.startsWith("onboarding_")) {
-
-  /* STEP 1 — BUSINESS NAME */
-  if (userSession.sessionState === "onboarding_business_name") {
-    const name = typeof action === "string" ? action.trim() : "";
-
-    if (!name) {
-     // 🚑 SAFETY NET — never swallow user input during onboarding
-return sendText(
-  from,
-  "⚠️ Please complete the business setup.\n\nReply with the requested information."
-);
-
-    }
-
-await UserSession.updateOne(
-  { phone },
-  {
-    sessionState: "onboarding_business_address",
-    "sessionData.name": name
-  }
-);
-
-// 🔑 RELOAD SESSION (CRITICAL)
-userSession = await UserSession.findOne({ phone });
-
-return sendButtons(
-  from,
-  "📍 Enter your business address (optional):",
-  [{ id: "onb_skip_address", title: "⏭ Skip" }]
-);
-
-  }
-
- 
- /* STEP 2 — BUSINESS ADDRESS */
-if (userSession.sessionState === "onboarding_business_address") {
-  if (action !== "onb_skip_address" && typeof action === "string") {
-    await UserSession.updateOne(
-      { phone },
-      { "sessionData.address": action.trim() }
-    );
-  }
-
-  await UserSession.updateOne(
-    { phone },
-    { sessionState: "onboarding_business_logo" }
-  );
-
-  // 🔑 RELOAD SESSION (CRITICAL — SAME AS STEP 1)
-  userSession = await UserSession.findOne({ phone });
-
-  return sendButtons(
-    from,
-    "🖼️ Send your business logo (optional):",
-    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
-  );
-}
-
-
-  /* STEP 3 — BUSINESS LOGO */
-  if (userSession.sessionState === "onboarding_business_logo") {
-
-   if (action === "onb_skip_logo") {
-  await UserSession.updateOne(
-    { phone },
-    { sessionState: "onboarding_create_business" }
-  );
-
-  // 🔑 RELOAD SESSION
-  userSession = await UserSession.findOne({ phone });
-
-  return sendText(from, "✅ Creating your business...");
-
-
-    }
-
-   if (typeof action === "object" && action?.type === "image") {
-  await UserSession.updateOne(
-    { phone },
-    {
-      sessionState: "onboarding_create_business",
-      "sessionData.logoTemp": action.image?.id || null
-    }
-  );
-
-  // 🔑 RELOAD SESSION
-  userSession = await UserSession.findOne({ phone });
-
-  return sendText(from, "✅ Creating your business...");
-}
-
-
-    return sendButtons(
-      from,
-      "🖼️ Please send your business logo, or skip:",
-      [{ id: "onb_skip_logo", title: "⏭ Skip" }]
-    );
-  }
-
-  /* STEP 4 — CREATE BUSINESS */
-  if (userSession.sessionState === "onboarding_create_business") {
-    const Business = (await import("../models/business.js")).default;
-    const UserRole = (await import("../models/userRole.js")).default;
-
-    const newBiz = await Business.create({
-      name: userSession.sessionData.name,
-      address: userSession.sessionData.address || "",
-      currency: "USD",
-      package: "trial"
-    });
-
-    await UserRole.create({
-      businessId: newBiz._id,
-      phone,
-      role: "owner",
-      pending: false
-    });
-
-    await UserSession.updateOne(
-      { phone },
-      {
-        activeBusinessId: newBiz._id,
-        sessionState: "ready",
-        sessionData: {}
-      }
-    );
-
-    await sendText(
-      from,
-      `🎉 Business created successfully!\n\n🏢 ${newBiz.name}`
-    );
-
-    return sendMainMenu(from);
-  }
-
-  return sendText(
-    from,
-    "⚠️ Please continue setting up your business.\n\nReply with the requested information."
-  );
-}
 
 
 

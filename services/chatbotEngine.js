@@ -100,28 +100,33 @@ if (userSession?.sessionState?.startsWith("onboarding_")) {
 }
 
   /* STEP 2 — BUSINESS ADDRESS */
-  if (userSession.sessionState === "onboarding_business_address") {
-    if (action !== "onb_skip_address") {
-      await UserSession.updateOne(
-        { phone },
-        { "sessionData.address": action.trim() }
-      );
-    }
+if (userSession.sessionState === "onboarding_business_address") {
 
+  if (action !== "onb_skip_address" && typeof action === "string") {
     await UserSession.updateOne(
       { phone },
-      { sessionState: "onboarding_business_logo" }
-    );
-
-    return sendButtons(
-      from,
-      "🖼️ Send your business logo (optional):",
-      [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+      { "sessionData.address": action.trim() }
     );
   }
 
+  await UserSession.updateOne(
+    { phone },
+    { sessionState: "onboarding_business_logo" }
+  );
+
+  return sendButtons(
+    from,
+    "🖼️ Send your business logo (optional):",
+    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+  );
+}
+
+
   /* STEP 3 — BUSINESS LOGO */
-  if (userSession.sessionState === "onboarding_business_logo") {
+if (userSession.sessionState === "onboarding_business_logo") {
+
+  // Skip button
+  if (action === "onb_skip_logo") {
     await UserSession.updateOne(
       { phone },
       { sessionState: "onboarding_create_business" }
@@ -129,6 +134,28 @@ if (userSession?.sessionState?.startsWith("onboarding_")) {
 
     return sendText(from, "✅ Creating your business...");
   }
+
+  // Image upload (Meta sends image as action object)
+  if (typeof action === "object" && action?.type === "image") {
+    await UserSession.updateOne(
+      { phone },
+      {
+        sessionState: "onboarding_create_business",
+        "sessionData.logoTemp": action.image?.id || null
+      }
+    );
+
+    return sendText(from, "✅ Creating your business...");
+  }
+
+  // Anything else → remind user
+  return sendButtons(
+    from,
+    "🖼️ Please send your business logo, or skip:",
+    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+  );
+}
+
 
   /* STEP 4 — CREATE BUSINESS */
   if (userSession.sessionState === "onboarding_create_business") {

@@ -1031,128 +1031,70 @@ if (biz) {
   
 
 // 🚨 No active business selected
+// 🚀 CREATE BUSINESS (ONLY ENTRY POINT)
 if (!biz) {
 
-// ===== CREATE BUSINESS WHEN NO ACTIVE BUSINESS =====
-if (trimmed === "1") {
+  if (!/^create$/i.test(trimmed)) {
+    return sendTwimlText(
+      res,
+`👋 Welcome to ZimQuote
 
+You are not linked to any business.
+
+Reply *CREATE* to set up your business.`
+    );
+  }
+
+  // 🔒 Ensure user has no businesses
   const roles = await UserRole.find({ phone: providerId });
-
-  // Only allow create business if user truly has none
   if (roles.length > 0) {
     return sendTwimlText(
       res,
-      "You already belong to a business. Reply *menu* to continue."
+      "You are already linked to a business. Reply *menu*."
     );
   }
 
- const now = new Date();
+  // ✅ CREATE BUSINESS
+  const now = new Date();
+  const biz = await Business.create({
+    name: null,
+    currency: "USD",
+    provider: "whatsapp",
+    package: "trial",
+    subscriptionStatus: "active",
+    trialStartedAt: now,
+    trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  });
 
-const newBiz = await Business.create({
-  name: null,
-  currency: "USD",
-  provider: "whatsapp",
+  const branch = await Branch.create({
+    businessId: biz._id,
+    name: "Main Branch",
+    isDefault: true
+  });
 
-  package: "trial",
-  subscriptionStatus: "active", // ✅ VALID ENUM
-  trialStartedAt: now,
-  trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
-});
-
-
-
-// 🔑 CREATE DEFAULT BRANCH
-const defaultBranch = await Branch.create({
-  businessId: newBiz._id,
-  name: "Main Branch",
-  isDefault: true
-});
-
-// 🔑 ASSIGN OWNER TO DEFAULT BRANCH
-await UserRole.create({
-  businessId: newBiz._id,
-  branchId: defaultBranch._id, // ✅ FIX
-  phone: providerId,
-  role: "owner",
-  pending: false
-});
-
-  await UserSession.findOneAndUpdate(
-    { phone: providerId },
-    { activeBusinessId: newBiz._id },
-    { upsert: true }
-  );
-
-  return sendTwimlText(
-    res,
-    "Business created.\nEnter business name:"
-  );
-}
-
-
-
-  const roles = await UserRole.find({ phone: providerId }).populate("businessId");
-
-  // ✅ User belongs to ONE business → auto-link silently
-if (roles.length === 1) {
-  const roleRec = roles[0];
-
-  // 🚨 SAFETY CHECK
-  if (!roleRec.businessId) {
-    console.error(
-      "UserRole has null businessId",
-      { roleId: roleRec._id, phone: providerId }
-    );
-
-    // Clean up broken role
-    await UserRole.deleteOne({ _id: roleRec._id });
-
-    return sendTwimlText(
-      res,
-      "⚠️ Your business link was invalid and has been reset.\nReply *menu* to continue."
-    );
-  }
-
-  await UserSession.findOneAndUpdate(
-    { phone: providerId },
-    { activeBusinessId: roleRec.businessId._id },
-    { upsert: true }
-  );
-
-
-
-
-    return sendTwimlText(
-      res,
-      `Switched to ${roles[0].businessId.name}\nReply *menu* to continue.`
-    );
-  }
-
-  // ❌ User belongs to NO businesses
-  if (!roles.length) {
-    return sendTwimlText(
-      res,
-`Welcome to ZimQuote 👋
-You are not linked to any business.
-
-1) Create new business`
-    );
-  }
-
-  // 🔁 User belongs to MULTIPLE businesses
-  let msg = "Select a business:\n";
-  roles.forEach((r, i) => {
-    msg += `${i + 1}) ${r.businessId.name} (${r.role})\n`;
+  await UserRole.create({
+    businessId: biz._id,
+    branchId: branch._id,
+    phone: providerId,
+    role: "owner",
+    pending: false
   });
 
   await UserSession.findOneAndUpdate(
     { phone: providerId },
-    { activeBusinessId: null, pendingChoices: roles.map(r => r.businessId._id) },
+    { activeBusinessId: biz._id },
     { upsert: true }
   );
 
-  return sendTwimlText(res, msg);
+  biz.sessionState = "awaiting_business_name";
+  await saveBiz(biz);
+
+  return sendTwimlText(
+    res,
+    "✅ Business created!\n\nWhat is your business name?"
+  );
 }
+
 
 
 

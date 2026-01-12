@@ -36,6 +36,15 @@ import { sendText } from "./metaSender.js";
 export async function handleIncomingMessage({ from, action }) {
     // =========================
 
+const biz = await getBizForPhone(from);
+
+// 🚫 No business → redirect to Twilio onboarding
+if (!biz) {
+  return sendText(
+    from,
+    "👋 Welcome!\n\nYou don’t have a business yet.\n\nReply *CREATE* to set up your business."
+  );
+}
 
   const a = action || "";
   const al = a.toLowerCase();
@@ -400,7 +409,7 @@ const settingsStates = [
 ];
 
 // ✅ SAFELY load business AFTER onboarding
-let biz = await getBizForPhone(from);
+ biz = await getBizForPhone(from);
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
 

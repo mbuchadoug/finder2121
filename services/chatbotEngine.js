@@ -42,7 +42,7 @@ export async function handleIncomingMessage({ from, action }) {
    NEW USER → BUSINESS ONBOARDING GATE
 ========================= */
 
-const biz = await getBizForPhone(from);
+
 
 /* =========================
    🚪 ONBOARDING ENTRY (RUN ONCE)
@@ -198,6 +198,13 @@ if (userSession.sessionState === "onboarding_business_logo") {
 }
 
 
+// 📌 Main menu shortcut — ONLY when NOT onboarding
+if (
+  !userSession?.sessionState?.startsWith("onboarding_") &&
+  (!al || ["hi", "hello", "menu"].includes(al))
+) {
+  return sendMainMenu(from);
+}
 
 
 
@@ -257,13 +264,6 @@ Reply *menu* to start.`
 
     // 🔒 Prevent Meta from interrupting Twilio media flows
 
-// 📌 Main menu shortcut — ONLY when NOT onboarding
-if (
-  !userSession?.sessionState?.startsWith("onboarding_") &&
-  (!al || ["hi", "hello", "menu"].includes(al))
-) {
-  return sendMainMenu(from);
-}
 
 
   /* =========================

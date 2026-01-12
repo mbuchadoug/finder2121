@@ -403,10 +403,7 @@ const settingsStates = [
 let biz = await getBizForPhone(from);
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
-// 🚫 NEVER allow Twilio while onboarding
-if (userSession?.sessionState?.startsWith("onboarding_")) {
-  return;
-}
+
 
 // ✅ Only pass text to Twilio AFTER onboarding
 if (!isMetaAction && biz && biz.sessionState) {

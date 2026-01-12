@@ -77,21 +77,27 @@ if (!userSession?.activeBusinessId && !userSession?.sessionState) {
 if (userSession?.sessionState?.startsWith("onboarding_")) {
 
   /* STEP 1 — BUSINESS NAME */
-  if (userSession.sessionState === "onboarding_business_name") {
-    await UserSession.updateOne(
-      { phone },
-      {
-        sessionState: "onboarding_business_address",
-        "sessionData.name": action.trim()
-      }
-    );
+ if (userSession.sessionState === "onboarding_business_name") {
+  const name = typeof action === "string" ? action.trim() : "";
 
-    return sendButtons(
-      from,
-      "📍 Enter your business address (optional):",
-      [{ id: "onb_skip_address", title: "⏭ Skip" }]
-    );
+  if (!name) {
+    return sendText(from, "❌ Please enter a valid business name:");
   }
+
+  await UserSession.updateOne(
+    { phone },
+    {
+      sessionState: "onboarding_business_address",
+      "sessionData.name": name
+    }
+  );
+
+  return sendButtons(
+    from,
+    "📍 Enter your business address (optional):",
+    [{ id: "onb_skip_address", title: "⏭ Skip" }]
+  );
+}
 
   /* STEP 2 — BUSINESS ADDRESS */
   if (userSession.sessionState === "onboarding_business_address") {

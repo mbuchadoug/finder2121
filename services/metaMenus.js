@@ -59,13 +59,9 @@ export async function sendMainMenu(to) {
 
  // No business yet → onboarding flow handles messaging
 if (!biz) {
-  // Fallback safety — engine SHOULD handle onboarding,
-  // but never silently fail
-  return sendText(
-    to,
-    "👋 Welcome! Please complete business setup to continue."
-  );
+  return; // onboarding must handle messaging
 }
+
 
 
   const items = [

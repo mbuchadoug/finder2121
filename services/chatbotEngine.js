@@ -9,6 +9,8 @@ import { sendList } from "./metaSender.js";
 import { canUseFeature, requiredPackageForFeature } from "./accessGuards.js";
 import { sendPackagesMenu } from "./metaMenus.js";
 import { startClientFlow } from "./clientFlow.js";
+import { sendButtons } from "./metaSender.js";
+
 import {
   handleChooseSavedClient,
   handleNewClientFromInvoice,
@@ -34,6 +36,140 @@ import { sendText } from "./metaSender.js";
 export async function handleIncomingMessage({ from, action }) {
   const a = action || "";
   const al = a.toLowerCase();
+
+
+  /* =========================
+   NEW USER → BUSINESS ONBOARDING GATE
+========================= */
+
+const biz = await getBizForPhone(from);
+
+if (!biz) {
+  const UserSession = (await import("../models/userSession.js")).default;
+
+  const phone = from.replace(/\D+/g, "");
+
+  const session = await UserSession.findOne({ phone });
+
+  // First ever interaction
+  if (!session || !session.sessionState) {
+    await UserSession.findOneAndUpdate(
+      { phone },
+      {
+        sessionState: "onboarding_business_name",
+        sessionData: {}
+      },
+      { upsert: true }
+    );
+
+    return sendText(
+      from,
+      "👋 Welcome!\n\nLet’s get you started.\n\nPlease enter your *business name*:"
+    );
+  }
+}
+
+
+
+
+///////////////////////create business
+
+/* =========================
+   ONBOARDING FLOW (USER SESSION)
+========================= */
+
+const UserSession = (await import("../models/userSession.js")).default;
+const phone = from.replace(/\D+/g, "");
+
+const userSession = await UserSession.findOne({ phone });
+
+/* STEP 1 — BUSINESS NAME */
+if (userSession?.sessionState === "onboarding_business_name") {
+  await UserSession.updateOne(
+    { phone },
+    {
+      sessionState: "onboarding_business_address",
+      "sessionData.name": action.trim()
+    }
+  );
+
+  return sendButtons(
+    from,
+    "📍 Enter your business address (optional):",
+    [{ id: "onb_skip_address", title: "⏭ Skip" }]
+  );
+}
+
+/* STEP 2 — BUSINESS ADDRESS */
+if (userSession?.sessionState === "onboarding_business_address") {
+  if (action !== "onb_skip_address") {
+    await UserSession.updateOne(
+      { phone },
+      { "sessionData.address": action.trim() }
+    );
+  }
+
+  await UserSession.updateOne(
+    { phone },
+    { sessionState: "onboarding_business_logo" }
+  );
+
+  return sendButtons(
+    from,
+    "🖼️ Send your business logo (optional):",
+    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+  );
+}
+
+/* STEP 3 — LOGO (SKIP SUPPORTED) */
+if (userSession?.sessionState === "onboarding_business_logo") {
+  if (action !== "onb_skip_logo") {
+    // actual media upload handled elsewhere
+  }
+
+  await UserSession.updateOne(
+    { phone },
+    { sessionState: "onboarding_create_business" }
+  );
+
+  return sendText(from, "✅ Creating your business...");
+}
+
+/* STEP 4 — CREATE BUSINESS */
+if (userSession?.sessionState === "onboarding_create_business") {
+  const Business = (await import("../models/business.js")).default;
+  const UserRole = (await import("../models/userRole.js")).default;
+
+  const newBiz = await Business.create({
+    name: userSession.sessionData.name,
+    address: userSession.sessionData.address || "",
+    currency: "USD",
+    package: "trial"
+  });
+
+  await UserRole.create({
+    businessId: newBiz._id,
+    phone,
+    role: "owner",
+    pending: false
+  });
+
+  await UserSession.updateOne(
+    { phone },
+    {
+      activeBusinessId: newBiz._id,
+      sessionState: "ready",
+      sessionData: {}
+    }
+  );
+
+  await sendText(
+    from,
+    `🎉 Business created successfully!\n\n🏢 ${newBiz.name}`
+  );
+
+  return sendMainMenu(from);
+}
 
   /* =========================
      ENTRY
@@ -346,7 +482,13 @@ if (a === ACTIONS.BRANCH_REPORT) {
      TEXT → TWILIO FLOW
   ========================= */
 
-const biz = await getBizForPhone(from);
+  /* =========================
+   ONBOARDING — BUSINESS NAME
+========================= */
+
+
+
+//const biz = await getBizForPhone(from);
 
 // 🔑 In Meta Cloud, typed text ALSO arrives as `action`
 const text = typeof action === "string" ? action.trim() : "";

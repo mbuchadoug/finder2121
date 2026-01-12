@@ -199,13 +199,7 @@ if (userSession.sessionState === "onboarding_business_logo") {
 
 
 
-// 🧭 If no business yet, ALWAYS guide user
-if (!biz && !userSession?.sessionState?.startsWith("onboarding_")) {
-  return sendText(
-    from,
-    "👋 Welcome!\n\nPlease reply *hi* to start setting up your business."
-  );
-}
+
 
 
   /* =========================

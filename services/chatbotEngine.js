@@ -42,120 +42,110 @@ export async function handleIncomingMessage({ from, action }) {
    NEW USER → BUSINESS ONBOARDING GATE
 ========================= */
 
-
-
 /* =========================
-   🚪 ONBOARDING ENTRY (RUN ONCE)
+   🚪 ONBOARDING (FIXED)
 ========================= */
 
 const UserSession = (await import("../models/userSession.js")).default;
 const phone = from.replace(/\D+/g, "");
 
-const userSession = await UserSession.findOne({ phone });
+// ALWAYS fetch session first
+let userSession = await UserSession.findOne({ phone });
 
-// ✅ No business AND no onboarding started → start onboarding
-if (!userSession?.activeBusinessId && !userSession?.sessionState) {
-  await UserSession.findOneAndUpdate(
+// 🟢 START ONBOARDING (ONLY ONCE)
+if (!userSession || (!userSession.activeBusinessId && !userSession.sessionState)) {
+  userSession = await UserSession.findOneAndUpdate(
     { phone },
     {
       sessionState: "onboarding_business_name",
       sessionData: {}
     },
-    { upsert: true }
+    { upsert: true, new: true }
   );
 
   return sendText(
     from,
-    "👋 Welcome!\n\nLet’s get you started.\n\nPlease enter your *business name*:"
+    "👋 Welcome!\n\nPlease enter your *business name*:"
   );
 }
 
-
-/* =========================
-   🔒 ONBOARDING FLOW (HARD STOP)
-========================= */
-if (userSession?.sessionState?.startsWith("onboarding_")) {
+// 🔒 HARD STOP: onboarding owns the conversation
+if (userSession.sessionState?.startsWith("onboarding_")) {
 
   /* STEP 1 — BUSINESS NAME */
- if (userSession.sessionState === "onboarding_business_name") {
-  const name = typeof action === "string" ? action.trim() : "";
+  if (userSession.sessionState === "onboarding_business_name") {
+    const name = typeof action === "string" ? action.trim() : "";
 
-  if (!name) {
-    return sendText(from, "❌ Please enter a valid business name:");
-  }
-
-  await UserSession.updateOne(
-    { phone },
-    {
-      sessionState: "onboarding_business_address",
-      "sessionData.name": name
+    if (!name) {
+      return sendText(from, "❌ Please enter a valid business name:");
     }
-  );
 
-  return sendButtons(
-    from,
-    "📍 Enter your business address (optional):",
-    [{ id: "onb_skip_address", title: "⏭ Skip" }]
-  );
-}
-
-  /* STEP 2 — BUSINESS ADDRESS */
-if (userSession.sessionState === "onboarding_business_address") {
-
-  if (action !== "onb_skip_address" && typeof action === "string") {
-    await UserSession.updateOne(
-      { phone },
-      { "sessionData.address": action.trim() }
-    );
-  }
-
-  await UserSession.updateOne(
-    { phone },
-    { sessionState: "onboarding_business_logo" }
-  );
-
-  return sendButtons(
-    from,
-    "🖼️ Send your business logo (optional):",
-    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
-  );
-}
-
-
-  /* STEP 3 — BUSINESS LOGO */
-if (userSession.sessionState === "onboarding_business_logo") {
-
-  // Skip button
-  if (action === "onb_skip_logo") {
-    await UserSession.updateOne(
-      { phone },
-      { sessionState: "onboarding_create_business" }
-    );
-
-    return sendText(from, "✅ Creating your business...");
-  }
-
-  // Image upload (Meta sends image as action object)
-  if (typeof action === "object" && action?.type === "image") {
     await UserSession.updateOne(
       { phone },
       {
-        sessionState: "onboarding_create_business",
-        "sessionData.logoTemp": action.image?.id || null
+        sessionState: "onboarding_business_address",
+        "sessionData.name": name
       }
     );
 
-    return sendText(from, "✅ Creating your business...");
+    return sendButtons(
+      from,
+      "📍 Enter your business address (optional):",
+      [{ id: "onb_skip_address", title: "⏭ Skip" }]
+    );
   }
 
-  // Anything else → remind user
-  return sendButtons(
-    from,
-    "🖼️ Please send your business logo, or skip:",
-    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
-  );
-}
+  /* STEP 2 — BUSINESS ADDRESS */
+  if (userSession.sessionState === "onboarding_business_address") {
+    if (action !== "onb_skip_address" && typeof action === "string") {
+      await UserSession.updateOne(
+        { phone },
+        { "sessionData.address": action.trim() }
+      );
+    }
 
+    await UserSession.updateOne(
+      { phone },
+      { sessionState: "onboarding_business_logo" }
+    );
+
+    return sendButtons(
+      from,
+      "🖼️ Send your business logo (optional):",
+      [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+    );
+  }
+
+  /* STEP 3 — BUSINESS LOGO */
+  if (userSession.sessionState === "onboarding_business_logo") {
+
+    if (action === "onb_skip_logo") {
+      await UserSession.updateOne(
+        { phone },
+        { sessionState: "onboarding_create_business" }
+      );
+
+      return sendText(from, "✅ Creating your business...");
+    }
+
+    if (typeof action === "object" && action?.type === "image") {
+      await UserSession.updateOne(
+        { phone },
+        {
+          sessionState: "onboarding_create_business",
+          "sessionData.logoTemp": action.image?.id || null
+        }
+      );
+
+      return sendText(from, "✅ Creating your business...");
+    }
+
+    return sendButtons(
+      from,
+      "🖼️ Please send your business logo, or skip:",
+      [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+    );
+  }
 
   /* STEP 4 — CREATE BUSINESS */
   if (userSession.sessionState === "onboarding_create_business") {
@@ -193,9 +183,9 @@ if (userSession.sessionState === "onboarding_business_logo") {
     return sendMainMenu(from);
   }
 
-  // ⛔ NOTHING else should run during onboarding
   return;
 }
+
 
 
 // 📌 Main menu shortcut — ONLY when NOT onboarding

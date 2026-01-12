@@ -554,7 +554,7 @@ const settingsStates = [
 ];
 
 // ✅ SAFELY load business AFTER onboarding
-//const biz = await getBizForPhone(from);
+let biz = await getBizForPhone(from);
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
 if (!isMetaAction && biz && biz.sessionState) {

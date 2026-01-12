@@ -92,6 +92,12 @@ export async function continueTwilioFlow({ from, text }) {
   const trimmed = text.trim();
   const state = biz.sessionState;
 
+
+  // 🛑 If user is idle, do NOT hijack messages
+if (state === "ready") {
+  return false;
+}
+
   /* ===========================
      🔑 ENSURE CLIENT IS LOADED
      (META RESUME SAFETY)

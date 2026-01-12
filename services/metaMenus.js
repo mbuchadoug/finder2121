@@ -4,18 +4,22 @@ import { canAccessSection } from "./roleGuard.js";
 import UserRole from "../models/userRole.js";
  import { normalizePhone } from "./phone.js";
 
-async function filterMenuByRole({ from, biz, items }) {
-  // const phone = from.replace(/\D+/g, "");
 
- 
+ async function filterMenuByRole({ from, biz, items }) {
+  // ✅ Normalize phone safely
+  let phone = normalizePhone(from);
 
-const phone = normalizePhone(from);
+  if (phone.startsWith("0")) {
+    phone = "263" + phone.slice(1);
+  }
 
-
-if (phone.startsWith("0")) {
-  phone = "263" + phone.slice(1);
-}
-
+  // 🛑 NO BUSINESS YET (onboarding / new user)
+  if (!biz) {
+    // show safe default (clerk-level)
+    return items.filter(item =>
+      !item.section || canAccessSection("clerk", item.section)
+    );
+  }
 
   const user = await UserRole.findOne({
     businessId: biz._id,
@@ -23,20 +27,19 @@ if (phone.startsWith("0")) {
     pending: false
   });
 
-  // ✅ Owner sees everything
+  // 👑 Owner sees everything
   if (user?.role === "owner") {
     return items;
   }
 
-if (!user) {
-  // If user not found, assume clerk-level access
-  return items.filter(item =>
-    !item.section || canAccessSection("clerk", item.section)
-  );
-}
+  // 🧾 User not found → fallback to clerk
+  if (!user) {
+    return items.filter(item =>
+      !item.section || canAccessSection("clerk", item.section)
+    );
+  }
 
-
-  // ✅ Normal role-based filtering
+  // 🎯 Role-based filtering
   return items.filter(item => {
     if (!item.section) return true;
     return canAccessSection(user.role, item.section);
@@ -47,11 +50,21 @@ if (!user) {
 
 
 
+
 /* =========================
    MAIN
 ========================= */
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
+
+  // 🛑 If still onboarding, DO NOT try to show menu
+  if (!biz) {
+    return sendText(
+      to,
+      "⏳ Please complete business setup to continue."
+    );
+  }
+
 
   const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },

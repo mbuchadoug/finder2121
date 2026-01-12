@@ -199,9 +199,12 @@ if (userSession.sessionState === "onboarding_business_logo") {
 
 
 
-// 🧯 Safety: user finished onboarding but biz not loaded yet
-if (!biz) {
-  return;
+// 🧭 If no business yet, ALWAYS guide user
+if (!biz && !userSession?.sessionState?.startsWith("onboarding_")) {
+  return sendText(
+    from,
+    "👋 Welcome!\n\nPlease reply *hi* to start setting up your business."
+  );
 }
 
 

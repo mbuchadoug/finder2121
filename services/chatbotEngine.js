@@ -545,15 +545,17 @@ const settingsStates = [
   "settings_rcpt_prefix"
 ];
 
-// ✅ Allow Twilio to handle active session states (including media uploads)
-if (!isMetaAction && biz?.sessionState) {
+// ✅ SAFELY load business AFTER onboarding
+const biz = await getBizForPhone(from);
+
+// ✅ Only pass text to Twilio if a business exists AND has a session
+if (!isMetaAction && biz && biz.sessionState) {
   const handled = await continueTwilioFlow({
     from,
     text
   });
   if (handled) return;
 }
-
 
 if (a.startsWith("invite_branch_")) {
   const branchId = a.replace("invite_branch_", "");
@@ -608,14 +610,14 @@ if (a.startsWith("assign_user_")) {
 // ===============================
 // FINAL STEP: SAVE USER → BRANCH
 // ===============================
-if (
-  a.startsWith("assign_branch_") &&
-  biz.sessionState === "assign_branch_pick_branch"
-) {
-  const branchId = a.replace("assign_branch_", "");
-
+if (a.startsWith("assign_branch_")) {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
+
+  // ensure we are in the correct state
+  if (biz.sessionState !== "assign_branch_pick_branch") return;
+
+  const branchId = a.replace("assign_branch_", "");
 
   const userId = biz.sessionData.userId;
   if (!userId) {

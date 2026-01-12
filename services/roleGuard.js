@@ -1,16 +1,10 @@
-// services/roleGuard.js
-import UserRole from "../models/userRole.js";
+import { ROLE_MATRIX } from "./roleMatrix.js";
 
-/**
- * Check if WhatsApp user has required role
- */
-export async function requireRole(biz, phone, allowedRoles = []) {
-  const role = await UserRole.findOne({
-    businessId: biz._id,
-    phone,
-    pending: false
-  }).lean();
+export function canAccessSection(role, section) {
+  const config = ROLE_MATRIX[role];
+  if (!config) return false;
 
-  if (!role) return false;
-  return allowedRoles.includes(role.role);
+  if (config.allow.includes("*")) return true;
+
+  return config.allow.includes(section);
 }

@@ -6,7 +6,6 @@ import { showUnpaidInvoices } from "./paymentAdapters.js";
 import Invoice from "../models/invoice.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
-import { canUseFeature, requiredPackageForFeature } from "./accessGuards.js";
 
 import { startClientFlow } from "./clientFlow.js";
 import {
@@ -548,26 +547,21 @@ if (a === ACTIONS.SETTINGS_BRANCHES) {
  case ACTIONS.PAYMENTS_MENU:
   return sendPaymentsMenu(from);
 
-case ACTIONS.REPORTS_MENU: {
+    case ACTIONS.REPORTS_MENU: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  if (!canUseFeature(biz, "reports_daily")) {
-    const needed = requiredPackageForFeature("reports_daily");
-    return sendText(
-      from,
-      `🔒 Reports are not available on your current package.\n\nUpgrade to *${needed.toUpperCase()}* to unlock reports.`
-    );
-  }
-
+  // 🔑 SET TWILIO STATE
   biz.sessionState = "reports_menu";
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  const isGold = biz.package === "gold";
+  // 🔍 Check package
+  const isGold =
+    biz.package === "gold" || biz.package === "enterprise";
+
   return sendReportsMenu(from, isGold);
 }
-
 
 case ACTIONS.BUSINESS_PROFILE: {
   const biz = await getBizForPhone(from);
@@ -599,56 +593,6 @@ case ACTIONS.INVITE_USER: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  // ============================
-  // 🔒 ROLE CHECK (MINIMAL)
-  // ============================
-  const UserRole = (await import("../models/userRole.js")).default;
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  if (!caller || caller.role !== "owner") {
-    return sendText(
-      from,
-      "🔒 Only the business owner can invite users."
-    );
-  }
-
-  // ============================
-  // 📦 PACKAGE FEATURE CHECK
-  // ============================
-  const { PACKAGES } = await import("./packages.js");
-
-  const pkg = PACKAGES[biz.package] || PACKAGES.trial;
-
-  if (!pkg.features.includes("users")) {
-    return sendText(
-      from,
-      "🔒 User management is not available on your current package.\n\nUpgrade your package to invite users."
-    );
-  }
-
-  // ============================
-  // 👥 USER LIMIT CHECK
-  // ============================
-  const activeUsers = await UserRole.countDocuments({
-    businessId: biz._id,
-    pending: false
-  });
-
-  if (activeUsers >= pkg.users) {
-    return sendText(
-      from,
-      `🚫 User limit reached (${pkg.users}).\n\nUpgrade your package to add more users.`
-    );
-  }
-
-  // ============================
-  // ✅ EXISTING LOGIC (UNCHANGED)
-  // ============================
-
   // move into invite flow
   biz.sessionState = "invite_user_choose_branch";
   biz.sessionData = {};
@@ -675,25 +619,6 @@ case ACTIONS.INVITE_USER: {
 
 
 case ACTIONS.BRANCHES_MENU: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  const UserRole = (await import("../models/userRole.js")).default;
-  const { canAccessSection } = await import("./roleGuard.js");
-
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  if (!caller || !canAccessSection(caller.role, "branches")) {
-    return sendText(
-      from,
-      "🔒 You do not have permission to access branches."
-    );
-  }
-
   return sendBranchesMenu(from);
 }
 
@@ -702,29 +627,11 @@ case ACTIONS.ADD_BRANCH: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  if (!canUseFeature(biz, "branches")) {
-    return sendText(
-      from,
-      "🔒 Branches are not available on your current package.\nUpgrade to *GOLD* to unlock branches."
-    );
-  }
-
-  const Branch = (await import("../models/branch.js")).default;
-  const count = await Branch.countDocuments({ businessId: biz._id });
-
-  const { branches } = (await import("./packages.js")).PACKAGES[biz.package];
-  if (count >= branches) {
-    return sendText(
-      from,
-      `🚫 Branch limit reached (${branches}).\nUpgrade your package to add more branches.`
-    );
-  }
-
   biz.sessionState = "branch_add_name";
   await saveBizSafe(biz);
+
   return sendText(from, "Enter new branch name:");
 }
-
 
 case ACTIONS.VIEW_BRANCHES: {
   const biz = await getBizForPhone(from);
@@ -860,48 +767,12 @@ case ACTIONS.PAYMENT_OUT: {
 }
 
 
-   case ACTIONS.BUSINESS_MENU: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  const UserRole = (await import("../models/userRole.js")).default;
-  const { canAccessSection } = await import("./roleGuard.js");
-
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  if (!caller || !canAccessSection(caller.role, "users")) {
-    return sendText(
-      from,
-      "🔒 You do not have permission to access Business & Users."
-    );
-  }
-
-  return sendBusinessMenu(from);
-}
+    case ACTIONS.BUSINESS_MENU:
+      return sendBusinessMenu(from);
 
 case ACTIONS.SETTINGS_MENU: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
-
-  const UserRole = (await import("../models/userRole.js")).default;
-  const { canAccessSection } = await import("./roleGuard.js");
-
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  if (!caller || !canAccessSection(caller.role, "settings")) {
-    return sendText(
-      from,
-      "🔒 You do not have permission to access Settings."
-    );
-  }
 
   biz.sessionState = "settings_menu";
   biz.sessionData = {};

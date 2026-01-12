@@ -79,7 +79,12 @@ if (userSession.sessionState?.startsWith("onboarding_")) {
     const name = typeof action === "string" ? action.trim() : "";
 
     if (!name) {
-      return sendText(from, "❌ Please enter a valid business name:");
+     // 🚑 SAFETY NET — never swallow user input during onboarding
+return sendText(
+  from,
+  "⚠️ Please complete the business setup.\n\nReply with the requested information."
+);
+
     }
 
     await UserSession.updateOne(

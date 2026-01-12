@@ -5,7 +5,14 @@ import UserRole from "../models/userRole.js";
 
 
 async function filterMenuByRole({ from, biz, items }) {
-  const phone = from.replace(/\D+/g, "");
+  // const phone = from.replace(/\D+/g, "");
+
+  let phone = from.replace(/\D+/g, "");
+
+if (phone.startsWith("0")) {
+  phone = "263" + phone.slice(1);
+}
+
 
   const user = await UserRole.findOne({
     businessId: biz._id,
@@ -19,11 +26,11 @@ async function filterMenuByRole({ from, biz, items }) {
   }
 
   // ✅ No role found → SAFE minimal menu
-  if (!user) {
-    return items.filter(item =>
-      ["sales", "clients"].includes(item.section)
-    );
-  }
+ if (!user) {
+  // Unknown user → show nothing except Back
+  return items.filter(item => !item.section);
+}
+
 
   // ✅ Normal role-based filtering
   return items.filter(item => {

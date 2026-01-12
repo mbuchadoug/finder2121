@@ -13,8 +13,9 @@ async function filterMenuByRole({ from, biz, items }) {
     pending: false
   });
 
-  // Owner sees everything
-  if (!user || user.role === "owner") return items;
+
+// Only owner sees everything
+if (user?.role === "owner") return items;
 
   return items.filter(item => {
     if (!item.section) return true;

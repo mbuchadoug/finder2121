@@ -87,65 +87,83 @@ return sendText(
 
     }
 
+await UserSession.updateOne(
+  { phone },
+  {
+    sessionState: "onboarding_business_address",
+    "sessionData.name": name
+  }
+);
+
+// 🔑 RELOAD SESSION (CRITICAL)
+userSession = await UserSession.findOne({ phone });
+
+return sendButtons(
+  from,
+  "📍 Enter your business address (optional):",
+  [{ id: "onb_skip_address", title: "⏭ Skip" }]
+);
+
+  }
+
+ 
+ /* STEP 2 — BUSINESS ADDRESS */
+if (userSession.sessionState === "onboarding_business_address") {
+  if (action !== "onb_skip_address" && typeof action === "string") {
     await UserSession.updateOne(
       { phone },
-      {
-        sessionState: "onboarding_business_address",
-        "sessionData.name": name
-      }
-    );
-
-    return sendButtons(
-      from,
-      "📍 Enter your business address (optional):",
-      [{ id: "onb_skip_address", title: "⏭ Skip" }]
+      { "sessionData.address": action.trim() }
     );
   }
 
-  /* STEP 2 — BUSINESS ADDRESS */
-  if (userSession.sessionState === "onboarding_business_address") {
-    if (action !== "onb_skip_address" && typeof action === "string") {
-      await UserSession.updateOne(
-        { phone },
-        { "sessionData.address": action.trim() }
-      );
-    }
+  await UserSession.updateOne(
+    { phone },
+    { sessionState: "onboarding_business_logo" }
+  );
 
-    await UserSession.updateOne(
-      { phone },
-      { sessionState: "onboarding_business_logo" }
-    );
+  // 🔑 RELOAD SESSION (CRITICAL — SAME AS STEP 1)
+  userSession = await UserSession.findOne({ phone });
 
-    return sendButtons(
-      from,
-      "🖼️ Send your business logo (optional):",
-      [{ id: "onb_skip_logo", title: "⏭ Skip" }]
-    );
-  }
+  return sendButtons(
+    from,
+    "🖼️ Send your business logo (optional):",
+    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+  );
+}
+
 
   /* STEP 3 — BUSINESS LOGO */
   if (userSession.sessionState === "onboarding_business_logo") {
 
-    if (action === "onb_skip_logo") {
-      await UserSession.updateOne(
-        { phone },
-        { sessionState: "onboarding_create_business" }
-      );
+   if (action === "onb_skip_logo") {
+  await UserSession.updateOne(
+    { phone },
+    { sessionState: "onboarding_create_business" }
+  );
 
-      return sendText(from, "✅ Creating your business...");
+  // 🔑 RELOAD SESSION
+  userSession = await UserSession.findOne({ phone });
+
+  return sendText(from, "✅ Creating your business...");
+
+
     }
 
-    if (typeof action === "object" && action?.type === "image") {
-      await UserSession.updateOne(
-        { phone },
-        {
-          sessionState: "onboarding_create_business",
-          "sessionData.logoTemp": action.image?.id || null
-        }
-      );
-
-      return sendText(from, "✅ Creating your business...");
+   if (typeof action === "object" && action?.type === "image") {
+  await UserSession.updateOne(
+    { phone },
+    {
+      sessionState: "onboarding_create_business",
+      "sessionData.logoTemp": action.image?.id || null
     }
+  );
+
+  // 🔑 RELOAD SESSION
+  userSession = await UserSession.findOne({ phone });
+
+  return sendText(from, "✅ Creating your business...");
+}
+
 
     return sendButtons(
       from,

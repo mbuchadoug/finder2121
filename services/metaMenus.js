@@ -2,12 +2,15 @@ import { ACTIONS } from "./actions.js";
 import { sendList, sendText, sendButtons } from "./metaSender.js";
 import { canAccessSection } from "./roleGuard.js";
 import UserRole from "../models/userRole.js";
-
+ import { normalizePhone } from "./phone.js";
 
 async function filterMenuByRole({ from, biz, items }) {
   // const phone = from.replace(/\D+/g, "");
 
-  let phone = from.replace(/\D+/g, "");
+ 
+
+const phone = normalizePhone(from);
+
 
 if (phone.startsWith("0")) {
   phone = "263" + phone.slice(1);
@@ -25,10 +28,11 @@ if (phone.startsWith("0")) {
     return items;
   }
 
-  // ✅ No role found → SAFE minimal menu
- if (!user) {
-  // Unknown user → show nothing except Back
-  return items.filter(item => !item.section);
+if (!user) {
+  // If user not found, assume clerk-level access
+  return items.filter(item =>
+    !item.section || canAccessSection("clerk", item.section)
+  );
 }
 
 

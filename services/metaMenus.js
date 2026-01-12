@@ -59,7 +59,10 @@ export async function sendMainMenu(to) {
 
  // No business yet → onboarding flow handles messaging
 if (!biz) {
-  // onboarding flow controls messaging
+  await sendText(
+    to,
+    "⚠️ Your business setup is still in progress.\nPlease complete the setup first."
+  );
   return;
 }
 

@@ -53,7 +53,8 @@ const phone = from.replace(/\D+/g, "");
 let userSession = await UserSession.findOne({ phone });
 
 // 🟢 START ONBOARDING (ONLY ONCE)
-if (!userSession || (!userSession.activeBusinessId && !userSession.sessionState)) {
+// 🟢 START ONBOARDING (ONLY ONCE — EVER)
+if (!userSession) {
   userSession = await UserSession.findOneAndUpdate(
     { phone },
     {
@@ -68,6 +69,7 @@ if (!userSession || (!userSession.activeBusinessId && !userSession.sessionState)
     "👋 Welcome!\n\nPlease enter your *business name*:"
   );
 }
+
 
 // 🔒 HARD STOP: onboarding owns the conversation
 if (userSession.sessionState?.startsWith("onboarding_")) {

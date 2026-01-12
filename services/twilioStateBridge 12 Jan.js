@@ -220,45 +220,26 @@ if (state === "settings_rcpt_prefix") {
 
 
   async function runDailyReportMeta({ biz, from }) {
-      const UserRole = (await import("../models/userRole.js")).default;
-
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone: from.replace(/\D+/g, ""),
-    pending: false
-  });
-
-  // ✅ Managers are restricted to their branch
-  const branchFilter =
-    caller?.role === "manager" && caller.branchId
-      ? { branchId: caller.branchId }
-      : {};
-
   const start = new Date();
   start.setHours(0, 0, 0, 0);
 
   const end = new Date();
   end.setHours(23, 59, 59, 999);
 
- const invoices = await Invoice.find({
-  businessId: biz._id,
-  ...branchFilter,
-  createdAt: { $gte: start, $lte: end }
-}).lean();
+  const invoices = await Invoice.find({
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  }).lean();
 
-const payments = await (await import("../models/payment.js")).default.find({
-  businessId: biz._id,
-  ...branchFilter,
-  createdAt: { $gte: start, $lte: end }
-}).lean();
+  const payments = await (await import("../models/payment.js")).default.find({
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  }).lean();
 
-
- const expenses = await Expense.find({
-  businessId: biz._id,
-  ...branchFilter,
-  createdAt: { $gte: start, $lte: end }
-}).lean();
-
+  const expenses = await Expense.find({
+    businessId: biz._id,
+    createdAt: { $gte: start, $lte: end }
+  }).lean();
 
   const invoiced = invoices.reduce((s, i) => s + (i.total || 0), 0);
   const received = payments.reduce((s, p) => s + (p.amount || 0), 0);

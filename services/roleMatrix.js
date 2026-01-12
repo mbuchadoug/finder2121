@@ -15,19 +15,23 @@ export const ROLE_MATRIX = {
     ]
   },
 
-  manager: {
-    allow: [
-      "sales",
-      "clients",
-      "payments",
-      "reports"
-    ]
-  },
+ manager: {
+  allow: [
+    "sales",
+    "clients",
+    "payments",
+    "reports",
+    "settings"   // ✅ allow business settings
+  ]
+},
 
   clerk: {
-    allow: [
-      "sales",
-      "clients"
-    ]
-  }
+  allow: [
+    "sales",
+    "clients",
+    "payments",
+    "reports" // daily reports already enforced elsewhere
+  ]
+}
+
 };

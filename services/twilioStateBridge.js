@@ -36,14 +36,20 @@ export async function continueTwilioFlow({ from, text }) {
   // ============================
   // 🔒 ROLE GUARD (TWILIO)
   // ============================
-  const UserRole = (await import("../models/userRole.js")).default;
-  const { canAccessSection } = await import("./roleGuard.js");
+const UserRole = (await import("../models/userRole.js")).default;
+const { canAccessSection } = await import("./roleGuard.js");
 
-  const caller = await UserRole.findOne({
-    businessId: biz._id,
-    phone,
-    pending: false
-  });
+const caller = await UserRole.findOne({
+  businessId: biz._id,
+  phone,
+  pending: false
+});
+
+// ✅ SAFETY DEFAULT (FIX 3)
+if (caller && !caller.role) {
+  caller.role = "clerk";
+}
+
 
   // Safety: unknown users are blocked
   if (!caller) {
@@ -54,22 +60,29 @@ export async function continueTwilioFlow({ from, text }) {
     return true;
   }
 
-  const restrictedStateMap = {
-    settings_currency: "settings",
-    settings_terms: "settings",
-    settings_inv_prefix: "settings",
-    settings_qt_prefix: "settings",
-    settings_rcpt_prefix: "settings",
+const restrictedStateMap = {
+  settings_currency: "settings",
+  settings_terms: "settings",
+  settings_inv_prefix: "settings",
+  settings_qt_prefix: "settings",
+  settings_rcpt_prefix: "settings",
 
-    branch_add_name: "branches",
+  branch_add_name: "branches",
 
-    report_daily: "reports",
-    report_weekly: "reports",
-    report_monthly: "reports",
-    report_choose_branch: "reports",
+  report_daily: "reports",
+  report_weekly: "reports",
+  report_monthly: "reports",
+  report_choose_branch: "reports",
 
-    invite_user_phone: "users"
-  };
+  payment_amount: "payments",
+  payment_method: "payments",
+  expense_amount: "payments",
+  expense_category: "payments",
+
+  invite_user_phone: "users"
+};
+
+
 
   const section = restrictedStateMap[biz.sessionState];
 

@@ -13,15 +13,25 @@ async function filterMenuByRole({ from, biz, items }) {
     pending: false
   });
 
+  // ✅ Owner sees everything
+  if (user?.role === "owner") {
+    return items;
+  }
 
-// Only owner sees everything
-if (user?.role === "owner") return items;
+  // ✅ No role found → SAFE minimal menu
+  if (!user) {
+    return items.filter(item =>
+      ["sales", "clients"].includes(item.section)
+    );
+  }
 
+  // ✅ Normal role-based filtering
   return items.filter(item => {
     if (!item.section) return true;
     return canAccessSection(user.role, item.section);
   });
 }
+
 
 
 

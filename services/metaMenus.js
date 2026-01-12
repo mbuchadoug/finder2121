@@ -58,13 +58,12 @@ export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
  // No business yet → onboarding flow handles messaging
+// ⛔ If no business, do NOT block here.
+// Onboarding logic in chatbotEngine owns this state.
 if (!biz) {
-  await sendText(
-    to,
-    "⚠️ Your business setup is still in progress.\nPlease complete the setup first."
-  );
   return;
 }
+
 
 
   const items = [

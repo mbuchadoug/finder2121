@@ -1,4 +1,4 @@
-import { ROLE_MATRIX } from "./roleMatrix.js";
+import { ROLE_ACCESS } from "./roleMatrix.js";
 
 export function canAccessSection(role, section) {
   const config = ROLE_MATRIX[role];

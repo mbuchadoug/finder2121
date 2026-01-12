@@ -64,6 +64,9 @@ SETTINGS_LOGO: "settings_logo",
 SETTINGS_CLIENTS: "settings_clients",
 SETTINGS_BRANCHES: "settings_branches",
 
+// PACKAGES
+UPGRADE_PACKAGE: "upgrade_package",
+CHOOSE_PACKAGE: "choose_package",
 
 
   // NAV

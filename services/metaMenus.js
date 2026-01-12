@@ -13,7 +13,9 @@ export async function sendMainMenu(to) {
     { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments" },
     { id: ACTIONS.REPORTS_MENU, title: "📈 Reports" },
     { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users" },
-    { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings" }
+    { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings" },
+       { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package" }
+
   ]);
 }
 
@@ -156,4 +158,19 @@ export async function sendInviteUserMenu(to) {
     { id: ACTIONS.BRANCH_ASSIGN_USER, title: "👥 Assign user to branch" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
+}
+
+
+export async function sendPackagesMenu(to, currentPackage) {
+  return sendList(
+    to,
+    `📦 Your current package: *${currentPackage.toUpperCase()}*\n\nChoose a package:`,
+    [
+      
+      { id: "pkg_bronze", title: "🥉 Bronze" },
+      { id: "pkg_silver", title: "🥈 Silver" },
+      { id: "pkg_gold", title: "🥇 Gold" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ]
+  );
 }

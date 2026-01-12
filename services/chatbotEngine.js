@@ -7,7 +7,7 @@ import Invoice from "../models/invoice.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
 import { canUseFeature, requiredPackageForFeature } from "./accessGuards.js";
-
+import { sendPackagesMenu } from "./metaMenus.js";
 import { startClientFlow } from "./clientFlow.js";
 import {
   handleChooseSavedClient,
@@ -533,6 +533,37 @@ if (a === ACTIONS.SETTINGS_BRANCHES) {
   return sendBranchesMenu(from);
 }
 
+// ===============================
+// PACKAGE SELECTION
+// ===============================
+if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
+  const selected = a.replace("pkg_", "");
+
+  const allowed = ["trial", "bronze", "silver", "gold"];
+  if (!allowed.includes(selected)) {
+    return sendText(from, "❌ Invalid package selected.");
+  }
+
+  // ✅ Update business package
+  biz.package = selected;
+  biz.subscriptionStatus = "active";
+
+  // reset usage counters if upgrading
+  biz.documentCountMonth = 0;
+  biz.documentCountMonthKey = null;
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(
+    from,
+    `✅ Package updated successfully!\n\nYour new package: *${selected.toUpperCase()}*`
+  );
+
+  return sendMainMenu(from);
+}
+
 
   /* =========================
      MENUS
@@ -910,6 +941,28 @@ case ACTIONS.SETTINGS_MENU: {
   return sendSettingsMenu(from);
 }
 
+
+case ACTIONS.UPGRADE_PACKAGE: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  // 🔒 Only owner can upgrade
+  const UserRole = (await import("../models/userRole.js")).default;
+  const caller = await UserRole.findOne({
+    businessId: biz._id,
+    phone: from.replace(/\D+/g, ""),
+    pending: false
+  });
+
+  if (!caller || caller.role !== "owner") {
+    return sendText(from, "🔒 Only the business owner can change the package.");
+  }
+
+  biz.sessionState = "choose_package";
+  await saveBizSafe(biz);
+
+  return sendPackagesMenu(from, biz.package);
+}
 
 
     

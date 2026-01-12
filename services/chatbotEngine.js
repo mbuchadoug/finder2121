@@ -199,6 +199,10 @@ if (userSession.sessionState === "onboarding_business_logo") {
 
 
 
+// 🧯 Safety: user finished onboarding but biz not loaded yet
+if (!biz) {
+  return;
+}
 
 
   /* =========================

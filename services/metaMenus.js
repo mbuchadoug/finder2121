@@ -59,12 +59,9 @@ export async function sendMainMenu(to) {
 
  // No business yet → onboarding flow handles messaging
 if (!biz) {
-  return sendText(
-    to,
-    "👋 Welcome! Please complete business setup to continue."
-  );
+  // onboarding flow controls messaging
+  return;
 }
-
 
 
   const items = [

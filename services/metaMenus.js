@@ -57,15 +57,6 @@ import UserRole from "../models/userRole.js";
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
- // No business yet → onboarding flow handles messaging
-// ⛔ If no business, do NOT block here.
-// Onboarding logic in chatbotEngine owns this state.
-if (!biz) {
-  return;
-}
-
-
-
   const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
     { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },

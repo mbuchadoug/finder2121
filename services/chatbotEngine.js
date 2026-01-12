@@ -51,14 +51,7 @@ export async function handleIncomingMessage({ from, action }) {
 
 
 
-// 📌 Main menu shortcut — ONLY when NOT onboarding
-if (
-  !userSession?.sessionState?.startsWith("onboarding_") &&
-  (!al || ["hi", "hello", "menu"].includes(al))
-) {
-  return sendMainMenu(from);
-}
-
+// 📌 Main menu shortcut — ONLY when NOT onboardin
 
 
 

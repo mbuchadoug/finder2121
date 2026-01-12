@@ -18,12 +18,12 @@ async function filterMenuByRole({ from, biz, items }) {
     return items;
   }
 
-  // ✅ No role found → SAFE minimal menu
-  if (!user) {
-    return items.filter(item =>
-      ["sales", "clients"].includes(item.section)
-    );
-  }
+
+// ❌ Unknown / not joined users → block hard
+if (!user) {
+  return [];
+}
+
 
   // ✅ Normal role-based filtering
   return items.filter(item => {

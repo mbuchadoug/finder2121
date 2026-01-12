@@ -57,13 +57,10 @@ import UserRole from "../models/userRole.js";
 export async function sendMainMenu(to) {
   const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
 
-  // 🛑 If still onboarding, DO NOT try to show menu
-  if (!biz) {
-    return sendText(
-      to,
-      "⏳ Please complete business setup to continue."
-    );
-  }
+ // No business yet → onboarding flow handles messaging
+if (!biz) {
+  return;
+}
 
 
   const items = [

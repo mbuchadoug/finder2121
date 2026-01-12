@@ -104,6 +104,42 @@ if (userSession.sessionState?.startsWith("onboarding_")) {
 }
 
 
+// FINAL STEP — CREATE BUSINESS
+if (userSession.sessionState === "onboarding_create_business") {
+  const Business = (await import("../models/business.js")).default;
+  const UserRole = (await import("../models/userRole.js")).default;
+
+  const biz = await Business.create({
+    name: userSession.sessionData.name,
+    address: userSession.sessionData.address || "",
+    currency: "USD",
+    package: "trial"
+  });
+
+  await UserRole.create({
+    businessId: biz._id,
+    phone,
+    role: "owner",
+    pending: false
+  });
+
+  await UserSession.updateOne(
+    { phone },
+    {
+      activeBusinessId: biz._id,
+      sessionState: "ready",
+      sessionData: {}
+    }
+  );
+
+  await sendText(
+    from,
+    `🎉 Business created successfully!\n\n🏢 ${biz.name}`
+  );
+
+  return sendMainMenu(from);
+}
+
   const a = action || "";
   const al = a.toLowerCase();
 

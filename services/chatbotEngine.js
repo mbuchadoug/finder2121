@@ -46,13 +46,16 @@ const biz = await getBizForPhone(from);
 
 if (!biz) {
   const UserSession = (await import("../models/userSession.js")).default;
-
   const phone = from.replace(/\D+/g, "");
 
   const session = await UserSession.findOne({ phone });
 
-  // First ever interaction
-  if (!session || !session.sessionState) {
+  // 🚨 If onboarding already started → DO NOT restart
+  if (session?.sessionState?.startsWith("onboarding_")) {
+    // let onboarding handlers below process the message
+  } 
+  // ✅ First ever interaction
+  else {
     await UserSession.findOneAndUpdate(
       { phone },
       {

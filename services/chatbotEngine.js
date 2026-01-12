@@ -190,7 +190,10 @@ return sendText(
     return sendMainMenu(from);
   }
 
-  return;
+  return sendText(
+    from,
+    "⚠️ Please continue setting up your business.\n\nReply with the requested information."
+  );
 }
 
 
@@ -551,7 +554,7 @@ const settingsStates = [
 ];
 
 // ✅ SAFELY load business AFTER onboarding
-const biz = await getBizForPhone(from);
+//const biz = await getBizForPhone(from);
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
 if (!isMetaAction && biz && biz.sessionState) {

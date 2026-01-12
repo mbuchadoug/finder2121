@@ -44,41 +44,8 @@ export async function handleIncomingMessage({ from, action }) {
 
 const biz = await getBizForPhone(from);
 
-if (!biz) {
-  const UserSession = (await import("../models/userSession.js")).default;
-  const phone = from.replace(/\D+/g, "");
-
-  const session = await UserSession.findOne({ phone });
-
-  // 🚨 If onboarding already started → DO NOT restart
-  if (session?.sessionState?.startsWith("onboarding_")) {
-    // let onboarding handlers below process the message
-  } 
-  // ✅ First ever interaction
-  else {
-    await UserSession.findOneAndUpdate(
-      { phone },
-      {
-        sessionState: "onboarding_business_name",
-        sessionData: {}
-      },
-      { upsert: true }
-    );
-
-    return sendText(
-      from,
-      "👋 Welcome!\n\nLet’s get you started.\n\nPlease enter your *business name*:"
-    );
-  }
-}
-
-
-
-
-///////////////////////create business
-
 /* =========================
-   ONBOARDING FLOW (USER SESSION)
+   🚪 ONBOARDING ENTRY (RUN ONCE)
 ========================= */
 
 const UserSession = (await import("../models/userSession.js")).default;
@@ -86,93 +53,120 @@ const phone = from.replace(/\D+/g, "");
 
 const userSession = await UserSession.findOne({ phone });
 
-/* STEP 1 — BUSINESS NAME */
-if (userSession?.sessionState === "onboarding_business_name") {
-  await UserSession.updateOne(
+// ✅ No business AND no onboarding started → start onboarding
+if (!userSession?.activeBusinessId && !userSession?.sessionState) {
+  await UserSession.findOneAndUpdate(
     { phone },
     {
-      sessionState: "onboarding_business_address",
-      "sessionData.name": action.trim()
-    }
+      sessionState: "onboarding_business_name",
+      sessionData: {}
+    },
+    { upsert: true }
   );
 
-  return sendButtons(
+  return sendText(
     from,
-    "📍 Enter your business address (optional):",
-    [{ id: "onb_skip_address", title: "⏭ Skip" }]
+    "👋 Welcome!\n\nLet’s get you started.\n\nPlease enter your *business name*:"
   );
 }
 
-/* STEP 2 — BUSINESS ADDRESS */
-if (userSession?.sessionState === "onboarding_business_address") {
-  if (action !== "onb_skip_address") {
+
+/* =========================
+   🔒 ONBOARDING FLOW (HARD STOP)
+========================= */
+if (userSession?.sessionState?.startsWith("onboarding_")) {
+
+  /* STEP 1 — BUSINESS NAME */
+  if (userSession.sessionState === "onboarding_business_name") {
     await UserSession.updateOne(
       { phone },
-      { "sessionData.address": action.trim() }
+      {
+        sessionState: "onboarding_business_address",
+        "sessionData.name": action.trim()
+      }
+    );
+
+    return sendButtons(
+      from,
+      "📍 Enter your business address (optional):",
+      [{ id: "onb_skip_address", title: "⏭ Skip" }]
     );
   }
 
-  await UserSession.updateOne(
-    { phone },
-    { sessionState: "onboarding_business_logo" }
-  );
+  /* STEP 2 — BUSINESS ADDRESS */
+  if (userSession.sessionState === "onboarding_business_address") {
+    if (action !== "onb_skip_address") {
+      await UserSession.updateOne(
+        { phone },
+        { "sessionData.address": action.trim() }
+      );
+    }
 
-  return sendButtons(
-    from,
-    "🖼️ Send your business logo (optional):",
-    [{ id: "onb_skip_logo", title: "⏭ Skip" }]
-  );
-}
+    await UserSession.updateOne(
+      { phone },
+      { sessionState: "onboarding_business_logo" }
+    );
 
-/* STEP 3 — LOGO (SKIP SUPPORTED) */
-if (userSession?.sessionState === "onboarding_business_logo") {
-  if (action !== "onb_skip_logo") {
-    // actual media upload handled elsewhere
+    return sendButtons(
+      from,
+      "🖼️ Send your business logo (optional):",
+      [{ id: "onb_skip_logo", title: "⏭ Skip" }]
+    );
   }
 
-  await UserSession.updateOne(
-    { phone },
-    { sessionState: "onboarding_create_business" }
-  );
+  /* STEP 3 — BUSINESS LOGO */
+  if (userSession.sessionState === "onboarding_business_logo") {
+    await UserSession.updateOne(
+      { phone },
+      { sessionState: "onboarding_create_business" }
+    );
 
-  return sendText(from, "✅ Creating your business...");
+    return sendText(from, "✅ Creating your business...");
+  }
+
+  /* STEP 4 — CREATE BUSINESS */
+  if (userSession.sessionState === "onboarding_create_business") {
+    const Business = (await import("../models/business.js")).default;
+    const UserRole = (await import("../models/userRole.js")).default;
+
+    const newBiz = await Business.create({
+      name: userSession.sessionData.name,
+      address: userSession.sessionData.address || "",
+      currency: "USD",
+      package: "trial"
+    });
+
+    await UserRole.create({
+      businessId: newBiz._id,
+      phone,
+      role: "owner",
+      pending: false
+    });
+
+    await UserSession.updateOne(
+      { phone },
+      {
+        activeBusinessId: newBiz._id,
+        sessionState: "ready",
+        sessionData: {}
+      }
+    );
+
+    await sendText(
+      from,
+      `🎉 Business created successfully!\n\n🏢 ${newBiz.name}`
+    );
+
+    return sendMainMenu(from);
+  }
+
+  // ⛔ NOTHING else should run during onboarding
+  return;
 }
 
-/* STEP 4 — CREATE BUSINESS */
-if (userSession?.sessionState === "onboarding_create_business") {
-  const Business = (await import("../models/business.js")).default;
-  const UserRole = (await import("../models/userRole.js")).default;
 
-  const newBiz = await Business.create({
-    name: userSession.sessionData.name,
-    address: userSession.sessionData.address || "",
-    currency: "USD",
-    package: "trial"
-  });
 
-  await UserRole.create({
-    businessId: newBiz._id,
-    phone,
-    role: "owner",
-    pending: false
-  });
 
-  await UserSession.updateOne(
-    { phone },
-    {
-      activeBusinessId: newBiz._id,
-      sessionState: "ready",
-      sessionData: {}
-    }
-  );
-
-  await sendText(
-    from,
-    `🎉 Business created successfully!\n\n🏢 ${newBiz.name}`
-  );
-
-  return sendMainMenu(from);
-}
 
   /* =========================
      ENTRY
@@ -229,7 +223,11 @@ Reply *menu* to start.`
 
     // 🔒 Prevent Meta from interrupting Twilio media flows
 
-if (!al || ["hi", "hello", "menu"].includes(al)) {
+// 📌 Main menu shortcut — ONLY when NOT onboarding
+if (
+  !userSession?.sessionState?.startsWith("onboarding_") &&
+  (!al || ["hi", "hello", "menu"].includes(al))
+) {
   return sendMainMenu(from);
 }
 

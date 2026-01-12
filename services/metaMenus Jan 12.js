@@ -29,22 +29,17 @@ async function filterMenuByRole({ from, biz, items }) {
    MAIN
 ========================= */
 export async function sendMainMenu(to) {
-  const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
+  return sendList(to, "📊 Main Menu", [
+    { id: ACTIONS.SALES_MENU, title: "🧾 Sales" },
+    { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients" },
+    { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments" },
+    { id: ACTIONS.REPORTS_MENU, title: "📈 Reports" },
+    { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users" },
+    { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings" },
+       { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package" }
 
-  const items = [
-    { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
-    { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },
-    { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments", section: "payments" },
-    { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
-    { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
-    { id: ACTIONS.SETTINGS_MENU, title: "⚙ Settings", section: "settings" },
-    { id: ACTIONS.UPGRADE_PACKAGE, title: "⭐ Upgrade Package" } // owner-only check happens elsewhere
-  ];
-
-  const filtered = await filterMenuByRole({ from: to, biz, items });
-  return sendList(to, "📊 Main Menu", filtered);
+  ]);
 }
-
 
 /* =========================
    SALES (FIXED ✅)
@@ -96,40 +91,33 @@ export async function sendBusinessMenu(to) {
 
 
 export async function sendBusinessMenu(to) {
-  const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
-
-  const items = [
-    { id: ACTIONS.BUSINESS_PROFILE, title: "🏢 Business Profile", section: "users" },
-    { id: ACTIONS.USERS_MENU, title: "👥 Users", section: "users" },
-    { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches", section: "branches" },
+  return sendList(to, "🏢 Business & Users", [
+    { id: ACTIONS.BUSINESS_PROFILE, title: "🏢 Business Profile" },
+    { id: ACTIONS.USERS_MENU, title: "👥 Users" },
+    { id: ACTIONS.BRANCHES_MENU, title: "🏬 Branches" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
-  ];
-
-  const filtered = await filterMenuByRole({ from: to, biz, items });
-  return sendList(to, "🏢 Business & Users", filtered);
+  ]);
 }
-
 
 
 /* =========================
    SETTINGS
 ========================= */
-export async function sendSettingsMenu(from) {
-  const biz = await (await import("./bizHelpers.js")).getBizForPhone(from);
-
-  const items = [
-    { id: ACTIONS.SETTINGS_CURRENCY, title: "💱 Currency", section: "settings" },
-    { id: ACTIONS.SETTINGS_TERMS, title: "📅 Payment terms", section: "settings" },
-    { id: ACTIONS.SETTINGS_INV_PREFIX, title: "🧾 Invoice prefix", section: "settings" },
-    { id: ACTIONS.SETTINGS_QT_PREFIX, title: "📄 Quote prefix", section: "settings" },
-    { id: ACTIONS.SETTINGS_RCPT_PREFIX, title: "🧾 Receipt prefix", section: "settings" },
-    { id: ACTIONS.SETTINGS_LOGO, title: "🖼️ Business logo", section: "settings" },
-    { id: ACTIONS.SETTINGS_CLIENTS, title: "👥 View clients", section: "settings" },
-    { id: ACTIONS.SETTINGS_BRANCHES, title: "🏬 Branches", section: "branches" }
-  ];
-
-  const filtered = await filterMenuByRole({ from, biz, items });
-  return sendList(from, "⚙️ Settings", filtered);
+export function sendSettingsMenu(from) {
+  return sendList(
+    from,
+    "⚙️ Settings",
+    [
+      { id: ACTIONS.SETTINGS_CURRENCY, title: "💱 Currency" },
+      { id: ACTIONS.SETTINGS_TERMS, title: "📅 Payment terms" },
+      { id: ACTIONS.SETTINGS_INV_PREFIX, title: "🧾 Invoice prefix" },
+      { id: ACTIONS.SETTINGS_QT_PREFIX, title: "📄 Quote prefix" },
+      { id: ACTIONS.SETTINGS_RCPT_PREFIX, title: "🧾 Receipt prefix" },
+      { id: ACTIONS.SETTINGS_LOGO, title: "🖼️ Business logo" },
+      { id: ACTIONS.SETTINGS_CLIENTS, title: "👥 View clients" },
+      { id: ACTIONS.SETTINGS_BRANCHES, title: "🏬 Branches" }
+    ]
+  );
 }
 
 
@@ -146,42 +134,32 @@ export async function sendInvoiceConfirmMenu(to, summaryText) {
 
 
 export async function sendReportsMenu(to, isGold = false) {
-  const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
-
   const items = [
-    { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report", section: "reports" }
+    { id: ACTIONS.DAILY_REPORT, title: "📅 Daily Report" }
   ];
 
   if (isGold) {
     items.push(
-      { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report", section: "reports" },
-      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report", section: "reports" },
-      { id: ACTIONS.BRANCH_REPORT, title: "🏢 Branch Report", section: "reports" }
+      { id: ACTIONS.WEEKLY_REPORT, title: "📊 Weekly Report" },
+      { id: ACTIONS.MONTHLY_REPORT, title: "📆 Monthly Report" },
+      { id: ACTIONS.BRANCH_REPORT, title: "🏢 Branch Report" }
     );
   }
 
   items.push({ id: ACTIONS.BACK, title: "⬅ Back" });
 
-  const filtered = await filterMenuByRole({ from: to, biz, items });
-  return sendList(to, "📈 Reports", filtered);
+  return sendList(to, "📈 Reports", items);
 }
-
 
 
 export async function sendUsersMenu(to) {
-  const biz = await (await import("./bizHelpers.js")).getBizForPhone(to);
-
-  const items = [
-    { id: ACTIONS.INVITE_USER, title: "➕ Invite User", section: "users" },
-    { id: ACTIONS.VIEW_INVITES, title: "📨 Pending Invites", section: "users" },
-    { id: ACTIONS.VIEW_USERS, title: "👤 Active Users", section: "users" },
+  return sendList(to, "👥 Users", [
+    { id: ACTIONS.INVITE_USER, title: "➕ Invite User" },
+    { id: ACTIONS.VIEW_INVITES, title: "📨 Pending Invites" },
+    { id: ACTIONS.VIEW_USERS, title: "👤 Active Users" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
-  ];
-
-  const filtered = await filterMenuByRole({ from: to, biz, items });
-  return sendList(to, "👥 Users", filtered);
+  ]);
 }
-
 
 
 export async function sendBranchesMenu(to) {

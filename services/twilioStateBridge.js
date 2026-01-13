@@ -863,11 +863,15 @@ if (state === "adding_client_phone") {
 
     await saveBizSafe(biz);
 
-    await sendButtons(from, "Item added ✅", [
-      { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" },
-      { id: ACTIONS.INV_ENTER_PRICES, title: "💰 Enter prices" },
-      { id: ACTIONS.INV_CANCEL, title: "❌ Cancel" }
-    ]);
+   await sendButtons(from, {
+  text: "Item added ✅",
+  buttons: [
+    { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" },
+    { id: ACTIONS.INV_ENTER_PRICES, title: "💰 Enter prices" },
+    { id: ACTIONS.INV_CANCEL, title: "❌ Cancel" }
+  ]
+});
+
 
     return true;
   }

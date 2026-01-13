@@ -1046,17 +1046,13 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
 
   const url = `${site}/docs/generated/${folder}/${filename}`;
 
-await sendDocument(from, { link: url, filename });
+  await sendDocument(from, { link: url, filename });
 
-biz.sessionState = "ready";
-biz.sessionData = {};
-await saveBizSafe(biz);
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
 
-// ✅ SHOW MAIN MENU AFTER PDF
-await sendMainMenu(from);
-
-return true;
-
+  return true;
 }
 
 

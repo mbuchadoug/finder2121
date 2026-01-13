@@ -475,6 +475,30 @@ if (a === ACTIONS.BRANCH_REPORT) {
    ONBOARDING — BUSINESS NAME
 ========================= */
 
+// =========================
+// 🏢 ONBOARDING: BUSINESS NAME
+// =========================
+if (biz && biz.sessionState === "awaiting_business_name") {
+  const name = text;
+
+  if (!name || name.length < 2) {
+    await sendText(from, "❌ Please enter a valid business name:");
+    return;
+  }
+
+  biz.name = name;
+  biz.sessionState = "awaiting_currency";
+  await saveBizSafe(biz);
+
+  // Ask for currency (buttons)
+  await sendButtons(from, "💱 Select your business currency", [
+    { id: "onb_currency_USD", title: "USD ($)" },
+    { id: "onb_currency_ZWL", title: "ZWL (Z$)" },
+    { id: "onb_currency_ZAR", title: "ZAR (R)" }
+  ]);
+
+  return;
+}
 
 
 //const biz = await getBizForPhone(from);
@@ -518,6 +542,68 @@ if (!isMetaAction && biz && biz.sessionState) {
   });
   if (handled) return;
 }
+
+
+
+// =========================
+// 💱 ONBOARDING: CURRENCY
+// =========================
+if (biz && biz.sessionState === "awaiting_currency" && a.startsWith("onb_currency_")) {
+  const currency = a.replace("onb_currency_", "");
+
+  if (!["USD", "ZWL", "ZAR"].includes(currency)) {
+    await sendText(from, "❌ Invalid currency selection.");
+    return;
+  }
+
+  biz.currency = currency;
+  biz.sessionState = "awaiting_logo";
+  await saveBizSafe(biz);
+
+  await sendButtons(
+    from,
+    "🖼 Would you like to add your business logo now?",
+    [
+      { id: "onb_logo_yes", title: "📷 Upload Logo" },
+      { id: "onb_logo_skip", title: "Skip for now" }
+    ]
+  );
+
+  return;
+}
+
+
+// =========================
+// 🖼 ONBOARDING: LOGO CHOICE
+// =========================
+if (biz && biz.sessionState === "awaiting_logo") {
+  // User wants to upload logo
+  if (a === "onb_logo_yes") {
+    biz.sessionState = "awaiting_logo_upload";
+    await saveBizSafe(biz);
+
+    await sendText(
+      from,
+      "📷 Please send your logo image (PNG or JPG).\nYou can also type *skip* to continue without a logo."
+    );
+    return;
+  }
+
+  // User skips logo
+  if (a === "onb_logo_skip") {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    await sendText(
+      from,
+      "✅ Setup complete!\n\nYour business is ready to use 🚀"
+    );
+
+    return sendMainMenu(from);
+  }
+}
+
+
 
 
 if (a.startsWith("invite_branch_")) {
@@ -1160,6 +1246,43 @@ case ACTIONS.UPGRADE_PACKAGE: {
 
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
+
+
+// =========================
+// 🖼 ONBOARDING: LOGO UPLOAD (META IMAGE OR SKIP)
+// =========================
+if (biz && biz.sessionState === "awaiting_logo_upload") {
+  // User types skip
+  if (text && text.toLowerCase() === "skip") {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    await sendText(from, "✅ Setup complete! Logo skipped.");
+    return sendMainMenu(from);
+  }
+
+  /**
+   * IMPORTANT:
+   * At this point, the actual image handling
+   * happens in meta_webhook.js
+   *
+   * That file should already:
+   *  - download the image
+   *  - save biz.logoUrl
+   */
+
+  if (biz.logoUrl) {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    await sendText(from, "✅ Logo uploaded successfully!");
+    return sendMainMenu(from);
+  }
+
+  // If neither skip nor image yet, wait silently
+  return;
+}
+
 
    default: {
   const biz = await getBizForPhone(from);

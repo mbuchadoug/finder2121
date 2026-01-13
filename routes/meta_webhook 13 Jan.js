@@ -94,14 +94,14 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
         });
 
         biz.logoUrl = logoUrl;
+        biz.sessionState = "settings_menu";
+        biz.sessionData = {};
         await biz.save();
 
-// 🔑 IMPORTANT:
-// Do NOT change sessionState here.
-// chatbotEngine.js will decide what happens next.
-
-        await sendText(from, "✅ Logo uploaded successfully.");
-
+        await sendText(
+          from,
+          "✅ Logo uploaded successfully.\n\nYou are back in Settings."
+        );
       } catch (err) {
         console.error("META LOGO SAVE ERROR:", err);
         await sendText(from, "❌ Failed to save logo. Please try again.");

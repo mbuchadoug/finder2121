@@ -28,7 +28,7 @@ export async function sendText(to, text) {
 /* =========================
    BUTTONS
 ========================= */
-export async function sendButtons(to, bodyText, buttons) {
+/*export async function sendButtons(to, bodyText, buttons) {
   return axios.post(
     API,
     {
@@ -51,7 +51,35 @@ export async function sendButtons(to, bodyText, buttons) {
     },
     { headers }
   );
+}*/
+
+export async function sendButtons(to, payload) {
+  const { text, buttons } = payload;
+
+  return axios.post(
+    API,
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text },
+        action: {
+          buttons: buttons.map(b => ({
+            type: "reply",
+            reply: {
+              id: b.id,
+              title: b.title
+            }
+          }))
+        }
+      }
+    },
+    { headers }
+  );
 }
+
 
 /* =========================
    LIST (THIS WAS MISSING 🔥)

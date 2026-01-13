@@ -147,16 +147,12 @@ return;
 
   return sendButtons(
   from,
-  {
-    text: "👋 Welcome!\n\nYou don’t have a business yet.",
-    buttons: [
-      {
-        id: "create",
-        title: "➕ Create business"
-      }
-    ]
-  }
+  "👋 Welcome!\n\nYou don’t have a business yet.",
+  [
+    { id: "create", title: "➕ Create business" }
+  ]
 );
+
 
   }
 

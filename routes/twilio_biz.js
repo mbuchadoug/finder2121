@@ -852,6 +852,11 @@ async function sendMenuForUser(res, biz, providerId) {
 
 /* ---------- Main webhook (keeps your flow intact) ---------- */
 router.post("/webhook", async (req, res) => {
+  console.log("🔥 TWILIO WEBHOOK HIT", {
+  From: req.body.From,
+  Body: req.body.Body
+});
+
   console.log("TWILIO (biz): webhook hit ->", { path: req.path, ip: req.ip || req.connection?.remoteAddress });
   try { console.log("TWILIO (biz): body (raw):", JSON.stringify(req.body)); } catch (e) { console.log("TWILIO (biz): body keys:", Object.keys(req.body || {})); }
 

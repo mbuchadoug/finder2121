@@ -33,43 +33,52 @@ import {
 import { getBizForPhone, saveBizSafe } from "./bizHelpers.js";
 import { sendText } from "./metaSender.js";
 
+
+import axios from "axios";
+
+
+
+
 export async function handleIncomingMessage({ from, action }) {
-    // =========================
-console.log("META INCOMING:", {
-  from,
-  action
-});
+  console.log("META INCOMING:", { from, action });
 
-const biz = await getBizForPhone(from);
+  // 🔑 ALWAYS LOAD BUSINESS FIRST
+  const biz = await getBizForPhone(from);
 
-// 🚫 No business → redirect to Twilio onboarding
-// 🚫 No business → ONLY block non-onboarding messages
-if (!biz) {
-  const text = (action || "").trim();
+  // =========================
+  // 🟢 ONBOARDING GATE (META)
+  // =========================
+  if (!biz) {
+    const text = (action || "").trim();
 
-  // ✅ CREATE must be forwarded AND acknowledged
-  if (/^create$/i.test(text)) {
+    if (/^create$/i.test(text)) {
+      // 1️⃣ ACK META (CRITICAL)
+      await sendText(from, "⏳ Creating your business, please wait...");
 
-    // 1️⃣ Tell user something (Meta reply)
-    await sendText(
+      // 2️⃣ DELEGATE TO TWILIO STATE MACHINE
+      await continueTwilioFlow({
+        from,
+        text: "CREATE"
+      });
+
+      return;
+    }
+
+    if (/^join$/i.test(text)) {
+      await sendText(from, "⏳ Processing invitation...");
+      await continueTwilioFlow({
+        from,
+        text: "JOIN"
+      });
+      return;
+    }
+
+    return sendText(
       from,
-      "⏳ Creating your business, please wait..."
+      "👋 Welcome!\n\nYou don’t have a business yet.\n\nReply *CREATE* to set up your business."
     );
-
-    // 2️⃣ Forward to Twilio (stateful logic)
-    await continueTwilioFlow({
-      from,
-      text: "CREATE"
-    });
-
-    return;
   }
 
-  return sendText(
-    from,
-    "👋 Welcome!\n\nYou don’t have a business yet.\n\nReply *CREATE* to set up your business."
-  );
-}
 
 
   const a = action || "";

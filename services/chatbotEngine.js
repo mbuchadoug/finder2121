@@ -504,11 +504,15 @@ if (biz && biz.sessionState === "awaiting_business_name") {
   await saveBizSafe(biz);
 
   // Ask for currency (buttons)
-  await sendButtons(from, "💱 Select your business currency", [
+ await sendButtons(from, {
+  text: "💱 Select your business currency",
+  buttons: [
     { id: "onb_currency_USD", title: "USD ($)" },
     { id: "onb_currency_ZWL", title: "ZWL (Z$)" },
     { id: "onb_currency_ZAR", title: "ZAR (R)" }
-  ]);
+  ]
+});
+
 
   return;
 }
@@ -573,14 +577,15 @@ if (biz && biz.sessionState === "awaiting_currency" && a.startsWith("onb_currenc
   biz.sessionState = "awaiting_logo";
   await saveBizSafe(biz);
 
-  await sendButtons(
-    from,
-    "🖼 Would you like to add your business logo now?",
-    [
-      { id: "onb_logo_yes", title: "📷 Upload Logo" },
-      { id: "onb_logo_skip", title: "Skip for now" }
-    ]
-  );
+await sendButtons(from, {
+  text: "🖼 Would you like to add your business logo now?",
+  buttons: [
+    { id: "onb_logo_yes", title: "📷 Upload Logo" },
+    { id: "onb_logo_skip", title: "Skip for now" }
+  ]
+});
+
+
 
   return;
 }

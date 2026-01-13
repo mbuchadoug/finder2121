@@ -145,10 +145,19 @@ return;
       return;
     }
 
-    return sendText(
-      from,
-      "👋 Welcome!\n\nYou don’t have a business yet.\n\nReply *CREATE* to set up your business."
-    );
+  return sendButtons(
+  from,
+  {
+    text: "👋 Welcome!\n\nYou don’t have a business yet.",
+    buttons: [
+      {
+        id: "create",
+        title: "➕ Create business"
+      }
+    ]
+  }
+);
+
   }
 
 

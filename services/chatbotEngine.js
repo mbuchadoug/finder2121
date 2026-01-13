@@ -17,7 +17,7 @@ import { startClientFlow } from "./clientFlow.js";
 import { sendButtons } from "./metaSender.js";
    import Business from "../models/business.js";
   // import { sendPackagesMenu } from "./metaMenus.js";
-//import { sendText } from "./metaSender.js";
+import { sendText } from "./metaSender.js";
 
 import Branch from "../models/branch.js";
 import UserRole from "../models/userRole.js";

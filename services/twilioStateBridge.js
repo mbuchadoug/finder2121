@@ -585,12 +585,13 @@ if (state === ACTIONS.EXPENSE_METHOD) {
     number: receiptNumber,
     date: new Date(),
     billingTo: biz.sessionData.category,
-    items: [{
-      item: `${biz.sessionData.category} (${method})`,
-      qty: 1,
-      unit: biz.sessionData.amount,
-      total: biz.sessionData.amount
-    }],
+   items: [{
+  item: biz.sessionData.description || biz.sessionData.category,
+  qty: 1,
+  unit: biz.sessionData.amount,
+  total: biz.sessionData.amount
+}]
+,
     bizMeta: {
       name: biz.name,
       logoUrl: biz.logoUrl,

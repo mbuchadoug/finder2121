@@ -7,6 +7,7 @@ import { handleIncomingMessage } from "../services/chatbotEngine.js";
 import Business from "../models/business.js";
 import { saveMetaLogo } from "../services/saveMetaLogo.js";
 import { sendText } from "../services/metaSender.js";
+import { sendMainMenu } from "../services/metaMenus.js";
 
 
 
@@ -93,14 +94,22 @@ console.log("Full msg:", JSON.stringify(msg, null, 2));
           businessId: biz._id.toString()
         });
 
-        biz.logoUrl = logoUrl;
-        await biz.save();
+      biz.logoUrl = logoUrl;
 
-// 🔑 IMPORTANT:
-// Do NOT change sessionState here.
-// chatbotEngine.js will decide what happens next.
+// 🔑 COMPLETE ONBOARDING IF THIS WAS ONBOARDING
+if (biz.sessionState === "awaiting_logo_upload") {
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await biz.save();
 
-        await sendText(from, "✅ Logo uploaded successfully.");
+  await sendText(from, "✅ Logo uploaded successfully!");
+  return sendMainMenu(from);
+}
+
+// ⚙️ Settings flow fallback
+await biz.save();
+await sendText(from, "✅ Logo updated successfully.");
+
 
       } catch (err) {
         console.error("META LOGO SAVE ERROR:", err);

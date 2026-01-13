@@ -1,4 +1,7 @@
 import { PACKAGES } from "./packages.js";
+import { sendText } from "./metaSender.js";
+import { sendPackagesMenu } from "./metaMenus.js";
+
 
 export function canUseFeature(biz, feature) {
   const pkg = PACKAGES[biz.package] || PACKAGES.trial;

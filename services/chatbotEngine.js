@@ -35,20 +35,34 @@ import { sendText } from "./metaSender.js";
 
 export async function handleIncomingMessage({ from, action }) {
     // =========================
+console.log("META INCOMING:", {
+  from,
+  action
+});
 
 const biz = await getBizForPhone(from);
 
 // 🚫 No business → redirect to Twilio onboarding
 // 🚫 No business → ONLY block non-onboarding messages
 if (!biz) {
-  const al = (action || "").toLowerCase();
+  const text = (action || "").trim();
 
-  // ✅ Allow CREATE to reach Twilio
-  if (al === "create") {
-    return continueTwilioFlow({
+  // ✅ CREATE must be forwarded AND acknowledged
+  if (/^create$/i.test(text)) {
+
+    // 1️⃣ Tell user something (Meta reply)
+    await sendText(
+      from,
+      "⏳ Creating your business, please wait..."
+    );
+
+    // 2️⃣ Forward to Twilio (stateful logic)
+    await continueTwilioFlow({
       from,
       text: "CREATE"
     });
+
+    return;
   }
 
   return sendText(
@@ -56,6 +70,7 @@ if (!biz) {
     "👋 Welcome!\n\nYou don’t have a business yet.\n\nReply *CREATE* to set up your business."
   );
 }
+
 
   const a = action || "";
   const al = a.toLowerCase();

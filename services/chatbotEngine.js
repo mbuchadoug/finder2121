@@ -6,7 +6,12 @@ import { showUnpaidInvoices } from "./paymentAdapters.js";
 import Invoice from "../models/invoice.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
-import { canUseFeature, requiredPackageForFeature } from "./accessGuards.js";
+import {
+  canUseFeature,
+  requiredPackageForFeature,
+  promptUpgrade
+} from "./accessGuards.js";
+
 import { sendPackagesMenu } from "./metaMenus.js";
 import { startClientFlow } from "./clientFlow.js";
 import { sendButtons } from "./metaSender.js";

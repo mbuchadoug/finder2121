@@ -35,6 +35,22 @@ import { sendText } from "./metaSender.js";
 
 
 import axios from "axios";
+async function forwardToTwilioWebhook({ from, text }) {
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+
+  await axios.post(
+    site + "/twilio/webhook",
+    new URLSearchParams({
+      From: "whatsapp:" + from.replace(/\D+/g, ""),
+      Body: text
+    }).toString(),
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      }
+    }
+  );
+}
 
 
 
@@ -56,10 +72,11 @@ export async function handleIncomingMessage({ from, action }) {
       await sendText(from, "⏳ Creating your business, please wait...");
 
       // 2️⃣ DELEGATE TO TWILIO STATE MACHINE
-      await continueTwilioFlow({
-        from,
-        text: "CREATE"
-      });
+    await forwardToTwilioWebhook({
+  from,
+  text: "CREATE"
+});
+
 
       return;
     }

@@ -8,6 +8,7 @@ import MessagingResponse from "twilio/lib/twiml/MessagingResponse.js";
 import { dispatchAction } from "../services/actionDispatcher.js";
 import Business from "../models/business.js";
 import Client from "../models/client.js";
+import { sendButtons } from "../services/metaSender.js";
 
 import Branch from "../models/branch.js";
 import UserRole from "../models/userRole.js";
@@ -1039,16 +1040,24 @@ if (biz) {
 // 🚀 CREATE BUSINESS (ONLY ENTRY POINT)
 if (!biz) {
 
-  if (!/^create$/i.test(trimmed)) {
-    return sendTwimlText(
-      res,
-`👋 Welcome to ZimQuote
+ const wantsCreate =
+  /^create$/i.test(trimmed) ||
+  action === "create_business";
 
-You are not linked to any business.
+if (!wantsCreate) {
+  return sendButtons(res, {
+    text: `👋 Welcome to ZimQuote
 
-Reply *CREATE* to set up your business.`
-    );
-  }
+You are not linked to any business.`,
+    buttons: [
+      {
+        id: "create_business",
+        title: "➕ Create business"
+      }
+    ]
+  });
+}
+
 
   // 🔒 Ensure user has no businesses
   const roles = await UserRole.find({ phone: providerId });

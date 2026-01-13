@@ -10,7 +10,10 @@ import { canUseFeature, requiredPackageForFeature } from "./accessGuards.js";
 import { sendPackagesMenu } from "./metaMenus.js";
 import { startClientFlow } from "./clientFlow.js";
 import { sendButtons } from "./metaSender.js";
-
+   import Business from "../models/business.js";
+import Branch from "../models/branch.js";
+import UserRole from "../models/userRole.js";
+import UserSession from "../models/userSession.js";
 import {
   handleChooseSavedClient,
   handleNewClientFromInvoice,
@@ -72,10 +75,54 @@ export async function handleIncomingMessage({ from, action }) {
       await sendText(from, "⏳ Creating your business, please wait...");
 
       // 2️⃣ DELEGATE TO TWILIO STATE MACHINE
-    await forwardToTwilioWebhook({
-  from,
-  text: "CREATE"
+
+
+const phone = from.replace(/\D+/g, "");
+
+const existing = await Business.findOne({ ownerPhone: phone });
+if (existing) {
+  await sendText(from, "You already have a business. Reply *menu*.");
+  return;
+}
+
+const now = new Date();
+
+const biz = await Business.create({
+  name: null,
+  currency: "USD",
+  provider: "whatsapp",
+  package: "trial",
+  subscriptionStatus: "active",
+  trialStartedAt: now,
+  trialEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
 });
+
+const branch = await Branch.create({
+  businessId: biz._id,
+  name: "Main Branch",
+  isDefault: true
+});
+
+await UserRole.create({
+  businessId: biz._id,
+  branchId: branch._id,
+  phone,
+  role: "owner",
+  pending: false
+});
+
+await UserSession.findOneAndUpdate(
+  { phone },
+  { activeBusinessId: biz._id },
+  { upsert: true }
+);
+
+biz.sessionState = "awaiting_business_name";
+await biz.save();
+
+await sendText(from, "✅ Business created!\n\nWhat is your business name?");
+return;
+
 
 
       return;

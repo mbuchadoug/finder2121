@@ -176,12 +176,12 @@ await UserSession.findOneAndUpdate(
 biz.sessionState = "awaiting_business_name";
 await biz.save();
 
-await sendText(from, "✅ Business created!\n\nWhat is your business name?");
+await sendText(from, "\nWhat is your business name?");
 return;
 
 
 
-      return;
+      //return;
     }
 
     /*if (/^join$/i.test(text)) {

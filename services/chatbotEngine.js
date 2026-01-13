@@ -147,7 +147,7 @@ return;
 
   const a = action || "";
   const al = a.toLowerCase();
-
+const text = typeof action === "string" ? action.trim() : "";
 
   /* =========================
    NEW USER → BUSINESS ONBOARDING GATE
@@ -504,7 +504,6 @@ if (biz && biz.sessionState === "awaiting_business_name") {
 //const biz = await getBizForPhone(from);
 
 // 🔑 In Meta Cloud, typed text ALSO arrives as `action`
-const text = typeof action === "string" ? action.trim() : "";
 
 // ✅ Meta action = known button/list IDs only
 const isMetaAction =

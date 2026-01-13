@@ -19,13 +19,13 @@ export async function startQuoteFlow(to) {
 
   await biz.save();
 
-  return sendButtons(
-    to,
-    "📝 New Quotation\n\nChoose client option:",
-    [
-      { id: "INV_USE_CLIENT", title: "📋 Use saved client" },
-      { id: "INV_NEW_CLIENT", title: "➕ New client" },
-      { id: "INV_CANCEL", title: "⬅ Cancel" }
-    ]
-  );
+return sendButtons(to, {
+  text: "📝 New Quotation\n\nChoose client option:",
+  buttons: [
+    { id: "INV_USE_CLIENT", title: "📋 Use saved client" },
+    { id: "INV_NEW_CLIENT", title: "➕ New client" },
+    { id: "INV_CANCEL", title: "⬅ Cancel" }
+  ]
+});
+
 }

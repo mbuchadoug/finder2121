@@ -15,7 +15,7 @@ export async function startReceiptFlow(to) {
   biz.sessionData = { docType: "receipt", items: [] };
   await biz.save();
 
-  return sendButtons(
+  /*return sendButtons(
     to,
     "🧾 New Receipt\n\nChoose client option:",
     [
@@ -23,5 +23,15 @@ export async function startReceiptFlow(to) {
       { id: "INV_NEW_CLIENT", title: "➕ New client" },
       { id: "INV_CANCEL", title: "⬅ Cancel" }
     ]
-  );
+  );*/
+
+  return sendButtons(to, {
+  text: "🧾 New Receipt\n\nChoose client option:",
+  buttons: [
+        { id: "INV_USE_CLIENT", title: "📋 Use saved client" },
+      { id: "INV_NEW_CLIENT", title: "➕ New client" },
+      { id: "INV_CANCEL", title: "⬅ Cancel" }
+  ]
+});
+
 }

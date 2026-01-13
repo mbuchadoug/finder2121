@@ -53,22 +53,8 @@ export async function sendText(to, text) {
   );
 }*/
 
-export async function sendButtons(to, payloadOrText, maybeButtons) {
-  let payload;
-
-  // ✅ backward compatibility
-  if (typeof payloadOrText === "string") {
-    payload = {
-      text: payloadOrText,
-      buttons: Array.isArray(maybeButtons) ? maybeButtons : []
-    };
-  } else {
-    payload = payloadOrText;
-  }
-
-  if (!Array.isArray(payload.buttons)) {
-    throw new Error("sendButtons: buttons must be an array");
-  }
+export async function sendButtons(to, payload) {
+  const { text, buttons } = payload;
 
   return axios.post(
     API,
@@ -78,11 +64,14 @@ export async function sendButtons(to, payloadOrText, maybeButtons) {
       type: "interactive",
       interactive: {
         type: "button",
-        body: { text: payload.text },
+        body: { text },
         action: {
-          buttons: payload.buttons.map(b => ({
+          buttons: buttons.map(b => ({
             type: "reply",
-            reply: { id: b.id, title: b.title }
+            reply: {
+              id: b.id,
+              title: b.title
+            }
           }))
         }
       }
@@ -90,7 +79,6 @@ export async function sendButtons(to, payloadOrText, maybeButtons) {
     { headers }
   );
 }
-
 
 
 /* =========================

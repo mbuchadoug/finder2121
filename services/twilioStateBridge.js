@@ -509,43 +509,16 @@ if (state === ACTIONS.EXPENSE_CATEGORY || state === "expense_category") {
     return true;
   }
 
-  // ✅ Save category
+  // ✅ Save selected category
   biz.sessionData.category = category;
 
-  // ➡️ NEW STEP: ask for description
-  biz.sessionState = "expense_description";
-  await saveBizSafe(biz);
-
-  await sendText(
-    from,
-    "📝 Enter expense description (e.g. Fuel for delivery, Office stationery):"
-  );
-
-  return true;
-}
-
-
-/* ===========================
-   EXPENSE: DESCRIPTION
-=========================== */
-if (state === "expense_description") {
-  const description = trimmed;
-
-  if (!description || description.length < 2) {
-    await sendText(from, "❌ Please enter a valid description:");
-    return true;
-  }
-
-  biz.sessionData.description = description;
-
-  // ➡️ Next step
+  // ➡️ Move to next step
   biz.sessionState = "expense_amount";
   await saveBizSafe(biz);
 
   await sendText(from, "💵 Enter expense amount:");
   return true;
 }
-
 
 
 /* ===========================
@@ -567,15 +540,13 @@ if (state === ACTIONS.EXPENSE_METHOD) {
 
   const Expense = (await import("../models/expense.js")).default;
 
- const expense = await Expense.create({
-  businessId: biz._id,
-  amount: biz.sessionData.amount,
-  category: biz.sessionData.category,
-  description: biz.sessionData.description, // ✅ NEW
-  method,
-  createdBy: from
-});
-
+  const expense = await Expense.create({
+    businessId: biz._id,
+    amount: biz.sessionData.amount,
+    category: biz.sessionData.category,
+    method,
+    createdBy: from
+  });
 
   const receiptNumber = `EXP-${expense._id.toString().slice(-6)}`;
 

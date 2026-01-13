@@ -11,6 +11,9 @@ import { sendPackagesMenu } from "./metaMenus.js";
 import { startClientFlow } from "./clientFlow.js";
 import { sendButtons } from "./metaSender.js";
    import Business from "../models/business.js";
+   import { sendPackagesMenu } from "./metaMenus.js";
+import { sendText } from "./metaSender.js";
+
 import Branch from "../models/branch.js";
 import UserRole from "../models/userRole.js";
 import UserSession from "../models/userSession.js";
@@ -884,13 +887,22 @@ case ACTIONS.REPORTS_MENU: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  if (!canUseFeature(biz, "reports_daily")) {
+  /*if (!canUseFeature(biz, "reports_daily")) {
     const needed = requiredPackageForFeature("reports_daily");
     return sendText(
       from,
       `🔒 Reports are not available on your current package.\n\nUpgrade to *${needed.toUpperCase()}* to unlock reports.`
     );
-  }
+  }*/
+
+    if (!canUseFeature(biz, "reports_daily")) {
+  return promptUpgrade({
+    biz,
+    from,
+    feature: "Reports"
+  });
+}
+
 
   biz.sessionState = "reports_menu";
   biz.sessionData = {};
@@ -955,12 +967,21 @@ case ACTIONS.INVITE_USER: {
 
   const pkg = PACKAGES[biz.package] || PACKAGES.trial;
 
-  if (!pkg.features.includes("users")) {
+  /*if (!pkg.features.includes("users")) {
     return sendText(
       from,
       "🔒 User management is not available on your current package.\n\nUpgrade your package to invite users."
     );
-  }
+  }*/
+
+    if (!pkg.features.includes("users")) {
+  return promptUpgrade({
+    biz,
+    from,
+    feature: "User management"
+  });
+}
+
 
   // ============================
   // 👥 USER LIMIT CHECK
@@ -1034,12 +1055,20 @@ case ACTIONS.ADD_BRANCH: {
   const biz = await getBizForPhone(from);
   if (!biz) return sendMainMenu(from);
 
-  if (!canUseFeature(biz, "branches")) {
+ /* if (!canUseFeature(biz, "branches")) {
     return sendText(
       from,
       "🔒 Branches are not available on your current package.\nUpgrade to *GOLD* to unlock branches."
     );
-  }
+  }*/
+ if (!canUseFeature(biz, "branches")) {
+  return promptUpgrade({
+    biz,
+    from,
+    feature: "Branches"
+  });
+}
+
 
   const Branch = (await import("../models/branch.js")).default;
   const count = await Branch.countDocuments({ businessId: biz._id });

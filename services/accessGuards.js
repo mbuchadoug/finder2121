@@ -5,6 +5,20 @@ export function canUseFeature(biz, feature) {
   return pkg.features.includes(feature);
 }
 
+export async function promptUpgrade({ biz, from, feature }) {
+  biz.sessionState = "choose_package";
+  biz.sessionData = {};
+  await biz.save();
+
+  await sendText(
+    from,
+    `🔒 *${feature}* is not available on your current package.\n\nPlease upgrade to continue.`
+  );
+
+  await sendPackagesMenu(from, biz.package);
+}
+
+
 export function requiredPackageForFeature(feature) {
   for (const [pkg, cfg] of Object.entries(PACKAGES)) {
     if (cfg.features.includes(feature)) {

@@ -67,16 +67,7 @@ async function forwardToTwilioWebhook({ from, text }) {
 
 
 export async function handleIncomingMessage({ from, action }) {
-    // =========================
-  // 🔑 JOIN INVITATION (ABSOLUTE PRIORITY)
-  // =========================
-  const phone = from.replace(/\D+/g, "");
-  const text =
-    typeof action === "string" ? action.trim() : "";
-  const al = text.toLowerCase();
-
   
-
   console.log("META INCOMING:", { from, action });
 
   // 🔑 ALWAYS LOAD BUSINESS FIRST
@@ -169,8 +160,8 @@ return sendButtons(from, {
 
 
   const a = action || "";
-  /*const al = a.toLowerCase();
-const text = typeof action === "string" ? action.trim() : "";*/
+  const al = a.toLowerCase();
+const text = typeof action === "string" ? action.trim() : "";
 
   /* =========================
    NEW USER → BUSINESS ONBOARDING GATE
@@ -193,7 +184,51 @@ const text = typeof action === "string" ? action.trim() : "";*/
     return sendMainMenu(from);
   }*/
 
+    /* =========================
+   JOIN INVITATION (META)
+========================= */
+if (al === "join") {
+  const phone = from.replace(/\D+/g, "");
 
+  const UserRole = (await import("../models/userRole.js")).default;
+  const UserSession = (await import("../models/userSession.js")).default;
+
+  const invite = await UserRole.findOne({
+    phone,
+    pending: true
+  }).populate("businessId branchId");
+
+  if (!invite) {
+    return sendText(
+      from,
+      "❌ No pending invitation found for this number."
+    );
+  }
+
+  // ✅ ACTIVATE USER
+  invite.pending = false;
+  await invite.save();
+
+  // ✅ SET ACTIVE BUSINESS
+  await UserSession.findOneAndUpdate(
+    { phone },
+    { activeBusinessId: invite.businessId._id },
+    { upsert: true }
+  );
+
+  await sendText(
+    from,
+`✅ Invitation accepted!
+
+🏢 Business: ${invite.businessId.name}
+📍 Branch: ${invite.branchId?.name || "Main"}
+🔑 Role: ${invite.role}
+
+Reply *menu* to start.`
+  );
+
+  return sendMainMenu(from);
+}
 
     // 🔒 Prevent Meta from interrupting Twilio media flows
 

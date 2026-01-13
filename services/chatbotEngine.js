@@ -544,11 +544,12 @@ if (!isMetaAction && biz && biz.sessionState) {
 
 
 
+
 // =========================
 // 💱 ONBOARDING: CURRENCY
 // =========================
 if (biz && biz.sessionState === "awaiting_currency" && a.startsWith("onb_currency_")) {
-  const currency = a.replace("onb_currency_", "");
+  const currency = a.replace("onb_currency_", "").toUpperCase();
 
   if (!["USD", "ZWL", "ZAR"].includes(currency)) {
     await sendText(from, "❌ Invalid currency selection.");
@@ -570,6 +571,7 @@ if (biz && biz.sessionState === "awaiting_currency" && a.startsWith("onb_currenc
 
   return;
 }
+
 
 
 // =========================

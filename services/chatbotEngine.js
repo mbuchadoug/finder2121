@@ -1375,18 +1375,21 @@ case ACTIONS.UPGRADE_PACKAGE: {
       return startClientFlow(from);
 
 
-
-
-   default: {
+default: {
   const biz = await getBizForPhone(from);
 
-  // 🚫 Do NOT interrupt Twilio flows (e.g. logo upload)
-  if (biz?.sessionState === "awaiting_logo_upload") {
+  // 🔒 DO NOT INTERRUPT ACTIVE FLOWS
+  if (biz?.sessionState && biz.sessionState !== "ready") {
+    // Let Twilio or Meta state handlers continue
     return;
   }
 
+  // ✅ Only show menu when idle
   return sendMainMenu(from);
 }
+
+
+ 
 
   }
 }

@@ -603,6 +603,40 @@ if (biz && biz.sessionState === "awaiting_logo") {
   }
 }
 
+// =========================
+// 🖼 ONBOARDING: LOGO UPLOAD (META IMAGE OR SKIP)
+// =========================
+if (biz && biz.sessionState === "awaiting_logo_upload") {
+  // User types skip
+  if (text && text.toLowerCase() === "skip") {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    await sendText(from, "✅ Setup complete! Logo skipped.");
+    return sendMainMenu(from);
+  }
+
+  /**
+   * IMPORTANT:
+   * At this point, the actual image handling
+   * happens in meta_webhook.js
+   *
+   * That file should already:
+   *  - download the image
+   *  - save biz.logoUrl
+   */
+
+  if (biz.logoUrl) {
+    biz.sessionState = "ready";
+    await saveBizSafe(biz);
+
+    await sendText(from, "✅ Logo uploaded successfully!");
+    return sendMainMenu(from);
+  }
+
+  // If neither skip nor image yet, wait silently
+  return;
+}
 
 
 
@@ -1248,40 +1282,6 @@ case ACTIONS.UPGRADE_PACKAGE: {
       return startClientFlow(from);
 
 
-// =========================
-// 🖼 ONBOARDING: LOGO UPLOAD (META IMAGE OR SKIP)
-// =========================
-if (biz && biz.sessionState === "awaiting_logo_upload") {
-  // User types skip
-  if (text && text.toLowerCase() === "skip") {
-    biz.sessionState = "ready";
-    await saveBizSafe(biz);
-
-    await sendText(from, "✅ Setup complete! Logo skipped.");
-    return sendMainMenu(from);
-  }
-
-  /**
-   * IMPORTANT:
-   * At this point, the actual image handling
-   * happens in meta_webhook.js
-   *
-   * That file should already:
-   *  - download the image
-   *  - save biz.logoUrl
-   */
-
-  if (biz.logoUrl) {
-    biz.sessionState = "ready";
-    await saveBizSafe(biz);
-
-    await sendText(from, "✅ Logo uploaded successfully!");
-    return sendMainMenu(from);
-  }
-
-  // If neither skip nor image yet, wait silently
-  return;
-}
 
 
    default: {

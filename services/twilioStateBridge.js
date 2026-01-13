@@ -406,10 +406,10 @@ They must click it to join.`
   biz.sessionData = {};
   await saveBizSafe(biz);
 
-  await sendText(
+  /*await sendText(
     from,
     `✅ Invitation sent to ${phone}\n📍 Branch: ${branch.name}`
-  );
+  );*/
   await sendMainMenu(from);
   return true;
 }

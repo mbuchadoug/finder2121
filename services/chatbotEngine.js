@@ -75,45 +75,7 @@ export async function handleIncomingMessage({ from, action }) {
     typeof action === "string" ? action.trim() : "";
   const al = text.toLowerCase();
 
-  if (al === "join") {
-    const invite = await UserRole.findOne({
-      phone,
-      pending: true
-    }).populate("businessId branchId");
-
-    if (!invite) {
-      await sendText(
-        from,
-        "❌ No pending invitation found for this number."
-      );
-      return;
-    }
-
-    // ✅ ACTIVATE USER
-    invite.pending = false;
-    await invite.save();
-
-    // ✅ SET ACTIVE BUSINESS
-    await UserSession.findOneAndUpdate(
-      { phone },
-      { activeBusinessId: invite.businessId._id },
-      { upsert: true }
-    );
-
-    await sendText(
-      from,
-`✅ Invitation accepted!
-
-🏢 Business: ${invite.businessId.name}
-📍 Branch: ${invite.branchId?.name || "Main"}
-🔑 Role: ${invite.role}
-
-Reply *menu* to start.`
-    );
-
-    await sendMainMenu(from);
-    return;
-  }
+  
 
   console.log("META INCOMING:", { from, action });
 

@@ -1143,7 +1143,8 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   return sendMainMenu(from);
 }
 
-if (a.startsWith("doc_")) {
+if (a.startsWith("doc_") && a.length > 28) {
+
   const docId = a.replace("doc_", "");
   const biz = await getBizForPhone(from);
 
@@ -1160,10 +1161,10 @@ if (a.startsWith("doc_")) {
   return sendButtons(from, {
     text: `📄 ${doc.number}\nStatus: ${doc.status}`,
     buttons: [
-      { id: "doc_view", title: "📄 View PDF" },
-      { id: "doc_delete", title: "🗑 Delete" },
-      { id: ACTIONS.BACK, title: "⬅ Back" }
-    ]
+  { id: ACTIONS.VIEW_DOC, title: "📄 View PDF" },
+  { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
+  { id: ACTIONS.BACK, title: "⬅ Back" }
+]
   });
 }
 

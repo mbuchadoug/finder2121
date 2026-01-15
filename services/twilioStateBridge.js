@@ -937,40 +937,20 @@ if (
 
     biz.sessionData.lastItem = null;
     biz.sessionData.expectingQty = false;
-    biz.sessionState = "creating_invoice_confirm";
+   biz.sessionState = "creating_invoice_confirm";
+await saveBizSafe(biz);
 
-    await saveBizSafe(biz);
+// 🔹 BUILD SUMMARY IMMEDIATELY
+const summary = biz.sessionData.items
+  .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
+  .join("\n");
 
-// ✅ Check if all items already have prices
-const allHavePrices = biz.sessionData.items.every(
-  i => typeof i.unit === "number" && i.unit > 0
+// 🔹 SHOW CONFIRM MENU DIRECTLY
+return sendInvoiceConfirmMenu(
+  from,
+  `🧾 Invoice Summary\n\n${summary}`
 );
 
-const buttons = [
-  { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" }
-];
-
-// Only allow price entry if at least one item has no price
-if (!allHavePrices) {
-  buttons.push({
-    id: ACTIONS.INV_ENTER_PRICES,
-    title: "💰 Enter prices"
-  });
-}
-
-buttons.push({
-  id: ACTIONS.INV_CANCEL,
-  title: "❌ Cancel"
-});
-
-await sendButtons(from, {
-  text: "Item added ✅",
-  buttons
-});
-
-
-
-    return true;
   }
 
 

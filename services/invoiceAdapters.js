@@ -80,9 +80,14 @@ export async function handleClientPicked(to, clientId) {
   // Optional cache (safe)
   biz.sessionData.client = client;
 
-  biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.items = [];
-  biz.sessionData.awaitingItemDesc = false;
+ biz.sessionState = "creating_invoice_add_items";
+biz.sessionData.items = [];
+
+// 🔥 CRITICAL RESET
+biz.sessionData.itemMode = null;
+biz.sessionData.lastItem = null;
+biz.sessionData.expectingQty = false;
+
 
   biz.markModified("sessionData");
   await biz.save();

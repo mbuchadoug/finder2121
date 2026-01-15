@@ -12,7 +12,15 @@ export async function startInvoiceFlow(to) {
   }
 
   biz.sessionState = "creating_invoice_choose_client";
-  biz.sessionData = { docType: "invoice", items: [] };
+  //biz.sessionData = { docType: "invoice", items: [] };
+  biz.sessionData = {
+  docType: "invoice",
+  items: [],
+  itemMode: null,
+  lastItem: null,
+  expectingQty: false
+};
+
   await biz.save();
 
  return sendButtons(to, {

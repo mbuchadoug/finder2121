@@ -12,13 +12,15 @@ export async function showUnpaidInvoices(to) {
     return sendText(to, "❌ No active business.");
   }
 
-  const invoices = await Invoice.find({
-    businessId: biz._id,
-    status: { $ne: "paid" }
-  })
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
+ const invoices = await Invoice.find({
+  businessId: biz._id,
+  type: "invoice",        // 🔥 THIS IS THE FIX
+  status: { $ne: "paid" }
+})
+  .sort({ createdAt: -1 })
+  .limit(10)
+  .lean();
+
 
   if (!invoices.length) {
     return sendText(to, "✅ No unpaid invoices found.");

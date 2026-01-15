@@ -81,7 +81,7 @@ export async function sendSalesMenu(to) {
     { id: ACTIONS.NEW_INVOICE, title: "New Invoice" },
     { id: ACTIONS.NEW_QUOTE, title: "New Quotation" },
     { id: ACTIONS.NEW_RECEIPT, title: "New Receipt" },
-    { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products" },
+    //{ id: ACTIONS.PRODUCTS_MENU, title: "📦 Products" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }

@@ -1105,6 +1105,7 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
   const invoiceDoc = await Invoice.create({
     businessId: biz._id,
     clientId: client._id,
+    type: docType, // 🔥 ADD THIS LINE
     number,
     currency: biz.currency,
 

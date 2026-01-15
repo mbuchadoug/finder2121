@@ -883,81 +883,74 @@ if (state === "adding_client_phone") {
   /* ===========================
      ITEM ADDING
   ============================ */
-  if (state === "creating_invoice_add_items") {
-if (
-  !biz.sessionData.itemMode &&
-  !biz.sessionData.lastItem &&
-  !biz.sessionData.expectingQty &&
-  (!biz.sessionData.items || biz.sessionData.items.length === 0)
-) {
-  biz.sessionData.itemMode = "choose";
-  await saveBizSafe(biz);
+if (state === "creating_invoice_add_items") {
 
-  await sendButtons(from, {
-    text: "How would you like to add an item?",
-    buttons: [
-      { id: "inv_item_catalogue", title: "📦 Catalogue" },
-      { id: "inv_view_products", title: "👀 View items" },
-      { id: "inv_item_custom", title: "✍️ Custom item" }
-    ]
+  // ✅ SHOW MENU WHEN itemMode IS NULL
+  if (
+    biz.sessionData.itemMode === null &&
+    !biz.sessionData.lastItem &&
+    !biz.sessionData.expectingQty
+  ) {
+    biz.sessionData.itemMode = "choose";
+    await saveBizSafe(biz);
+
+    await sendButtons(from, {
+      text: "How would you like to add an item?",
+      buttons: [
+        { id: "inv_item_catalogue", title: "📦 Catalogue" },
+        { id: "inv_view_products", title: "👀 View items" },
+        { id: "inv_item_custom", title: "✍️ Custom item" }
+      ]
+    });
+
+    return true; // ⛔ IMPORTANT
+  }
+
+  // 👇 ONLY RUNS AFTER USER CHOOSES CUSTOM ITEM
+  if (!biz.sessionData.expectingQty) {
+    if (!isNaN(Number(trimmed))) {
+      await sendText(from, "Please send an item description (not a number).");
+      return true;
+    }
+
+    biz.sessionData.lastItem = { description: trimmed };
+    biz.sessionData.expectingQty = true;
+    await saveBizSafe(biz);
+
+    await sendText(from, "Enter quantity (e.g. 1):");
+    return true;
+  }
+
+  const qty = Number(trimmed);
+  if (isNaN(qty) || qty <= 0) {
+    await sendText(from, "Invalid quantity. Enter a number like 1:");
+    return true;
+  }
+
+  // ✅ SAVE ITEM WITHOUT PRICE FIRST
+  biz.sessionData.items = biz.sessionData.items || [];
+  biz.sessionData.items.push({
+    item: biz.sessionData.lastItem.description,
+    qty,
+    unit: null
   });
 
-  return true;
+  // 🔁 RESET FLAGS
+  biz.sessionData.lastItem = null;
+  biz.sessionData.expectingQty = false;
+
+  // 👉 PRICE STEP
+  biz.sessionState = "creating_invoice_enter_prices";
+  biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
+
+  await saveBizSafe(biz);
+
+  return sendText(
+    from,
+    `💰 Enter unit price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
+  );
 }
 
-
-
-    if (!biz.sessionData.expectingQty) {
-      if (!isNaN(Number(trimmed))) {
-        await sendText(from, "Please send an item description (not a number).");
-        return true;
-      }
-
-      biz.sessionData.lastItem = { description: trimmed };
-      biz.sessionData.expectingQty = true;
-      await saveBizSafe(biz);
-
-      await sendText(from, "Enter quantity (e.g. 1):");
-      return true;
-    }
-
-
-
-
-    const qty = Number(trimmed);
-    if (isNaN(qty) || qty <= 0) {
-      await sendText(from, "Invalid quantity. Enter a number like 1:");
-      return true;
-    }
-
-// ✅ SAVE ITEM WITHOUT PRICE FIRST
-biz.sessionData.items = biz.sessionData.items || [];
-biz.sessionData.items.push({
-  item: biz.sessionData.lastItem.description,
-  qty,
-  unit: null // 👈 IMPORTANT: price not set yet
-});
-
-// 🔁 RESET TEMP FLAGS
-biz.sessionData.lastItem = null;
-biz.sessionData.expectingQty = false;
-
-// 👉 MOVE TO PRICE ENTRY
-biz.sessionState = "creating_invoice_enter_prices";
-
-// track which item needs price
-biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
-
-await saveBizSafe(biz);
-
-// 👉 ASK FOR PRICE
-return sendText(
-  from,
-  `💰 Enter unit price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
-);
-
-
-  }
 
 
 

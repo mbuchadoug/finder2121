@@ -143,36 +143,11 @@ export async function sendList(to, title, items) {
   }, { headers });
 }
 
-/*export async function sendDocument(to, document) {
+export async function sendDocument(to, document) {
   return axios.post(API, {
     messaging_product: "whatsapp",
     to,
     type: "document",
     document
   }, { headers });
-}*/
-
-
-export async function sendDocument(to, { link, filename }) {
-  const phone = to.replace(/\D+/g, "");
-
-  return axios.post(
-    `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "document",
-      document: {
-        link,
-        filename
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
 }
-

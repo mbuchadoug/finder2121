@@ -889,15 +889,17 @@ if (!biz.sessionData.itemMode) {
   biz.sessionData.itemMode = "choose";
   await saveBizSafe(biz);
 
-return sendButtons(from, {
+await sendButtons(from, {
   text: "How would you like to add an item?",
-buttons: [
-  { id: "inv_item_catalogue", title: "📦 Catalogue" },
-  { id: "inv_view_products", title: "👀 View items" },
-  { id: "inv_item_custom", title: "✍️ Custom item" }
-]
-
+  buttons: [
+    { id: "inv_item_catalogue", title: "📦 Catalogue" },
+    { id: "inv_view_products", title: "👀 View items" },
+    { id: "inv_item_custom", title: "✍️ Custom item" }
+  ]
 });
+
+return true; // 🔴 THIS IS THE FIX
+
 
 }
 
@@ -968,6 +970,13 @@ await sendButtons(from, {
     return true;
   }
 
+
+
+
+
+
+
+  
   /* ===========================
      PRICE ENTRY
   ============================ */

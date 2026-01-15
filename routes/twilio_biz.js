@@ -353,6 +353,8 @@ async function generatePDF({
   bizMeta = {}
 }) {
 
+    // ✅ ADD THIS LINE
+  const baseDir = await ensurePublicSubdirs();
 const folder = path.join(
   baseDir,
   type === "invoice"
@@ -578,7 +580,8 @@ if (type === "statement") {
       </tr>
     </thead>
     <tbody>
-      ${itemsRowsHtml}
+     ${rowsHtml}
+
     </tbody>
   </table>
 

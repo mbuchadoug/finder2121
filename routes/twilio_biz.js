@@ -256,9 +256,12 @@ async function incrementCounter(type) { const counters = await loadCounters(); i
 async function ensurePublicSubdirs() {
   const base = path.join(process.cwd(), "public", "docs", "generated");
   await fs.promises.mkdir(base, { recursive: true });
-  for (const sub of ["invoices", "quotes", "receipts"]) {
+
+  // ✅ ADD "statements" HERE
+  for (const sub of ["invoices", "quotes", "receipts", "statements"]) {
     await fs.promises.mkdir(path.join(base, sub), { recursive: true });
   }
+
   return base;
 }
 
@@ -366,7 +369,9 @@ const folder = path.join(
     : "receipts"
 );
 
-  const filename = `${type}-${number}-${Date.now()}.pdf`;
+  const safeNumber = number || "statement";
+const filename = `${type}-${safeNumber}-${Date.now()}.pdf`;
+
   const filepath = path.join(folder, filename);
 
   // --- Resolve and possibly inline logo as data URI (prefer local file under public/docs/logos) ---

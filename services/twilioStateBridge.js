@@ -921,35 +921,41 @@ if (
       return true;
     }
 
+
+
+
     const qty = Number(trimmed);
     if (isNaN(qty) || qty <= 0) {
       await sendText(from, "Invalid quantity. Enter a number like 1:");
       return true;
     }
 
-    biz.sessionData.items = biz.sessionData.items || [];
-  biz.sessionData.items.push({
+// ✅ SAVE ITEM WITHOUT PRICE FIRST
+biz.sessionData.items = biz.sessionData.items || [];
+biz.sessionData.items.push({
   item: biz.sessionData.lastItem.description,
   qty,
-  unit: biz.sessionData.lastItem.unit || 0
+  unit: null // 👈 IMPORTANT: price not set yet
 });
 
+// 🔁 RESET TEMP FLAGS
+biz.sessionData.lastItem = null;
+biz.sessionData.expectingQty = false;
 
-    biz.sessionData.lastItem = null;
-    biz.sessionData.expectingQty = false;
-   biz.sessionState = "creating_invoice_confirm";
+// 👉 MOVE TO PRICE ENTRY
+biz.sessionState = "creating_invoice_enter_prices";
+
+// track which item needs price
+biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
+
 await saveBizSafe(biz);
 
-// 🔹 BUILD SUMMARY IMMEDIATELY
-const summary = biz.sessionData.items
-  .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
-  .join("\n");
-
-// 🔹 SHOW CONFIRM MENU DIRECTLY
-return sendInvoiceConfirmMenu(
+// 👉 ASK FOR PRICE
+return sendText(
   from,
-  `🧾 Invoice Summary\n\n${summary}`
+  `💰 Enter unit price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
 );
+
 
   }
 

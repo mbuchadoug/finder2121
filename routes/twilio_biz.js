@@ -494,7 +494,7 @@ if (type === "statement") {
     const companyAddress = bizMeta.address || "";
 
     const discountPercentDoc = Number(bizMeta.discountPercent || 0);
-  const rowsHtml =
+const rowsHtml =
   type === "statement"
     ? ledger.map(r => `
         <tr>
@@ -506,14 +506,17 @@ if (type === "statement") {
         </tr>
       `).join("")
     : items.map(it => {
-        const qty = it.qty || 1;
+        const qty = Number(it.qty || 1);
         const rate = Number(it.unit || it.rate || 0);
+        const discount = Number(it.discount || 0);
         const amount = qty * rate;
+
         return `
           <tr>
             <td style="text-align:center;">${qty}</td>
             <td>${escapeHtml(it.item || "")}</td>
             <td style="text-align:right;">${formatMoney(rate)}</td>
+            <td style="text-align:right;">${formatMoney(discount)}</td>
             <td style="text-align:right;">${formatMoney(amount)}</td>
           </tr>
         `;
@@ -2777,6 +2780,7 @@ const invoiceDoc = await Invoice.create({
     item: i.item,
     qty: i.qty,
     unit: i.unit,
+    discount: 0,
     total: i.qty * i.unit
   })),
 

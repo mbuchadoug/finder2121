@@ -513,17 +513,25 @@ if (al.startsWith("client_") && al !== ACTIONS.CLIENT_STATEMENT) {
   return;
 }
 
- if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
+if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
   const biz = await getBizForPhone(from);
 
-  // 🔑 CRITICAL RESET (THIS WAS MISSING)
+  // 🔥 FULL RESET (THIS WAS MISSING)
   biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.expectingQty = false;
+  biz.sessionData.itemMode = null;
   biz.sessionData.lastItem = null;
+  biz.sessionData.expectingQty = false;
 
   await saveBizSafe(biz);
 
-  return sendText(from, "Send item description:");
+  return sendButtons(from, {
+    text: "How would you like to add an item?",
+    buttons: [
+      { id: "inv_item_catalogue", title: "📦 Catalogue" },
+      { id: "inv_view_products", title: "👀 View items" },
+      { id: "inv_item_custom", title: "✍️ Custom item" }
+    ]
+  });
 }
 
 

@@ -889,13 +889,15 @@ if (!biz.sessionData.itemMode) {
   biz.sessionData.itemMode = "choose";
   await saveBizSafe(biz);
 
-  return sendButtons(from, {
-    text: "How would you like to add an item?",
-    buttons: [
-      { id: "inv_item_catalogue", title: "📦 From catalogue" },
-      { id: "inv_item_custom", title: "✍️ Custom item" }
-    ]
-  });
+return sendButtons(from, {
+  text: "How would you like to add an item?",
+  buttons: [
+    { id: "inv_item_catalogue", title: "📦 Pick from catalogue" },
+    { id: "inv_view_products", title: "👀 View products" },
+    { id: "inv_item_custom", title: "✍️ Custom item" }
+  ]
+});
+
 }
 
 

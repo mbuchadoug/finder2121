@@ -38,7 +38,8 @@ import {
   sendSettingsMenu,
     sendReportsMenu,   // ✅ ADD THIS LINE
      sendUsersMenu,      // ✅ ADD
-  sendBranchesMenu    // ✅ ADD
+  sendBranchesMenu,    // ✅ ADD,
+  sendProductsMenu 
 } from "./metaMenus.js";
 
 // helpers you already use elsewhere
@@ -440,6 +441,30 @@ if (a === "inv_item_custom") {
     await handleNewClientFromInvoice(from);
     return;
   }
+
+  if (a === "inv_view_products") {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const products = await Product.find({
+    businessId: biz._id,
+    isActive: true
+  }).lean();
+
+  if (!products.length) {
+    return sendText(from, "📦 No products found.");
+  }
+
+  let msg = "📦 Product catalogue:\n\n";
+
+  products.forEach((p, i) => {
+    msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+  });
+
+  msg += `\nReply *menu* to cancel or choose *Pick from catalogue* to add items.`;
+
+  return sendText(from, msg);
+}
 
 
   // ===============================
@@ -1548,6 +1573,29 @@ case ACTIONS.ADD_PRODUCT: {
   return sendText(from, "📦 Enter product name:");
 }
 
+case ACTIONS.VIEW_PRODUCTS: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const products = await Product.find({
+    businessId: biz._id,
+    isActive: true
+  }).lean();
+
+  if (!products.length) {
+    await sendText(from, "📦 No products found.");
+    return sendMainMenu(from);
+  }
+
+  let msg = "📦 Products:\n\n";
+
+  products.forEach((p, i) => {
+    msg += `${i + 1}) ${p.name} — ${p.unitPrice} ${biz.currency}\n`;
+  });
+
+  await sendText(from, msg);
+  return sendMainMenu(from);
+}
 
 default: {
   const biz = await getBizForPhone(from);

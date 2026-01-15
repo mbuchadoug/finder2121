@@ -1185,6 +1185,9 @@ if (
 // ===============================
 // 📄 SALES DOC → VIEW PDF (META)
 // ===============================
+// ===============================
+// 📄 SALES DOC → VIEW (RE-GENERATE PDF)
+// ===============================
 if (a === ACTIONS.VIEW_DOC) {
   const biz = await getBizForPhone(from);
   if (!biz?.sessionData?.docId) {
@@ -1192,12 +1195,41 @@ if (a === ACTIONS.VIEW_DOC) {
     return sendSalesMenu(from);
   }
 
-  const doc = await Invoice.findById(biz.sessionData.docId);
+  const doc = await Invoice.findById(biz.sessionData.docId).lean();
   if (!doc) {
     await sendText(from, "❌ Document not found.");
     return sendSalesMenu(from);
   }
 
+  // 🔎 Load client
+  const Client = (await import("../models/client.js")).default;
+  const client = await Client.findById(doc.clientId).lean();
+
+  if (!client) {
+    await sendText(from, "❌ Client not found.");
+    return sendSalesMenu(from);
+  }
+
+  // 🔄 RE-GENERATE PDF (same as creation)
+  const { filename } = await generatePDF({
+    type: doc.type,
+    number: doc.number,
+    date: doc.createdAt || new Date(),
+    billingTo: client.name || client.phone,
+    items: doc.items,
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      discountPercent: doc.discountPercent || 0,
+      vatPercent: doc.vatPercent || 0,
+      applyVat: doc.type === "receipt" ? false : true,
+      _id: biz._id.toString(),
+      status: doc.status
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
   const folder =
     doc.type === "invoice"
       ? "invoices"
@@ -1205,19 +1237,19 @@ if (a === ACTIONS.VIEW_DOC) {
       ? "quotes"
       : "receipts";
 
-  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
-  const filename = `${doc.number}.pdf`;
   const url = `${site}/docs/generated/${folder}/${filename}`;
 
+  // 📤 Send immediately
   await sendDocument(from, { link: url, filename });
 
-biz.sessionState = "ready";
-biz.sessionData = {};
-await saveBizSafe(biz);
+  // ✅ Reset session
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
 
-return; // ✅ DO NOT send anything after a document
-
+  return; // ⛔ IMPORTANT: stop here
 }
+
 
 
 

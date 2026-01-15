@@ -7,6 +7,7 @@ import Invoice from "../models/invoice.js";
 import Product from "../models/product.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
+import { sendDocument } from "./metaSender.js";
 import {
   canUseFeature,
   requiredPackageForFeature,
@@ -1179,31 +1180,7 @@ if (
 
 
 
-if (a === "doc_delete") {
-  const biz = await getBizForPhone(from);
-  const docId = biz.sessionData.docId;
 
-  const doc = await Invoice.findById(docId);
-  if (!doc) {
-    await sendText(from, "Document not found.");
-    return sendSalesMenu(from);
-  }
-
-  // 🔒 SAFETY RULE
-  if (doc.status === "paid") {
-    await sendText(from, "❌ Paid documents cannot be deleted.");
-    return sendSalesMenu(from);
-  }
-
-  await Invoice.deleteOne({ _id: docId });
-
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
-
-  await sendText(from, "🗑 Document deleted successfully.");
-  return sendSalesMenu(from);
-}
 
 // ===============================
 // 📄 SALES DOC → VIEW PDF (META)

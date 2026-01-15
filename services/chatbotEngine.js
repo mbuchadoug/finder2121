@@ -764,33 +764,6 @@ const settingsStates = [
  //biz = await getBizForPhone(from);
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
-// ===============================
-// 📄 SALES DOC → PICK DOCUMENT
-// ===============================
-if (a.startsWith("doc_") && a.length > 28) {
-  const docId = a.replace("doc_", "");
-  const biz = await getBizForPhone(from);
-
-  const doc = await Invoice.findById(docId);
-  if (!doc) {
-    await sendText(from, "❌ Document not found.");
-    return sendSalesMenu(from);
-  }
-
-  biz.sessionState = "sales_doc_action";
-  biz.sessionData = { docId };
-  await saveBizSafe(biz);
-
-return sendButtons(from, {
-  text: `📄 ${doc.number}\nStatus: ${doc.status}`,
-  buttons: [
-    { id: ACTIONS.VIEW_DOC, title: "📄 View PDF" },
-    { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
-    { id: ACTIONS.BACK, title: "⬅ Back" }
-  ]
-});
-
-}
 
 
 // ✅ Only pass text to Twilio AFTER onboarding
@@ -1170,15 +1143,57 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   return sendMainMenu(from);
 }
 
-// ===============================
-// 📄 SALES DOC → VIEW PDF
-// ===============================
+if (a.startsWith("doc_")) {
+  const docId = a.replace("doc_", "");
+  const biz = await getBizForPhone(from);
+
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  biz.sessionState = "sales_doc_action";
+  biz.sessionData = { docId };
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: `📄 ${doc.number}\nStatus: ${doc.status}`,
+    buttons: [
+      { id: "doc_view", title: "📄 View PDF" },
+      { id: "doc_delete", title: "🗑 Delete" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ]
+  });
+}
 
 
 
+if (a === "doc_delete") {
+  const biz = await getBizForPhone(from);
+  const docId = biz.sessionData.docId;
 
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "Document not found.");
+    return sendSalesMenu(from);
+  }
 
+  // 🔒 SAFETY RULE
+  if (doc.status === "paid") {
+    await sendText(from, "❌ Paid documents cannot be deleted.");
+    return sendSalesMenu(from);
+  }
 
+  await Invoice.deleteOne({ _id: docId });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "🗑 Document deleted successfully.");
+  return sendSalesMenu(from);
+}
 
 
   /* =========================

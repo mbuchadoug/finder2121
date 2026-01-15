@@ -92,8 +92,6 @@ biz.sessionData.expectingQty = false;
   biz.markModified("sessionData");
   await biz.save();
 
-  return sendText(
-    to,
-    `Client selected: ${client.name || client.phone}\n\nSend item description (e.g. "Website design").`
-  );
+ return; // 🔴 DO NOTHING — let state machine handle UI
+
 }

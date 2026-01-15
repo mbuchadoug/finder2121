@@ -332,18 +332,7 @@ Enter amount paid:`
 // META → TWILIO CONFIRM DELEGATION
 // ===============================
 
-if (al === "inv_add_item") {
-  const biz = await getBizForPhone(from);
 
-  // 🔑 RESET ITEM STATE BEFORE RE-ENTERING
-  biz.sessionState = "creating_invoice_add_items";
-  biz.sessionData.expectingQty = false;
-  biz.sessionData.lastItem = null;
-
-  await saveBizSafe(biz);
-
-  return sendText(from, "Send item description:");
-}
 
 
 // ===============================

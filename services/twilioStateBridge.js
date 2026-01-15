@@ -145,16 +145,17 @@ if (state === "client_statement_generate") {
     clientId
   });
 
-  const { filename } = await generatePDF({
-    type: "statement",
-    clientName: client.name || client.phone,
-    ledger,
-    bizMeta: {
-      name: biz.name,
-      logoUrl: biz.logoUrl,
-      _id: biz._id.toString()
-    }
-  });
+const { filename } = await generatePDF({
+  type: "statement",
+  billingTo: client.name || client.phone, // ✅ FIX
+  ledger,
+  bizMeta: {
+    name: biz.name,
+    logoUrl: biz.logoUrl,
+    _id: biz._id.toString()
+  }
+});
+
 
   const site = (process.env.SITE_URL || "").replace(/\/$/, "");
   const url = `${site}/docs/generated/statements/${filename}`;

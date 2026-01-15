@@ -459,8 +459,16 @@ if (type === "statement") {
   </style>
 </head>
 <body>
+
   <h2>${escapeHtml(bizMeta.name || "")}</h2>
-  <h3>Client Statement</h3>
+  <div style="margin-top:6px; font-weight:600;">
+    Client: ${escapeHtml(billingTo || "—")}
+  </div>
+  <div style="font-size:12px; color:#666;">
+    Date: ${new Date().toISOString().slice(0,10)}
+  </div>
+
+  <h3 style="margin-top:20px;">Statement</h3>
 
   <table>
     <thead>
@@ -476,9 +484,9 @@ if (type === "statement") {
       ${rows}
     </tbody>
   </table>
+
 </body>
-</html>
-`;
+</html>`;
 }
 
     const companyName = bizMeta.name || "";

@@ -77,6 +77,7 @@ export async function sendMainMenu(to) {
    SALES (FIXED ✅)
 ========================= */
 export async function sendSalesMenu(to) {
+    console.log("🔥 SALES MENU v2 LOADED");
   return sendList(to, "🧾 Sales", [
     { id: ACTIONS.NEW_INVOICE, title: "New Invoice" },
     { id: ACTIONS.NEW_QUOTE, title: "New Quotation" },

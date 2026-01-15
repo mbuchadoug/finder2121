@@ -884,6 +884,21 @@ if (state === "adding_client_phone") {
      ITEM ADDING
   ============================ */
   if (state === "creating_invoice_add_items") {
+
+if (!biz.sessionData.itemMode) {
+  biz.sessionData.itemMode = "choose";
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: "How would you like to add an item?",
+    buttons: [
+      { id: "inv_item_catalogue", title: "📦 From catalogue" },
+      { id: "inv_item_custom", title: "✍️ Custom item" }
+    ]
+  });
+}
+
+
     if (!biz.sessionData.expectingQty) {
       if (!isNaN(Number(trimmed))) {
         await sendText(from, "Please send an item description (not a number).");
@@ -905,11 +920,12 @@ if (state === "adding_client_phone") {
     }
 
     biz.sessionData.items = biz.sessionData.items || [];
-    biz.sessionData.items.push({
-      item: biz.sessionData.lastItem.description,
-      qty,
-      unit: 0
-    });
+  biz.sessionData.items.push({
+  item: biz.sessionData.lastItem.description,
+  qty,
+  unit: biz.sessionData.lastItem.unit || 0
+});
+
 
     biz.sessionData.lastItem = null;
     biz.sessionData.expectingQty = false;
@@ -917,14 +933,33 @@ if (state === "adding_client_phone") {
 
     await saveBizSafe(biz);
 
-   await sendButtons(from, {
-  text: "Item added ✅",
-  buttons: [
-    { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" },
-    { id: ACTIONS.INV_ENTER_PRICES, title: "💰 Enter prices" },
-    { id: ACTIONS.INV_CANCEL, title: "❌ Cancel" }
-  ]
+// ✅ Check if all items already have prices
+const allHavePrices = biz.sessionData.items.every(
+  i => typeof i.unit === "number" && i.unit > 0
+);
+
+const buttons = [
+  { id: ACTIONS.INV_ADD_ANOTHER_ITEM, title: "➕ Add another item" }
+];
+
+// Only allow price entry if at least one item has no price
+if (!allHavePrices) {
+  buttons.push({
+    id: ACTIONS.INV_ENTER_PRICES,
+    title: "💰 Enter prices"
+  });
+}
+
+buttons.push({
+  id: ACTIONS.INV_CANCEL,
+  title: "❌ Cancel"
 });
+
+await sendButtons(from, {
+  text: "Item added ✅",
+  buttons
+});
+
 
 
     return true;

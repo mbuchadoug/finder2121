@@ -4,6 +4,7 @@ import { startReceiptFlow } from "./receiptFlow.js";
 import { continueTwilioFlow } from "./twilioStateBridge.js";
 import { showUnpaidInvoices } from "./paymentAdapters.js";
 import Invoice from "../models/invoice.js";
+import Product from "../models/product.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
 import {
@@ -398,6 +399,41 @@ if (a === "inv_set_vat") {
   return sendText(from, "Enter VAT percent (0–100):");
 }
 
+if (a === "inv_item_catalogue") {
+  const biz = await getBizForPhone(from);
+
+  const products = await Product.find({
+    businessId: biz._id,
+    isActive: true
+  }).limit(20);
+
+  if (!products.length) {
+    biz.sessionData.itemMode = "custom";
+    await saveBizSafe(biz);
+    return sendText(from, "No catalogue items yet. Send item description:");
+  }
+
+  biz.sessionState = "creating_invoice_pick_product";
+  await saveBizSafe(biz);
+
+  return sendList(
+    from,
+    "Select item",
+    products.map(p => ({
+      id: `prod_${p._id}`,
+      title: `${p.name} (${p.unitPrice})`
+    }))
+  );
+}
+
+
+if (a === "inv_item_custom") {
+  const biz = await getBizForPhone(from);
+  biz.sessionData.itemMode = "custom";
+  await saveBizSafe(biz);
+
+  return sendText(from, "Send item description:");
+}
 
 
   if (al === "inv_new_client") {
@@ -433,6 +469,16 @@ if (a === ACTIONS.CLIENT_STATEMENT) {
       title: c.name || c.phone
     }))
   );
+}
+
+if (a === ACTIONS.ADD_PRODUCT) {
+  const biz = await getBizForPhone(from);
+
+  biz.sessionState = "product_add_name";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(from, "Enter product name:");
 }
 
 
@@ -563,6 +609,46 @@ if (a === ACTIONS.BRANCH_REPORT) {
   /* =========================
      TEXT → TWILIO FLOW
   ========================= */
+if (biz?.sessionState === "product_add_name") {
+  const name = text?.trim();
+
+  if (!name || name.length < 2) {
+    await sendText(from, "❌ Enter a valid product name:");
+    return;
+  }
+
+  biz.sessionData.productName = name;
+  biz.sessionState = "product_add_price";
+  await saveBizSafe(biz);
+
+  return sendText(from, "💰 Enter product price:");
+}
+
+
+if (biz?.sessionState === "product_add_price") {
+  const price = Number(text);
+
+  if (isNaN(price) || price <= 0) {
+    await sendText(from, "❌ Enter a valid price (e.g. 50):");
+    return;
+  }
+
+  const Product = (await import("../models/product.js")).default;
+
+  await Product.create({
+    businessId: biz._id,
+    name: biz.sessionData.productName,
+    unitPrice: price,
+    isActive: true
+  });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "✅ Product saved successfully!");
+  return sendMainMenu(from);
+}
 
   /* =========================
    ONBOARDING — BUSINESS NAME
@@ -949,6 +1035,30 @@ if (a.startsWith("stmt_client_")) {
   return continueTwilioFlow({ from, text: "generate" });
 }
 
+if (a.startsWith("prod_")) {
+  const productId = a.replace("prod_", "");
+  const biz = await getBizForPhone(from);
+
+  const Product = (await import("../models/product.js")).default;
+  const product = await Product.findById(productId);
+
+  if (!product) {
+    return sendText(from, "❌ Item not found.");
+  }
+
+  // Inject exactly how your invoice expects it
+  biz.sessionData.lastItem = {
+    description: product.name,
+    unit: product.unitPrice
+  };
+
+  biz.sessionData.expectingQty = true;
+  biz.sessionState = "creating_invoice_add_items";
+
+  await saveBizSafe(biz);
+
+  return sendText(from, `Enter quantity for *${product.name}*:`);
+}
 
 // ===============================
 // PACKAGE SELECTION
@@ -1423,6 +1533,20 @@ case ACTIONS.UPGRADE_PACKAGE: {
 
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);
+
+      case ACTIONS.PRODUCTS_MENU:
+  return sendProductsMenu(from);
+
+case ACTIONS.ADD_PRODUCT: {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "product_add_name";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(from, "📦 Enter product name:");
+}
 
 
 default: {

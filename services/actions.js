@@ -68,6 +68,13 @@ SETTINGS_BRANCHES: "settings_branches",
 UPGRADE_PACKAGE: "upgrade_package",
 CHOOSE_PACKAGE: "choose_package",
 
+INV_ITEM_CATALOGUE: "inv_item_catalogue",
+INV_ITEM_CUSTOM: "inv_item_custom",
+
+PRODUCTS_MENU: "products_menu",
+ADD_PRODUCT: "add_product",
+VIEW_PRODUCTS: "view_products",
+
 
   // NAV
   BACK: "back"

@@ -60,6 +60,7 @@ export async function sendMainMenu(to) {
   const items = [
     { id: ACTIONS.SALES_MENU, title: "🧾 Sales", section: "sales" },
     { id: ACTIONS.CLIENTS_MENU, title: "👥 Clients", section: "clients" },
+      { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products" },
     { id: ACTIONS.PAYMENTS_MENU, title: "💰 Payments", section: "payments" },
     { id: ACTIONS.REPORTS_MENU, title: "📈 Reports", section: "reports" },
     { id: ACTIONS.BUSINESS_MENU, title: "🏢 Business & Users", section: "users" },
@@ -80,6 +81,7 @@ export async function sendSalesMenu(to) {
     { id: ACTIONS.NEW_INVOICE, title: "New Invoice" },
     { id: ACTIONS.NEW_QUOTE, title: "New Quotation" },
     { id: ACTIONS.NEW_RECEIPT, title: "New Receipt" },
+    { id: ACTIONS.PRODUCTS_MENU, title: "📦 Products" },
     { id: ACTIONS.BACK, title: "⬅ Back" }
   ]);
 }
@@ -243,4 +245,16 @@ export async function sendPackagesMenu(to, currentPackage) {
       { id: ACTIONS.BACK, title: "⬅ Back" }
     ]
   );
+}
+
+
+export async function sendProductsMenu(from) {
+  return sendButtons(from, {
+    text: "📦 Products Catalogue",
+    buttons: [
+      { id: ACTIONS.ADD_PRODUCT, title: "➕ Add product" },
+      { id: ACTIONS.VIEW_PRODUCTS, title: "📋 View products" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ]
+  });
 }

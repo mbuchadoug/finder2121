@@ -913,7 +913,11 @@ if (state === "creating_invoice_add_items") {
       return true;
     }
 
-    biz.sessionData.lastItem = { description: trimmed };
+    biz.sessionData.lastItem = {
+  description: trimmed,
+  source: "custom"
+};
+
     biz.sessionData.expectingQty = true;
     await saveBizSafe(biz);
 
@@ -928,18 +932,26 @@ if (state === "creating_invoice_add_items") {
   }
 
   // ✅ SAVE ITEM WITHOUT PRICE FIRST
-  biz.sessionData.items = biz.sessionData.items || [];
-  biz.sessionData.items.push({
-    item: biz.sessionData.lastItem.description,
-    qty,
-    unit: null
-  });
+biz.sessionData.items.push({
+  item: biz.sessionData.lastItem.description,
+  qty,
+  unit: biz.sessionData.lastItem.unit ?? null,
+  source: biz.sessionData.lastItem.source
+});
+
+// persist source for decision
+biz.sessionData.lastItemSource = biz.sessionData.lastItem.source;
+
 
   // 🔁 RESET FLAGS
   biz.sessionData.lastItem = null;
   biz.sessionData.expectingQty = false;
 
-  // 👉 PRICE STEP
+  const lastItem =
+  biz.sessionData.items[biz.sessionData.items.length - 1];
+
+// 🔥 ONLY ASK PRICE FOR CUSTOM ITEMS
+if (biz.sessionData.lastItemSource === "custom") {
   biz.sessionState = "creating_invoice_enter_prices";
   biz.sessionData.priceIndex = biz.sessionData.items.length - 1;
 
@@ -947,8 +959,23 @@ if (state === "creating_invoice_add_items") {
 
   return sendText(
     from,
-    `💰 Enter unit price for:\n${biz.sessionData.items[biz.sessionData.priceIndex].item}`
+    `💰 Enter unit price for:\n${lastItem.item}`
   );
+}
+
+// ✅ CATALOGUE ITEM → SKIP PRICE
+biz.sessionState = "creating_invoice_confirm";
+await saveBizSafe(biz);
+
+const summary = biz.sessionData.items
+  .map((i, idx) => `${idx + 1}) ${i.item} x${i.qty} @ ${i.unit}`)
+  .join("\n");
+
+return sendInvoiceConfirmMenu(
+  from,
+  `🧾 Invoice Summary\n\n${summary}`
+);
+
 }
 
 

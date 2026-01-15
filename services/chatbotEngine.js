@@ -516,11 +516,11 @@ if (al.startsWith("client_") && al !== ACTIONS.CLIENT_STATEMENT) {
 if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
   const biz = await getBizForPhone(from);
 
-  // 🔥 FULL RESET (THIS WAS MISSING)
   biz.sessionState = "creating_invoice_add_items";
   biz.sessionData.itemMode = null;
   biz.sessionData.lastItem = null;
   biz.sessionData.expectingQty = false;
+  biz.sessionData.lastItemSource = null;
 
   await saveBizSafe(biz);
 
@@ -533,6 +533,7 @@ if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
     ]
   });
 }
+
 
 
   if (a === ACTIONS.INV_ENTER_PRICES) {
@@ -1080,10 +1081,12 @@ if (a.startsWith("prod_")) {
   }
 
   // Inject exactly how your invoice expects it
-  biz.sessionData.lastItem = {
-    description: product.name,
-    unit: product.unitPrice
-  };
+biz.sessionData.lastItem = {
+  description: product.name,
+  unit: product.unitPrice,
+  source: "catalogue" // 🔥 THIS IS THE FIX
+};
+
 
   biz.sessionData.expectingQty = true;
   biz.sessionState = "creating_invoice_add_items";

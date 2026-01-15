@@ -152,7 +152,6 @@ export async function sendList(to, title, items) {
   }, { headers });
 }*/
 
-import axios from "axios";
 
 export async function sendDocument(to, { link, filename }) {
   const phone = to.replace(/\D+/g, "");

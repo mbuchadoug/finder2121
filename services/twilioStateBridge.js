@@ -884,24 +884,27 @@ if (state === "adding_client_phone") {
      ITEM ADDING
   ============================ */
   if (state === "creating_invoice_add_items") {
-
-if (!biz.sessionData.itemMode) {
+if (
+  !biz.sessionData.itemMode &&
+  !biz.sessionData.lastItem &&
+  !biz.sessionData.expectingQty &&
+  (!biz.sessionData.items || biz.sessionData.items.length === 0)
+) {
   biz.sessionData.itemMode = "choose";
   await saveBizSafe(biz);
 
-await sendButtons(from, {
-  text: "How would you like to add an item?",
-  buttons: [
-    { id: "inv_item_catalogue", title: "📦 Catalogue" },
-    { id: "inv_view_products", title: "👀 View items" },
-    { id: "inv_item_custom", title: "✍️ Custom item" }
-  ]
-});
+  await sendButtons(from, {
+    text: "How would you like to add an item?",
+    buttons: [
+      { id: "inv_item_catalogue", title: "📦 Catalogue" },
+      { id: "inv_view_products", title: "👀 View items" },
+      { id: "inv_item_custom", title: "✍️ Custom item" }
+    ]
+  });
 
-return true; // 🔴 THIS IS THE FIX
-
-
+  return true;
 }
+
 
 
     if (!biz.sessionData.expectingQty) {

@@ -106,6 +106,44 @@ const restrictedStateMap = {
   const state = biz.sessionState;
 
 
+  // ===========================
+// 📄 VIEW EXISTING DOCUMENT
+// ===========================
+if (trimmed === "view_doc" && state === "sales_doc_action") {
+  const docId = biz.sessionData.docId;
+  const doc = await Invoice.findById(docId);
+
+  if (!doc) {
+    await sendText(from, "❌ Document not found.");
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const folder =
+    doc.type === "invoice"
+      ? "invoices"
+      : doc.type === "quote"
+      ? "quotes"
+      : "receipts";
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const filename = `${doc.number}.pdf`;
+  const url = `${site}/docs/generated/${folder}/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendMainMenu(from);
+  return true;
+}
+
+
   // 🛑 If user is idle, do NOT hijack messages
 if (state === "ready") {
   return false;

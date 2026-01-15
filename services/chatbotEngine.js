@@ -1143,6 +1143,35 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   return sendMainMenu(from);
 }
 
+// ===============================
+// 📄 SALES DOC → VIEW PDF
+// ===============================
+if (a === "doc_view") {
+  const biz = await getBizForPhone(from);
+  const docId = biz?.sessionData?.docId;
+
+  if (!docId) {
+    await sendText(from, "❌ No document selected.");
+    return sendSalesMenu(from);
+  }
+
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "❌ Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  await sendText(from, "📄 Generating PDF...");
+
+  // delegate to Twilio-style generator
+  return continueTwilioFlow({
+    from,
+    text: "view_doc"
+  });
+}
+
+
+
 if (a.startsWith("doc_") && a.length > 28) {
 
   const docId = a.replace("doc_", "");

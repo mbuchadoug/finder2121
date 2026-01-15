@@ -66,7 +66,32 @@ async function forwardToTwilioWebhook({ from, text }) {
 }
 
 
+async function showSalesDocs(from, type) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
 
+  const docs = await Invoice.find({
+    businessId: biz._id,
+    type
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!docs.length) {
+    await sendText(from, `No ${type}s found.`);
+    return sendSalesMenu(from);
+  }
+
+  return sendList(
+    from,
+    `📄 Select ${type}`,
+    docs.map(d => ({
+      id: `doc_${d._id}`,
+      title: `${d.number} — ${d.total} ${d.currency}`
+    }))
+  );
+}
 
 export async function handleIncomingMessage({ from, action }) {
     // =========================
@@ -338,6 +363,8 @@ Enter amount paid:`
 // ===============================
 // INVOICE CONFIRM ACTIONS (META)
 // ===============================
+
+
 
 // ✅ Generate PDF → simulate "2"
 if (a === "inv_generate_pdf") {
@@ -1116,6 +1143,58 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   return sendMainMenu(from);
 }
 
+if (a.startsWith("doc_")) {
+  const docId = a.replace("doc_", "");
+  const biz = await getBizForPhone(from);
+
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  biz.sessionState = "sales_doc_action";
+  biz.sessionData = { docId };
+  await saveBizSafe(biz);
+
+  return sendButtons(from, {
+    text: `📄 ${doc.number}\nStatus: ${doc.status}`,
+    buttons: [
+      { id: "doc_view", title: "📄 View PDF" },
+      { id: "doc_delete", title: "🗑 Delete" },
+      { id: ACTIONS.BACK, title: "⬅ Back" }
+    ]
+  });
+}
+
+
+
+if (a === "doc_delete") {
+  const biz = await getBizForPhone(from);
+  const docId = biz.sessionData.docId;
+
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  // 🔒 SAFETY RULE
+  if (doc.status === "paid") {
+    await sendText(from, "❌ Paid documents cannot be deleted.");
+    return sendSalesMenu(from);
+  }
+
+  await Invoice.deleteOne({ _id: docId });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "🗑 Document deleted successfully.");
+  return sendSalesMenu(from);
+}
+
 
   /* =========================
      MENUS
@@ -1555,6 +1634,18 @@ case ACTIONS.UPGRADE_PACKAGE: {
 
     case ACTIONS.NEW_RECEIPT:
       return startReceiptFlow(from);
+
+
+case ACTIONS.VIEW_INVOICES:
+  return showSalesDocs(from, "invoice");
+
+case ACTIONS.VIEW_QUOTES:
+  return showSalesDocs(from, "quote");
+
+case ACTIONS.VIEW_RECEIPTS:
+  return showSalesDocs(from, "receipt");
+
+
 
     case ACTIONS.ADD_CLIENT:
       return startClientFlow(from);

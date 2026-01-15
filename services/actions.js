@@ -14,6 +14,10 @@ export const ACTIONS = {
   NEW_QUOTE: "new_quote",
   NEW_RECEIPT: "new_receipt",
 
+  // SALES – ITEM ACTIONS
+VIEW_DOC: "view_doc",
+DELETE_DOC: "delete_doc",
+
   // CLIENTS
   ADD_CLIENT: "add_client",
   CLIENT_STATEMENT: "client_statement",

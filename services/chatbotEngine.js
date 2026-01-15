@@ -764,6 +764,33 @@ const settingsStates = [
  //biz = await getBizForPhone(from);
 
 // ✅ Only pass text to Twilio if a business exists AND has a session
+// ===============================
+// 📄 SALES DOC → PICK DOCUMENT
+// ===============================
+if (a.startsWith("doc_") && a.length > 28) {
+  const docId = a.replace("doc_", "");
+  const biz = await getBizForPhone(from);
+
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "❌ Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  biz.sessionState = "sales_doc_action";
+  biz.sessionData = { docId };
+  await saveBizSafe(biz);
+
+return sendButtons(from, {
+  text: `📄 ${doc.number}\nStatus: ${doc.status}`,
+  buttons: [
+    { id: ACTIONS.VIEW_DOC, title: "📄 View PDF" },
+    { id: ACTIONS.DELETE_DOC, title: "🗑 Delete" },
+    { id: ACTIONS.BACK, title: "⬅ Back" }
+  ]
+});
+
+}
 
 
 // ✅ Only pass text to Twilio AFTER onboarding
@@ -1164,38 +1191,44 @@ if (a === "doc_view") {
   await sendText(from, "📄 Generating PDF...");
 
   // delegate to Twilio-style generator
-  return continueTwilioFlow({
-    from,
-    text: "view_doc"
-  });
-}
-
-
-
-if (a.startsWith("doc_") && a.length > 28) {
-
-  const docId = a.replace("doc_", "");
+ if (a === ACTIONS.VIEW_DOC) {
   const biz = await getBizForPhone(from);
+  const docId = biz?.sessionData?.docId;
 
-  const doc = await Invoice.findById(docId);
-  if (!doc) {
-    await sendText(from, "Document not found.");
+  if (!docId) {
+    await sendText(from, "❌ No document selected.");
     return sendSalesMenu(from);
   }
 
-  biz.sessionState = "sales_doc_action";
-  biz.sessionData = { docId };
+  const doc = await Invoice.findById(docId);
+  if (!doc) {
+    await sendText(from, "❌ Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  const folder =
+    doc.type === "invoice"
+      ? "invoices"
+      : doc.type === "quote"
+      ? "quotes"
+      : "receipts";
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const filename = `${doc.number}.pdf`;
+  const url = `${site}/docs/generated/${folder}/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
-  return sendButtons(from, {
-    text: `📄 ${doc.number}\nStatus: ${doc.status}`,
-    buttons: [
-      { id: "doc_view", title: "📄 View PDF" },
-      { id: "doc_delete", title: "🗑 Delete" },
-      { id: ACTIONS.BACK, title: "⬅ Back" }
-    ]
-  });
+  return sendSalesMenu(from);
 }
+
+}
+
+
 
 
 

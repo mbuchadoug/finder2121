@@ -23,6 +23,12 @@ const InvoiceSchema = new mongoose.Schema({
     index: true,
     required: true
   },
+type: {
+  type: String,
+  enum: ["invoice", "quote", "receipt"],
+  default: "invoice",
+  index: true
+},
 
   currency: {
     type: String,

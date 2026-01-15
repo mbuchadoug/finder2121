@@ -1211,11 +1211,12 @@ if (a === ACTIONS.VIEW_DOC) {
 
   await sendDocument(from, { link: url, filename });
 
-  biz.sessionState = "ready";
-  biz.sessionData = {};
-  await saveBizSafe(biz);
+biz.sessionState = "ready";
+biz.sessionData = {};
+await saveBizSafe(biz);
 
-  return sendMainMenu(from);
+return; // ✅ DO NOT send anything after a document
+
 }
 
 

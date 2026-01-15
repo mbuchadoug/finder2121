@@ -1143,7 +1143,15 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   return sendMainMenu(from);
 }
 
-if (a.startsWith("doc_") && a.length > 28) {
+// ===============================
+// 📄 SALES DOC → PICK DOCUMENT
+// ===============================
+if (
+  a.startsWith("doc_") &&
+  a !== ACTIONS.VIEW_DOC &&
+  a !== ACTIONS.DELETE_DOC
+) {
+
 
   const docId = a.replace("doc_", "");
   const biz = await getBizForPhone(from);

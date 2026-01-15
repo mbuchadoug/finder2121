@@ -787,6 +787,85 @@ if (state === "adding_client_phone") {
   return true;
 }
 
+
+
+
+
+// ===========================
+// 📄 CLIENT STATEMENT
+// ===========================
+if (state === "client_statement_generate") {
+  const clientId = biz.sessionData.clientId;
+
+  const Client = (await import("../models/client.js")).default;
+  const client = await Client.findById(clientId).lean();
+
+  if (!client) {
+    await sendText(from, "❌ Client not found.");
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const invoices = await Invoice.find({
+    businessId: biz._id,
+    clientId
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  if (!invoices.length) {
+    await sendText(from, "ℹ️ No invoices found for this client.");
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendMainMenu(from);
+    return true;
+  }
+
+  // 🧮 Running balance
+  let runningBalance = 0;
+  const items = invoices.map(inv => {
+    runningBalance += inv.total - (inv.amountPaid || 0);
+
+    return {
+      item: inv.number,
+      qty: 1,
+      unit: inv.total,
+      total: runningBalance
+    };
+  });
+
+  // 📄 Generate PDF (reuse your generator)
+  const { filename } = await generatePDF({
+    type: "statement",
+    number: `STATEMENT-${Date.now()}`,
+    date: new Date(),
+    billingTo: client.name || client.phone,
+    items,
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      address: biz.address || "",
+      _id: biz._id.toString()
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/statements/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendMainMenu(from);
+  return true;
+}
+
   /* ===========================
      CLIENT CREATION (INVOICE)
   ============================ */

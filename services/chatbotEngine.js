@@ -528,6 +528,32 @@ if (a === ACTIONS.BRANCH_REPORT) {
 }
 
 
+// 📄 Client Statement (step 1: show clients)
+if (a === ACTIONS.CLIENT_STATEMENT) {
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  const Client = (await import("../models/client.js")).default;
+  const clients = await Client.find({ businessId: biz._id }).lean();
+
+  if (!clients.length) {
+    return sendText(from, "No clients found.");
+  }
+
+  biz.sessionState = "client_statement_pick_client";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendList(
+    from,
+    "📄 Select client for statement",
+    clients.map(c => ({
+      id: `stmt_client_${c._id}`,
+      title: c.name || c.phone
+    }))
+  );
+}
+
   /* =========================
      TEXT → TWILIO FLOW
   ========================= */
@@ -703,6 +729,21 @@ if (biz && biz.sessionState === "awaiting_logo_upload") {
 
   // If neither skip nor image yet, wait silently
   return;
+}
+
+// 📄 Client Statement: client selected
+if (a.startsWith("stmt_client_")) {
+  const clientId = a.replace("stmt_client_", "");
+
+  const biz = await getBizForPhone(from);
+  if (!biz) return sendMainMenu(from);
+
+  biz.sessionState = "client_statement_generate";
+  biz.sessionData = { clientId };
+  await saveBizSafe(biz);
+
+  // Delegate heavy work to Twilio-style engine
+  return continueTwilioFlow({ from, text: "generate" });
 }
 
 

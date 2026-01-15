@@ -112,9 +112,62 @@ if (state === "ready") {
 }
 
   /* ===========================
-     🔑 ENSURE CLIENT IS LOADED
-     (META RESUME SAFETY)
+     🔑 CLIENT STATEMENT
   ============================ */
+/* ===========================
+   CLIENT STATEMENT → GENERATE
+=========================== */
+if (state === "client_statement_generate") {
+  const clientId = biz.sessionData.clientId;
+
+  if (!clientId) {
+    biz.sessionState = "ready";
+    biz.sessionData = {};
+    await saveBizSafe(biz);
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const Client = (await import("../models/client.js")).default;
+  const client = await Client.findById(clientId).lean();
+
+  if (!client) {
+    await sendText(from, "❌ Client not found.");
+    await sendMainMenu(from);
+    return true;
+  }
+
+  const { buildClientStatement } =
+    await import("./clientStatement.js");
+
+  const ledger = await buildClientStatement({
+    businessId: biz._id,
+    clientId
+  });
+
+  const { filename } = await generatePDF({
+    type: "statement",
+    clientName: client.name || client.phone,
+    ledger,
+    bizMeta: {
+      name: biz.name,
+      logoUrl: biz.logoUrl,
+      _id: biz._id.toString()
+    }
+  });
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const url = `${site}/docs/generated/statements/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendMainMenu(from);
+  return true;
+}
 
 /* ===========================
    ⚙️ SETTINGS: TEXT INPUT HANDLERS

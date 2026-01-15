@@ -340,9 +340,30 @@ function drawTablePdfkit(doc, items, startX, startY, columnWidths, docDiscountPe
 
 /* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
 /* ---------- generatePDF: Puppeteer-first, Bootstrap 3.3.7 design, PDFKit fallback ---------- */
-async function generatePDF({ type, number, date, dueDate, billingTo, email, items = [], notes = "", bizMeta = {} }) {
-  const baseDir = await ensurePublicSubdirs();
-  const folder = path.join(baseDir, type === "invoice" ? "invoices" : type === "quote" ? "quotes" : "receipts");
+async function generatePDF({ 
+  type,
+  number,
+  date,
+  dueDate,
+  billingTo,
+  email,
+  items = [],
+  ledger = [],   // 👈 ADD THIS
+  notes = "",
+  bizMeta = {}
+}) {
+
+const folder = path.join(
+  baseDir,
+  type === "invoice"
+    ? "invoices"
+    : type === "quote"
+    ? "quotes"
+    : type === "statement"
+    ? "statements"
+    : "receipts"
+);
+
   const filename = `${type}-${number}-${Date.now()}.pdf`;
   const filepath = path.join(folder, filename);
 
@@ -401,27 +422,88 @@ async function generatePDF({ type, number, date, dueDate, billingTo, email, item
 
   // Build HTML from template (bootstrap 3.3.7 + your layout)
   function buildHtml() {
-    const typeLabel = type === "invoice" ? "INVOICE" : type === "quote" ? "QUOTATION" : "RECEIPT";
+const typeLabel =
+  type === "invoice" ? "INVOICE" :
+  type === "quote" ? "QUOTATION" :
+  type === "statement" ? "STATEMENT" :
+  "RECEIPT";
+if (type === "statement") {
+  const rows = ledger.map(r => `
+    <tr>
+      <td>${new Date(r.date).toISOString().slice(0,10)}</td>
+      <td>${escapeHtml(r.ref || "")}</td>
+      <td style="text-align:right">${r.debit ? formatMoney(r.debit) : "-"}</td>
+      <td style="text-align:right">${r.credit ? formatMoney(r.credit) : "-"}</td>
+      <td style="text-align:right">${formatMoney(r.balance)}</td>
+    </tr>
+  `).join("");
+
+  return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Client Statement</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table { width:100%; border-collapse:collapse; margin-top:20px; }
+    th, td { border:1px solid #333; padding:8px; font-size:12px; }
+    th { background:#f2f2f2; }
+  </style>
+</head>
+<body>
+  <h2>${escapeHtml(bizMeta.name || "")}</h2>
+  <h3>Client Statement</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Ref</th>
+        <th>Debit</th>
+        <th>Credit</th>
+        <th>Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+</body>
+</html>
+`;
+}
+
     const companyName = bizMeta.name || "";
     const logoUrl = logoForHtml || "";
     const companyAddress = bizMeta.address || "";
 
     const discountPercentDoc = Number(bizMeta.discountPercent || 0);
-    const itemsRowsHtml = items.map(it => {
-      const rowDiscount = (typeof it.discount !== "undefined" && it.discount !== null) ? it.discount : discountPercentDoc;
-      const qty = it.qty || it.quantity || 1;
-      const rate = Number(it.unit || it.rate || 0);
-      const amount = qty * rate;
-      return `
+  const rowsHtml =
+  type === "statement"
+    ? ledger.map(r => `
         <tr>
-          <td style="text-align:center; width:8%">${qty}</td>
-          <td style="text-align:center; width:40%">${escapeHtml(it.item || it.description || "")}</td>
-          <td style="text-align:center; width:12%">${formatMoney(rate)}</td>
-          <td style="text-align:center; width:8%">${escapeHtml(String(rowDiscount || 0))}</td>
-          <td style="text-align:center; width:20%">${formatMoney(amount)}</td>
+          <td>${r.date}</td>
+          <td>${r.ref}</td>
+          <td style="text-align:right;">${formatMoney(r.debit)}</td>
+          <td style="text-align:right;">${formatMoney(r.credit)}</td>
+          <td style="text-align:right;">${formatMoney(r.balance)}</td>
         </tr>
-      `;
-    }).join("\n");
+      `).join("")
+    : items.map(it => {
+        const qty = it.qty || 1;
+        const rate = Number(it.unit || it.rate || 0);
+        const amount = qty * rate;
+        return `
+          <tr>
+            <td style="text-align:center;">${qty}</td>
+            <td>${escapeHtml(it.item || "")}</td>
+            <td style="text-align:right;">${formatMoney(rate)}</td>
+            <td style="text-align:right;">${formatMoney(amount)}</td>
+          </tr>
+        `;
+      }).join("");
+
 
     const subtotal = items.reduce((s, it) => s + (Number(it.qty || it.quantity || 0) * Number(it.unit || it.rate || 0)), 0);
     const discountPercent = Number(bizMeta.discountPercent || 0);

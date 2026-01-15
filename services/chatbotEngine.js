@@ -405,10 +405,18 @@ if (a === "inv_set_vat") {
     return;
   }
 
-  if (al.startsWith("client_")) {
+ /* if (al.startsWith("client_")) {
     await handleClientPicked(from, al.replace("client_", ""));
     return;
-  }
+  }*/
+
+
+    // ⚠️ Invoice client picker ONLY
+if (al.startsWith("client_") && !al.startsWith("stmt_client_")) {
+  await handleClientPicked(from, al.replace("client_", ""));
+  return;
+}
+
 
  if (a === ACTIONS.INV_ADD_ANOTHER_ITEM) {
   const biz = await getBizForPhone(from);

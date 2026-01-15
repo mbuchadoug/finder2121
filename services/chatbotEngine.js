@@ -1178,6 +1178,7 @@ if (
 
 
 
+
 if (a === "doc_delete") {
   const biz = await getBizForPhone(from);
   const docId = biz.sessionData.docId;
@@ -1195,6 +1196,75 @@ if (a === "doc_delete") {
   }
 
   await Invoice.deleteOne({ _id: docId });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  await sendText(from, "🗑 Document deleted successfully.");
+  return sendSalesMenu(from);
+}
+
+// ===============================
+// 📄 SALES DOC → VIEW PDF (META)
+// ===============================
+if (a === ACTIONS.VIEW_DOC) {
+  const biz = await getBizForPhone(from);
+  if (!biz?.sessionData?.docId) {
+    await sendText(from, "❌ No document selected.");
+    return sendSalesMenu(from);
+  }
+
+  const doc = await Invoice.findById(biz.sessionData.docId);
+  if (!doc) {
+    await sendText(from, "❌ Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  const folder =
+    doc.type === "invoice"
+      ? "invoices"
+      : doc.type === "quote"
+      ? "quotes"
+      : "receipts";
+
+  const site = (process.env.SITE_URL || "").replace(/\/$/, "");
+  const filename = `${doc.number}.pdf`;
+  const url = `${site}/docs/generated/${folder}/${filename}`;
+
+  await sendDocument(from, { link: url, filename });
+
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendMainMenu(from);
+}
+
+
+
+// ===============================
+// 🗑 SALES DOC → DELETE (META)
+// ===============================
+if (a === ACTIONS.DELETE_DOC) {
+  const biz = await getBizForPhone(from);
+  if (!biz?.sessionData?.docId) {
+    await sendText(from, "❌ No document selected.");
+    return sendSalesMenu(from);
+  }
+
+  const doc = await Invoice.findById(biz.sessionData.docId);
+  if (!doc) {
+    await sendText(from, "❌ Document not found.");
+    return sendSalesMenu(from);
+  }
+
+  if (doc.status === "paid") {
+    await sendText(from, "❌ Paid documents cannot be deleted.");
+    return sendSalesMenu(from);
+  }
+
+  await Invoice.deleteOne({ _id: doc._id });
 
   biz.sessionState = "ready";
   biz.sessionData = {};

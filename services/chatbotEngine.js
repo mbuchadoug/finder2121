@@ -1149,12 +1149,18 @@ if (!plan) {
 
   const reference = `SUB_${biz._id}_${Date.now()}`;
 
- const phone = from.replace(/\D+/g, "");
+let phone = from.replace(/\D+/g, "");
+
+// Convert 263 → 0 for ZW numbers
+if (phone.startsWith("263")) {
+  phone = "0" + phone.slice(3);
+}
+
 
 // 🔐 Create Paynow payment
 const payment = paynow.createPayment(
   reference,
-  biz.ownerEmail || "payments@skoolfinder.net"
+  biz.ownerEmail || "bmusasa99@gmail.com"
 );
 
 // MUST match Paynow dashboard (EcoCash = ZWL)
@@ -1183,14 +1189,18 @@ if (!response.success) {
   return sendText(from, "❌ Failed to start payment. Try again.");
 }
 
-  if (!response.success) {
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    return sendText(from, "❌ Failed to start payment. Try again.");
+// ✅ ONLY poll if payment was created
+setTimeout(async () => {
+  try {
+    const status = await paynow.pollTransaction(response.pollUrl);
+    console.log("PAYNOW POLL STATUS:", status);
+  } catch (err) {
+    console.error("Paynow polling failed:", err);
   }
+}, 10000);
 
+
+ 
   // save Paynow tracking
   biz.sessionData.paynow = {
     reference,
@@ -1198,10 +1208,11 @@ if (!response.success) {
   };
   await saveBizSafe(biz);
 
-  return sendText(
-    from,
-    `💳 ${plan.label} Package (${plan.price} USD)\n\nPlease confirm the payment on your phone.`
-  );
+return sendText(
+  from,
+  `💳 ${plan.name} Package (${plan.price} ${plan.currency})\n\nPlease confirm the payment on your phone.`
+);
+
 }
 
 

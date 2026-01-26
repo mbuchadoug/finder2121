@@ -1129,13 +1129,12 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
     return sendText(from, "❌ Invalid package selected.");
   }
 
-  const PLANS = {
-    bronze: { price: 1, label: "Bronze" },
-    silver: { price: 5, label: "Silver" },
-    gold: { price: 10, label: "Gold" }
-  };
+const plan = SUBSCRIPTION_PLANS[selected];
 
-  const plan = PLANS[selected];
+if (!plan) {
+  return sendText(from, "❌ Invalid package selected.");
+}
+
 
   // ⛔ DO NOT upgrade yet
   // Save intent instead
@@ -1146,23 +1145,43 @@ if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   };
   await saveBizSafe(biz);
 
-  // 🔐 Create Paynow payment
-  const paynow = (await import("./paynow.js")).default;
+
 
   const reference = `SUB_${biz._id}_${Date.now()}`;
 
-  const payment = paynow.createPayment(
-    reference,
-    biz.email || "bmusasa99@gmail.com"
-  );
+ const phone = from.replace(/\D+/g, "");
 
-  payment.add(`${plan.label} Package`, plan.price);
+// 🔐 Create Paynow payment
+const payment = paynow.createPayment(
+  reference,
+  biz.ownerEmail || "payments@skoolfinder.net"
+);
 
-  const response = await paynow.sendMobile(
-    payment,
-    from.replace(/\D+/g, ""),
-    "ecocash"
-  );
+// MUST match Paynow dashboard (EcoCash = ZWL)
+payment.currency = plan.currency;
+
+// Add line item
+payment.add(
+  `${plan.name} Package`,
+  plan.price
+);
+
+// 🚀 START MOBILE PAYMENT
+const response = await paynow.sendMobile(
+  payment,
+  phone,
+  "ecocash"
+);
+
+console.log("PAYNOW RESPONSE:", response);
+
+if (!response.success) {
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+
+  return sendText(from, "❌ Failed to start payment. Try again.");
+}
 
   if (!response.success) {
     biz.sessionState = "ready";

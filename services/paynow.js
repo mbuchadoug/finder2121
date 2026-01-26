@@ -1,4 +1,5 @@
-import Paynow from "paynow";
+import { Paynow } from "paynow";
+
 
 const paynow = new Paynow(
   process.env.PAYNOW_INTEGRATION_ID,

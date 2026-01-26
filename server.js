@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import passport from "passport";
 import helmet from "helmet";
 import axios from "axios";
+import paynowRoutes from "./routes/paynow.js";
 import { engine } from "express-handlebars";
 import { ensureAuth } from "./middleware/ensureAuth.js";
 import MongoStore from "connect-mongo";
@@ -367,6 +368,8 @@ app.use("/meta", metaWebhookRoutes);
 app.use("/api/whatsapp", whatsappSend);
 app.use("/api/whatsapp", whatsappRegister);
 app.use(adminTutorRoutes);
+app.use("/paynow", paynowRoutes);
+
 // Mount Twilio routes under /twilio
 // Note: the twilioWebhookRoutes file expects router.post("/webhook") internally,
 // so the final endpoint will be /twilio/webhook

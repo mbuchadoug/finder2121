@@ -7,8 +7,6 @@ import Invoice from "../models/invoice.js";
 import Product from "../models/product.js";
 import { startQuoteFlow } from "./quoteFlow.js";
 import { sendList } from "./metaSender.js";
-import { SUBSCRIPTION_PLANS } from "./subscriptionPlans.js";
-import paynow from "./paynow.js";
 import { sendDocument } from "./metaSender.js";
 import {
   canUseFeature,
@@ -1119,72 +1117,33 @@ biz.sessionData.lastItem = {
 // ===============================
 // PACKAGE SELECTION
 // ===============================
-// ===============================
-// PACKAGE SELECTION → PAYNOW
-// ===============================
 if (biz?.sessionState === "choose_package" && a.startsWith("pkg_")) {
   const selected = a.replace("pkg_", "");
 
-  if (!["bronze", "silver", "gold"].includes(selected)) {
+  const allowed = ["trial", "bronze", "silver", "gold"];
+  if (!allowed.includes(selected)) {
     return sendText(from, "❌ Invalid package selected.");
   }
 
-  const PLANS = {
-    bronze: { price: 1, label: "Bronze" },
-    silver: { price: 5, label: "Silver" },
-    gold: { price: 10, label: "Gold" }
-  };
+  // ✅ Update business package
+  biz.package = selected;
+  biz.subscriptionStatus = "active";
 
-  const plan = PLANS[selected];
+  // reset usage counters if upgrading
+  biz.documentCountMonth = 0;
+  biz.documentCountMonthKey = null;
 
-  // ⛔ DO NOT upgrade yet
-  // Save intent instead
-  biz.sessionState = "subscription_payment_pending";
-  biz.sessionData = {
-    targetPackage: selected,
-    amount: plan.price
-  };
+  biz.sessionState = "ready";
+  biz.sessionData = {};
   await saveBizSafe(biz);
 
-  // 🔐 Create Paynow payment
-  const paynow = (await import("./paynow.js")).default;
-
-  const reference = `SUB_${biz._id}_${Date.now()}`;
-
-  const payment = paynow.createPayment(
-    reference,
-    biz.email || "bmusasa99@gmail.com"
-  );
-
-  payment.add(`${plan.label} Package`, plan.price);
-
-  const response = await paynow.sendMobile(
-    payment,
-    from.replace(/\D+/g, ""),
-    "ecocash"
-  );
-
-  if (!response.success) {
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    return sendText(from, "❌ Failed to start payment. Try again.");
-  }
-
-  // save Paynow tracking
-  biz.sessionData.paynow = {
-    reference,
-    pollUrl: response.pollUrl
-  };
-  await saveBizSafe(biz);
-
-  return sendText(
+  await sendText(
     from,
-    `💳 ${plan.label} Package (${plan.price} USD)\n\nPlease confirm the payment on your phone.`
+    `✅ Package updated successfully!\n\nYour new package: *${selected.toUpperCase()}*`
   );
-}
 
+  return sendMainMenu(from);
+}
 
 // ===============================
 // 📄 SALES DOC → PICK DOCUMENT

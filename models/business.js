@@ -22,6 +22,7 @@ const BusinessSchema = new mongoose.Schema({
   },
 
   sessionState: { type: String, default: null },
+  whatsappPhoneNumberId: String,
 
   // ✅ PACKAGES
 package: {

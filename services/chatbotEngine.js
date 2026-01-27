@@ -769,13 +769,30 @@ const settingsStates = [
 
 
 // ✅ Only pass text to Twilio AFTER onboarding
-if (!isMetaAction && biz && biz.sessionState) {
+// 🚨 DO NOT forward menu / hi / start to Twilio
+const escapeWords = ["menu", "hi", "hello", "start"];
+
+if (
+  !isMetaAction &&
+  biz &&
+  biz.sessionState &&
+  !escapeWords.includes(al)
+) {
   const handled = await continueTwilioFlow({
     from,
     text
   });
   if (handled) return;
 }
+
+
+if (escapeWords.includes(al)) {
+  biz.sessionState = "ready";
+  biz.sessionData = {};
+  await saveBizSafe(biz);
+  return sendMainMenu(from);
+}
+
 
 
 

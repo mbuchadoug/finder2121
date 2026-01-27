@@ -1166,7 +1166,7 @@ if (process.env.PAYNOW_TEST === "true") {
 const payment = paynow.createPayment(
   reference,
   process.env.PAYNOW_TEST === "true"
-    ? "YOUR_PAYNOW_LOGIN_EMAIL@domain.com"
+    ? "bmusasa99@gmail.com"
     : biz.ownerEmail
 );
 

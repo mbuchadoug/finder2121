@@ -3,6 +3,8 @@ import { Router } from "express";
 import Business from "../models/business.js";
 import { SUBSCRIPTION_PLANS } from "../services/subscriptionPlans.js";
   import { sendText } from "../services/metaSender.js";
+  import paynow from "../services/paynow.js";
+
 const router = Router();
 
 /**
@@ -11,71 +13,73 @@ const router = Router();
  */
 router.post("/webhook", async (req, res) => {
   try {
-    console.log("PAYNOW WEBHOOK:", req.body);
+    console.log("🔔 PAYNOW WEBHOOK RAW:", req.body);
 
-    const {
-      reference,
-      status
-    } = req.body;
+    // Paynow sends poll URL, not payment status
+    const pollUrl =
+      req.body?.pollurl ||
+      req.body?.pollUrl ||
+      req.body?.poll_url;
 
-    if (!reference) {
-      return res.status(400).send("Missing reference");
+    if (!pollUrl) {
+      console.warn("⚠️ Paynow webhook without pollUrl");
+      return res.sendStatus(200);
     }
 
-    // example reference: SUB_<bizId>_<timestamp>
-    const parts = reference.split("_");
-    if (parts.length < 3) {
-      return res.status(400).send("Invalid reference");
+    // 🔁 Poll Paynow for the REAL status
+    const status = await paynow.pollTransaction(pollUrl);
+    console.log("📡 PAYNOW POLL RESULT:", status);
+
+    if (!status || status.status?.toLowerCase() !== "paid") {
+      return res.sendStatus(200);
     }
 
-    const bizId = parts[1];
+    const reference = status.reference;
+    if (!reference || !reference.startsWith("SUB_")) {
+      return res.sendStatus(200);
+    }
+
+    // SUB_<bizId>_<timestamp>
+    const bizId = reference.split("_")[1];
+    if (!bizId) return res.sendStatus(200);
+
     const biz = await Business.findById(bizId);
-
-    if (!biz) {
-      return res.status(404).send("Business not found");
+    if (!biz || !biz.sessionData?.targetPackage) {
+      return res.sendStatus(200);
     }
 
-    // ✅ Only activate on PAID
-    if (status === "Paid") {
-      const target = biz.sessionData?.targetPackage;
-      const plan = SUBSCRIPTION_PLANS[target];
+    const target = biz.sessionData.targetPackage;
+    const plan = SUBSCRIPTION_PLANS[target];
+    if (!plan) return res.sendStatus(200);
 
-      if (!plan) {
-        console.warn("Unknown plan:", target);
-        return res.sendStatus(200);
-      }
+    const now = new Date();
 
-      const now = new Date();
+    // ✅ ACTIVATE SUBSCRIPTION
+    biz.package = target;
+    biz.subscriptionStatus = "active";
+    biz.subscriptionStartedAt = now;
+    biz.subscriptionEndsAt = new Date(
+      now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
+    );
+    biz.sessionState = "ready";
+    biz.sessionData = {};
 
-      biz.package = target;
-      biz.subscriptionStatus = "active";
-      biz.subscriptionStartedAt = now;
-      biz.subscriptionEndsAt = new Date(
-        now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
-      );
+    await biz.save();
 
-      biz.sessionState = "ready";
-      biz.sessionData = {};
+    console.log(`✅ Subscription activated: ${biz._id} → ${target}`);
 
-      await biz.save();
+    await sendText(
+      biz.ownerPhone,
+      `✅ Payment successful!\n\nYour *${target.toUpperCase()}* package is now active 🎉`
+    );
 
-      console.log(`✅ Subscription activated: ${biz._id} → ${target}`);
-
-    
-
-await sendText(
-  biz.ownerPhone,
-  `✅ Payment successful!\n\nYour *${target.toUpperCase()}* package is now active.`
-);
-
-    }
-
-    res.sendStatus(200);
+    return res.sendStatus(200);
   } catch (err) {
-    console.error("Paynow webhook error:", err);
-    res.sendStatus(500);
+    console.error("❌ Paynow webhook error:", err);
+    return res.sendStatus(200);
   }
 });
+
 
 /**
  * 🌍 RETURN URL (user browser / WhatsApp fallback)

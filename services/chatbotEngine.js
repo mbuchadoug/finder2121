@@ -1190,12 +1190,20 @@ if (!response.success) {
 }
 
 // ✅ ONLY poll if payment was created
-setTimeout(async () => {
+const pollUrl = response.pollUrl;
+let attempts = 0;
+const MAX_ATTEMPTS = 15; // ~2.5 minutes
+
+const pollInterval = setInterval(async () => {
+  attempts++;
+
   try {
-    const status = await paynow.pollTransaction(response.pollUrl);
+    const status = await paynow.pollTransaction(pollUrl);
     console.log("PAYNOW POLL STATUS:", status);
 
     if (status.status && status.status.toLowerCase() === "paid") {
+      clearInterval(pollInterval);
+
       const freshBiz = await Business.findById(biz._id);
 
       if (
@@ -1218,10 +1226,16 @@ setTimeout(async () => {
         await sendMainMenu(from);
       }
     }
+
+    // stop polling if it takes too long
+    if (attempts >= MAX_ATTEMPTS) {
+      clearInterval(pollInterval);
+      console.warn("⏰ Paynow polling timed out");
+    }
   } catch (err) {
     console.error("Paynow polling failed:", err);
   }
-}, 12000);
+}, 10000); // every 10 seconds
 
 
 

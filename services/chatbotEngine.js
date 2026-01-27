@@ -258,9 +258,14 @@ const text = typeof action === "string" ? action.trim() : "";*/
   /* =========================
      ENTRY
   ========================= */
-  /*if (!al || ["hi", "hello", "menu"].includes(al)) {
-    return sendMainMenu(from);
-  }*/
+// ✅ Global menu shortcut (ONLY when idle)
+if (
+  ["hi", "hello", "menu"].includes(al) &&
+  biz &&
+  (!biz.sessionState || biz.sessionState === "ready")
+) {
+  return sendMainMenu(from);
+}
 
     /* =========================
    JOIN INVITATION (META)
@@ -1196,10 +1201,35 @@ setTimeout(async () => {
   try {
     const status = await paynow.pollTransaction(response.pollUrl);
     console.log("PAYNOW POLL STATUS:", status);
+
+    if (status.paid()) {
+      // 🔑 RELOAD BUSINESS
+      const freshBiz = await Business.findById(biz._id);
+
+      if (
+        freshBiz.sessionState === "subscription_payment_pending" &&
+        freshBiz.sessionData?.targetPackage
+      ) {
+        freshBiz.package = freshBiz.sessionData.targetPackage;
+        freshBiz.subscriptionStatus = "active";
+        freshBiz.sessionState = "ready";
+        freshBiz.sessionData = {};
+
+        await freshBiz.save();
+
+        await sendText(
+          from,
+          `✅ Payment successful!\n\nYour package has been upgraded to *${freshBiz.package.toUpperCase()}* 🎉`
+        );
+
+        await sendMainMenu(from);
+      }
+    }
   } catch (err) {
     console.error("Paynow polling failed:", err);
   }
-}, 10000);
+}, 12000);
+
 
 
  

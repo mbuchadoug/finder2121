@@ -1888,7 +1888,7 @@ case ACTIONS.VIEW_PRODUCTS: {
   return sendMainMenu(from);
 }
 
-default: {
+/*default: {
   const biz = await getBizForPhone(from);
 
   // 🔒 DO NOT INTERRUPT ACTIVE FLOWS
@@ -1899,7 +1899,19 @@ default: {
 
   // ✅ Only show menu when idle
   return sendMainMenu(from);
+}*/
+
+default: {
+  const biz = await getBizForPhone(from);
+
+  // 🔒 DO NOT INTERRUPT ACTIVE FLOWS
+  if (biz?.sessionState && biz.sessionState !== "ready") {
+    return;
+  }
+
+  return sendMainMenu(from);
 }
+
 
 
  

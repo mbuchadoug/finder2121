@@ -258,14 +258,7 @@ const text = typeof action === "string" ? action.trim() : "";*/
   /* =========================
      ENTRY
   ========================= */
-// ✅ Global menu shortcut (ONLY when idle)
-if (
-  ["hi", "hello", "menu"].includes(al) &&
-  biz &&
-  (!biz.sessionState || biz.sessionState === "ready")
-) {
-  return sendMainMenu(from);
-}
+
 
     /* =========================
    JOIN INVITATION (META)
@@ -1202,11 +1195,11 @@ setTimeout(async () => {
     const status = await paynow.pollTransaction(response.pollUrl);
     console.log("PAYNOW POLL STATUS:", status);
 
-    if (status.paid()) {
-      // 🔑 RELOAD BUSINESS
+    if (status.status && status.status.toLowerCase() === "paid") {
       const freshBiz = await Business.findById(biz._id);
 
       if (
+        freshBiz &&
         freshBiz.sessionState === "subscription_payment_pending" &&
         freshBiz.sessionData?.targetPackage
       ) {

@@ -1156,18 +1156,12 @@ if (phone.startsWith("263")) {
   phone = "0" + phone.slice(3);
 }
 
-// 🔐 FORCE PAYNOW TEST PHONE
-if (process.env.PAYNOW_TEST === "true") {
-  phone = process.env.PAYNOW_TEST_PHONE; // 0771111111
-}
 
 
 // 🔐 Create Paynow payment
 const payment = paynow.createPayment(
   reference,
-  process.env.PAYNOW_TEST === "true"
-    ? "bmusasa99@gmail.com"
-    : biz.ownerEmail
+  biz.ownerEmail || "bmusasa99@gmail.com"
 );
 
 

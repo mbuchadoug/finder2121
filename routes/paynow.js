@@ -2,7 +2,7 @@
 import { Router } from "express";
 import Business from "../models/business.js";
 import { SUBSCRIPTION_PLANS } from "../services/subscriptionPlans.js";
-
+  import { sendText } from "../services/metaSender.js";
 const router = Router();
 
 /**
@@ -60,6 +60,14 @@ router.post("/webhook", async (req, res) => {
       await biz.save();
 
       console.log(`✅ Subscription activated: ${biz._id} → ${target}`);
+
+    
+
+await sendText(
+  biz.ownerPhone,
+  `✅ Payment successful!\n\nYour *${target.toUpperCase()}* package is now active.`
+);
+
     }
 
     res.sendStatus(200);

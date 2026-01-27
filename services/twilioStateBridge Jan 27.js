@@ -1104,35 +1104,6 @@ if (state === "creating_invoice_confirm" && trimmed === "2") {
 
   const total = subtotal - discountAmount + vatAmount;
 
-
-  // ==========================
-// 🔒 TRIAL PACKAGE LIMIT
-// ==========================
-if (biz.package === "trial") {
-  const { PACKAGES } = await import("./packages.js");
-
-  const limit = PACKAGES.trial.monthlyDocs;
-
-  if (biz.documentCountMonth >= limit) {
-    biz.sessionState = "ready";
-    biz.sessionData = {};
-    await saveBizSafe(biz);
-
-    await sendText(
-      from,
-`🚫 Trial limit reached
-
-You can only create *${limit} invoices* on the Trial package.
-
-Upgrade to continue creating invoices.`
-    );
-
-    await sendMainMenu(from);
-    return true;
-  }
-}
-
-
   const invoiceDoc = await Invoice.create({
     businessId: biz._id,
     clientId: client._id,
@@ -1160,11 +1131,6 @@ Upgrade to continue creating invoices.`
 
     createdBy: from
   });
-
-
-  // ✅ INCREMENT USAGE
-biz.documentCountMonth += 1;
-await saveBizSafe(biz);
 
   // ==========================
   // 📄 GENERATE PDF

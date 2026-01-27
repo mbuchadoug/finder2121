@@ -2,13 +2,12 @@ export const PACKAGES = {
   trial: {
     users: 1,
     branches: 1,
-
-    // 🔒 HARD CAP
     monthlyDocs: 10,
-
     features: [
-      "invoice" // ✅ ONLY invoices
-      // ❌ remove quote, receipt, payments, reports, users, branches
+      "invoice",
+      "quote",
+      "receipt",
+      "clients"
     ]
   },
 

@@ -1843,44 +1843,14 @@ case ACTIONS.UPGRADE_PACKAGE: {
     case ACTIONS.BACK:
       return sendMainMenu(from);
 
-   case ACTIONS.NEW_INVOICE: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
+    case ACTIONS.NEW_INVOICE:
+      return startInvoiceFlow(from);
 
-  // 🔒 Trial limit check happens later
-  return startInvoiceFlow(from);
-}
-
-case ACTIONS.NEW_QUOTE: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  if (biz.package === "trial") {
-    return promptUpgrade({
-      biz,
-      from,
-      feature: "Quotes"
-    });
-  }
-
+      case ACTIONS.NEW_QUOTE:
   return startQuoteFlow(from);
-}
 
-case ACTIONS.NEW_RECEIPT: {
-  const biz = await getBizForPhone(from);
-  if (!biz) return sendMainMenu(from);
-
-  if (biz.package === "trial") {
-    return promptUpgrade({
-      biz,
-      from,
-      feature: "Receipts"
-    });
-  }
-
-  return startReceiptFlow(from);
-}
-
+    case ACTIONS.NEW_RECEIPT:
+      return startReceiptFlow(from);
 
 
 case ACTIONS.VIEW_INVOICES:

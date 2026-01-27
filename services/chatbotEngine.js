@@ -1156,12 +1156,20 @@ if (phone.startsWith("263")) {
   phone = "0" + phone.slice(3);
 }
 
+// 🔐 FORCE PAYNOW TEST PHONE
+if (process.env.PAYNOW_TEST === "true") {
+  phone = process.env.PAYNOW_TEST_PHONE; // 0771111111
+}
+
 
 // 🔐 Create Paynow payment
 const payment = paynow.createPayment(
   reference,
-  biz.ownerEmail || "bmusasa99@gmail.com"
+  process.env.PAYNOW_TEST === "true"
+    ? "YOUR_PAYNOW_LOGIN_EMAIL@domain.com"
+    : biz.ownerEmail
 );
+
 
 // MUST match Paynow dashboard (EcoCash = ZWL)
 payment.currency = plan.currency;
